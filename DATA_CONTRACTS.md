@@ -134,9 +134,10 @@ Money and prices do **not** assume non-negativity. Electricity market rules are 
 
 ## DLQRecord
 
-- **Purpose:** Metadata for an ingestion normalization failure. Queue/persistence is not implemented.
+- **Purpose:** Metadata for an ingestion normalization failure.
 - **Fields:** `record_id` (`EntityId`); `failed_at` (`UtcDateTime`); `source_name` (`NonEmptyString`); `adapter_name` (`NonEmptyString`); `diagnostics` (tuple of `AdapterDiagnostic`, min length 1); `payload_reference` (`NonEmptyString`); optional `correlation_id` (`EntityId`).
 - **Invariants:** at least one diagnostic. **Raw external payloads are forbidden**; infrastructure may store the original bytes/file behind `payload_reference`.
+- **Persistence:** The canonical contract is unchanged. An interim infrastructure adapter (`FilesystemDeadLetterQueue`) can persist this metadata as one JSON file per `record_id`. It stores the opaque `payload_reference` string only; it does not store or resolve the failed payload. PostgreSQL/TimescaleDB remains the planned system of record (ADR-004). Replay, listing, and query APIs are not implemented. Ingestion adapters still return `DLQRecord` values on `StructuredIngestionResult`; they do not enqueue them.
 
 ---
 

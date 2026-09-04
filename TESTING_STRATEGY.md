@@ -50,7 +50,7 @@ Infrastructure integration tests against PostgreSQL, Redis, or Qdrant are **not*
 
 | Directory | Intent |
 | --- | --- |
-| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports |
+| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, infrastructure adapters, filesystem DLQ persistence |
 | `tests/integration/` | Real adapters against local files/containers when those exist |
 | `tests/architecture/` | Import-graph / layering rules |
 | `tests/fixtures/` | CSV/Excel/PDF snippets, malformed series, canonical JSON |
@@ -91,7 +91,7 @@ Chunk 9 covers Consumption duplicate interval keys: every member of a `(consumer
 
 Unrecoverable records produce `DLQRecord` with stage, source, correlation ID, and payload ref. Workflow continues for siblings. No silent swallow.
 
-Chunk 4 covers the application sink Protocol with an in-memory fake (`enqueue(DLQRecord)`). Persistence/runtime tests remain for a later chunk.
+Chunk 4 covers the application sink Protocol with an in-memory fake (`enqueue(DLQRecord)`). Chunk 11 covers the interim filesystem metadata implementation (`tests/unit/infrastructure/persistence/test_dlq.py`): one JSON artifact per canonical record; directory creation; round-trip into `DLQRecord`; canonical keys only; diagnostic and optional `correlation_id` survival; identical retry idempotency without a second file; same-ID/different-metadata `ConflictError` without overwrite; hashed filenames that cannot escape the configured root; sanitized `DependencyUnavailableError` for create/write/corrupt-file failures; and async `enqueue()` offload via `asyncio.to_thread`. Tests use `tmp_path` only. PostgreSQL integration tests and DLQ replay/list/delete tests remain later chunks.
 
 ### Agent tests
 
@@ -174,6 +174,12 @@ Chunk 10 Consumption missing-interval / gap reporting tests:
 - CSV adapter additions: explicit hourly grid reports a gap diagnostic without DLQ; the same source without a grid reports no gap; a 4-interval span emits one diagnostic; multiple gaps emit multiple diagnostics; different consumers stay independent; duplicate-induced and off-grid-induced gaps keep row DLQ plus a separate gap diagnostic with no extra gap DLQ; out-of-order source order is preserved; kW/timezone paths still work; unique consumer/timestamp/value/anchor sentinels are absent from outward metadata; no synthetic `01:00` record appears.
 - Excel adapter additions: corresponding typed/aware hourly gap, no-grid, compact multi-slot, per-consumer, duplicate-induced, off-grid-induced, out-of-order, timezone, kW, no-fake-DLQ, privacy, and no-synthetic-row cases. Existing Chunk 7–9 Excel tests remain the regression suite.
 - Architecture test (`tests/architecture/test_time_series_gap_boundary.py`): gap types and coverage windows do not appear on application ingestion ports; the time-series package still has no application/API/ML/file-reader imports.
+
+Chunk 11 filesystem DLQ persistence tests:
+
+- Unit tests (`tests/unit/infrastructure/persistence/test_dlq.py`): `tmp_path` only; no database or broker. Enqueue creates one canonical JSON file; the persistence directory is created when absent; stored JSON round-trips to `DLQRecord`; persisted keys are canonical DLQ/diagnostic fields only; diagnostics and optional `correlation_id` survive; identical retry is idempotent and does not add a second file; same `record_id` with different metadata raises `ConflictError` without overwrite; an opaque/filename-unsafe `record_id` is stored under a SHA-256 filename inside the configured root; create/write/corrupt-file failures become sanitized `DependencyUnavailableError` with no root path, OS text, raw JSON, or secret sentinel; async `enqueue()` offloads blocking work through `asyncio.to_thread`.
+- Architecture test (`tests/architecture/test_dlq_persistence_boundary.py`): application `DeadLetterQueuePort` still accepts one canonical `DLQRecord` and exposes no `Path`/raw-payload/database/HTTP/`Any` surface; `FilesystemDeadLetterQueue` may depend on application errors and domain contracts but must not import FastAPI, pandas/openpyxl, HTTP clients, databases, brokers, LangChain/LangGraph/OpenAI, ML libraries, or Consumption CSV/Excel adapters.
+- These tests do not cover PostgreSQL DLQ storage, replay, listing, deletion, or payload-reference resolution.
 
 Still planned: fail if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 

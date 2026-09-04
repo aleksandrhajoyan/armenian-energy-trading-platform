@@ -255,3 +255,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - A missing interval has no source row, so adapters emit only a sanitized `AdapterDiagnostic` (`consumption_missing_interval_gap`, severity ERROR, `field_name="timestamp"`, count-only message). No fabricated DLQ URI is created.
   - No Armenian DAM interval is hardcoded. Cross-batch completeness and persistence of gap objects are deferred.
 - **Consequences:** Operators can see that an explicitly configured cadence is incomplete inside the observed batch without losing valid observations or inventing source provenance. Delivery-window completeness, gap repair, and other domains remain later work.
+
+---
+
+## ADR-021 — Filesystem-backed DLQ metadata persistence boundary
+
+- **Status:** Accepted
+- **Context:** Chunks 4–10 emit canonical `DLQRecord` metadata on `StructuredIngestionResult`, but there was no persistence implementation behind `DeadLetterQueuePort`. Introducing PostgreSQL/TimescaleDB, Redis, a broker, or replay in this slice would expand into Phase 2 infrastructure. Adapters also must not persist DLQ records themselves: that would couple acquisition/normalization to runtime persistence policy. `EntityId` is an opaque string and is not a safe filesystem path component.
+- **Decision:**
+  - Keep the existing single-record application port: `async enqueue(record: DLQRecord) -> None`. Do not add a batch method, path argument, raw-payload argument, query API, or persistence DTO.
+  - Retry idempotency uses the existing canonical `record_id`. Enqueueing an identical canonical record succeeds without creating a second artifact. The same `record_id` with different canonical metadata fails closed as `ConflictError` and does not overwrite the stored record.
+  - `FilesystemDeadLetterQueue` is an interim local/development infrastructure adapter. It stores canonical `DLQRecord` metadata only. `payload_reference` remains opaque and is never dereferenced. Raw failed payloads are not stored and are not replayed.
+  - Storage is one UTF-8 JSON file per record. The filename is a SHA-256 digest of the UTF-8 `record_id`, not the raw identifier. Exclusive file creation is used so a concurrent writer cannot silently overwrite an existing file. Incomplete newly-created files are removed on a best-effort basis.
+  - Blocking filesystem I/O is offloaded from the async `enqueue()` boundary with `asyncio.to_thread`. Expected filesystem availability/integrity failures become sanitized `DependencyUnavailableError`. Messages must not include paths, OS error text, or persisted contents.
+  - Each `enqueue()` is independent. No cross-record batch atomicity, distributed locking, SQLite, PostgreSQL, Redis, broker, Docker, API endpoint, or FastAPI composition wiring is introduced.
+  - Future application/orchestration owns iteration over `StructuredIngestionResult.dlq_records`. This chunk does not add that use case.
+  - This filesystem adapter does not supersede ADR-004. PostgreSQL/TimescaleDB remains the planned system of record for canonical DLQ metadata.
+- **Consequences:** Local/dev callers can persist canonical DLQ metadata without a database. At-least-once retries of the same record are safe. Conflicting same-ID writes fail closed. Replay, listing, payload-reference resolution, and production durability remain later chunks. Ingestion CSV/Excel adapters continue to return DLQ metadata without persisting it.

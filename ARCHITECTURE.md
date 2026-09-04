@@ -72,6 +72,7 @@ This rule is enforced by AST import inspection:
 - `tests/architecture/test_structured_normalization_boundary.py` — the Consumption unit/timezone normalization package imports none of application/API/ML, pandas/openpyxl, HTTP clients, databases, or LLM/graph libraries. Application ports still expose no `PowerUnit`, `ZoneInfo`, or normalization config.
 - `tests/architecture/test_time_series_validation_boundary.py` — the Consumption time-series validation package imports none of application/API/ML, pandas/openpyxl, HTTP clients, databases, or LLM/graph libraries. Application ports still expose no `IntervalGrid`, duplicate policy, source-position configuration, or `ConsumptionGap`.
 - `tests/architecture/test_time_series_gap_boundary.py` — gap reports stay infrastructure-local; application ports expose no gap ranges, missing-timestamp collections, or coverage windows.
+- `tests/architecture/test_dlq_persistence_boundary.py` — application `DeadLetterQueuePort` stays free of filesystem/raw-payload/database types; `FilesystemDeadLetterQueue` may depend on application errors and domain contracts but not on FastAPI, pandas/openpyxl, HTTP clients, databases, brokers, LLM/graph libraries, ML libraries, or Consumption CSV/Excel adapters.
 
 Broader ML/agent import rules remain for later chunks.
 
@@ -125,6 +126,7 @@ Broader ML/agent import rules remain for later chunks.
 │       │   │   ├── unstructured/
 │       │   │   └── external_services/
 │       │   ├── persistence/
+│       │   │   └── dlq.py
 │       │   ├── cache/
 │       │   ├── vector_store/
 │       │   └── messaging/
@@ -151,7 +153,7 @@ Broader ML/agent import rules remain for later chunks.
 └── docs/
 ```
 
-Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Consumption duplicate-timestamp policy, optional interval-grid alignment, and internal compact gap reporting live under `structured/time_series/`. Empty architectural directories still use `.gitkeep`.
+Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Consumption duplicate-timestamp policy, optional interval-grid alignment, and internal compact gap reporting live under `structured/time_series/`. Interim filesystem-backed DLQ metadata persistence lives under `infrastructure/persistence/`. Empty architectural directories still use `.gitkeep`.
 
 ## Anti-Corruption Layer
 
@@ -212,7 +214,7 @@ CSV and Excel acquisition remain infrastructure-only. Paths, worksheet names, `s
 
 Consumption duplicate identity is `(consumer_id, canonical UTC timestamp)`. Every member of a duplicate group fails closed; there is no first-wins, last-wins, or aggregation policy. Interval-grid alignment and missing-interval detection run only when an explicit infrastructure `IntervalGrid` is configured (positive `timedelta` plus timezone-aware anchor, normalized to UTC internally). The default `interval_grid` is `None`: duplicates are still detected, but cadence is not checked and no gaps are inferred. Off-grid rows fail individually. Source order of surviving records is preserved; out-of-order aligned timestamps are neither sorted nor rejected.
 
-Gap detection is per `consumer_id` and only between that consumer's earliest and latest surviving observations. A compact contiguous range (`missing_count`, first/last missing timestamp) is kept infrastructure-local; missing timestamps are not expanded one-by-one. Surviving observed records remain valid. A missing interval has no source row, so it produces a sanitized `AdapterDiagnostic` (`consumption_missing_interval_gap`) and **no** fabricated DLQ record. Leading/trailing delivery-window completeness is not inferred. No Armenian DAM interval is assumed. Duplicate and gap detection are per `ingest()` batch only. Interpolation, synthetic fill, and DLQ persistence are not implemented.
+Gap detection is per `consumer_id` and only between that consumer's earliest and latest surviving observations. A compact contiguous range (`missing_count`, first/last missing timestamp) is kept infrastructure-local; missing timestamps are not expanded one-by-one. Surviving observed records remain valid. A missing interval has no source row, so it produces a sanitized `AdapterDiagnostic` (`consumption_missing_interval_gap`) and **no** fabricated DLQ record. Leading/trailing delivery-window completeness is not inferred. No Armenian DAM interval is assumed. Duplicate and gap detection are per `ingest()` batch only. Interpolation and synthetic fill are not implemented. Adapters still do not persist DLQ metadata themselves.
 
 Canonical Consumption output remains MW. `PowerUnit.MW` is the default source unit; `PowerUnit.KW` may convert kW→MW only when explicitly configured. `Consumption_MW` maps to canonical `value_mw` under the MW profile; `Consumption_kW` maps under the kW profile. Energy-like headers (`Consumption_MWh`, `Consumption_kWh`, `Consumption_MW_h`) fail regardless of `PowerUnit`. Header/config mismatches such as `PowerUnit.KW` with `value_mw` fail closed. No MW↔MWh conversion and no interval-length assumption.
 
@@ -235,7 +237,7 @@ An optional infrastructure-local semantic/LLM fallback remains deferred. No prov
 
 Partial success is first-class: a batch may contain canonical records together with diagnostics and DLQ references. Complete normalization failure (empty records plus DLQ references) and a valid empty source (all collections empty) are also valid results; they must not crash the workflow by themselves.
 
-DLQ persistence is abstracted behind application-owned `DeadLetterQueuePort`. No DLQ runtime exists yet.
+DLQ persistence is abstracted behind application-owned `DeadLetterQueuePort`. The port still accepts one canonical `DLQRecord` per `enqueue()`; filesystem paths and raw payloads are not part of that signature. An interim local filesystem implementation (`FilesystemDeadLetterQueue`) lives in infrastructure and persists canonical `DLQRecord` metadata only. `payload_reference` is stored as an opaque string and is never dereferenced. Storage filenames are derived from a SHA-256 digest of `record_id`, not from the raw identifier. Identical retries are idempotent; the same `record_id` with different canonical metadata fails closed as `ConflictError`. The adapter is not wired into ingestion adapters, `create_app()`, or any orchestration runtime. PostgreSQL/TimescaleDB remains the planned system of record (ADR-004); this filesystem adapter does not replace that decision. DLQ replay is not implemented.
 
 Dependency direction:
 
@@ -278,7 +280,7 @@ External Source
   → Application / Agent / ML layer
 ```
 
-The application-facing port and immutable result envelope are implemented. Deterministic schema field resolution is implemented inside infrastructure. Concrete structured adapters are `ConsumptionCsvAdapter` (UTF-8 CSV) and `ConsumptionExcelAdapter` (modern `.xlsx` via openpyxl). Explicit Consumption MW/kW power normalization, explicit IANA source-timezone normalization, fail-closed duplicate timestamp detection, optional interval-grid alignment, and internal compact gap reporting are implemented in infrastructure. They do not construct records for other domains, infer units, timezones, or DAM intervals, calculate Excel formulas, invent leading/trailing coverage, sort output, interpolate missing slots, or persist DLQ entries. REST adapters, semantic/LLM mapping, gap repair, and adapter runtimes for other sources are **not** implemented. Failures that cannot safely be normalized are represented as `DLQRecord` metadata on the result rather than crashing the workflow. File acquisition failures are `DependencyUnavailableError`. Missing intervals have no source row and therefore do not fabricate DLQ records.
+The application-facing port and immutable result envelope are implemented. Deterministic schema field resolution is implemented inside infrastructure. Concrete structured adapters are `ConsumptionCsvAdapter` (UTF-8 CSV) and `ConsumptionExcelAdapter` (modern `.xlsx` via openpyxl). Explicit Consumption MW/kW power normalization, explicit IANA source-timezone normalization, fail-closed duplicate timestamp detection, optional interval-grid alignment, and internal compact gap reporting are implemented in infrastructure. They do not construct records for other domains, infer units, timezones, or DAM intervals, calculate Excel formulas, invent leading/trailing coverage, sort output, interpolate missing slots, or persist DLQ entries. REST adapters, semantic/LLM mapping, gap repair, and adapter runtimes for other sources are **not** implemented. Failures that cannot safely be normalized are represented as `DLQRecord` metadata on the result rather than crashing the workflow. File acquisition failures are `DependencyUnavailableError`. Missing intervals have no source row and therefore do not fabricate DLQ records. Canonical DLQ metadata may later be passed to `DeadLetterQueuePort`; a filesystem metadata adapter exists but is not invoked by these source adapters.
 
 ## Unstructured / RAG conceptual flow
 
@@ -306,9 +308,9 @@ Ownership:
 | --- | --- |
 | Infrastructure adapter | Reading the external payload, schema interpretation, normalization attempts, `AdapterDiagnostic`, storing/referencing failed raw data, constructing `DLQRecord` metadata |
 | Application / orchestration | Receiving `StructuredIngestionResult` and later passing `dlq_records` to `DeadLetterQueuePort` |
-| DLQ infrastructure | Persisting or forwarding DLQ metadata (not implemented) |
+| DLQ infrastructure | Persisting canonical DLQ metadata. Current implementation: `FilesystemDeadLetterQueue` writes one canonical JSON file per `record_id`. Not yet invoked by ingestion adapters or API composition. |
 
-Transport for the DLQ (outbox table, Redis stream, etc.) is an infrastructure decision; application code depends only on `DeadLetterQueuePort`. The domain `DLQRecord` contract and the application sink port exist; runtime persistence does not.
+Transport for the DLQ is an infrastructure decision; application code depends only on `DeadLetterQueuePort`. The domain `DLQRecord` contract and the application sink port exist. The current sink implementation stores canonical metadata on the local filesystem (`payload_reference` remains an opaque string and is never dereferenced). PostgreSQL/TimescaleDB remains the planned system of record and is not implemented. Replay, listing, and deletion are not implemented.
 
 ## ML / LLM separation
 
@@ -384,7 +386,7 @@ Phase 2 agents have no inherent sequential dependency on each other. The orchest
 | Qdrant | Regulatory/document retrieval embeddings and payloads | Authoritative time-series or financial books |
 | Redis | Ephemeral workflow state, cache, short-lived locks | System of record |
 
-No store is running in this chunk.
+No PostgreSQL, Redis, or Qdrant service is running in this chunk. Canonical DLQ metadata can be written to a local filesystem directory by `FilesystemDeadLetterQueue` when an application caller invokes `DeadLetterQueuePort`; that adapter is not composed into the API or ingestion runtime yet.
 
 ## API boundary
 
@@ -445,7 +447,7 @@ Unexpected Exception
 
 ## Testing boundaries
 
-See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, the Consumption Excel adapter provider boundary, the Consumption unit/timezone normalization boundary, and the Consumption time-series validation and gap-reporting boundary.
+See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, the Consumption Excel adapter provider boundary, the Consumption unit/timezone normalization boundary, the Consumption time-series validation and gap-reporting boundary, and the filesystem DLQ persistence boundary.
 
 ## Runtime baseline (implemented)
 
