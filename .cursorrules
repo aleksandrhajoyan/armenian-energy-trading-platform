@@ -77,6 +77,10 @@ No external schema, Armenian header names, vendor column names, or raw units may
 ## Errors, logging, tests
 
 - Robust exception handling. Never silently swallow exceptions.
+- Application and domain exceptions must not contain HTTP status semantics. HTTP translation belongs exclusively to the API boundary.
+- Unexpected exception details must never be sent to clients. Public 500 responses are generic; internals stay in structured logs.
+- Correlation IDs must be propagated through request logs and error responses.
+- Never log request bodies, credentials, authorization headers, cookies, or secrets by default.
 - Structured logging only. No ad-hoc `print()` for operational output.
 - Tests are required for new behavior. Default tests must not call live external APIs.
 - No premature abstraction or giant modules. Prefer small, reviewable units.

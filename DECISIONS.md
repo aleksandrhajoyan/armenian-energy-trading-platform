@@ -114,3 +114,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Currency is an explicit ISO-style three-letter code. `AMD` is a valid value, not a hardcoded market default.
   - `DLQRecord` stores a `payload_reference` rather than the raw external payload so vendor schemas cannot leak past the ACL envelope.
 - **Consequences:** Adapters must perform unit and timezone conversion before constructing domain models. JSON money should travel as Decimal-safe strings. Unverified DAM product, gate, and tariff rules remain outside these types.
+
+---
+
+## ADR-013 — Transport-neutral errors, API envelopes, and stdlib observability
+
+- **Status:** Accepted
+- **Context:** Chunk 3 needed a failure and observability foundation before adapters exist. HTTP status codes must not leak into application or domain types. Client responses must stay free of secrets and stack traces, while operators still need a correlation key into structured logs. Third-party logging/telemetry stacks would add RAM, lock-in, and dependencies the project does not yet need.
+- **Decision:**
+  - Application failures are `ApplicationError` subclasses with stable machine-readable codes and safe messages. They carry no HTTP status, FastAPI/Starlette types, raw payloads, or stack traces as contract data.
+  - HTTP mapping and the public error envelope live only in the API layer. Unexpected exceptions become a generic HTTP 500 (`internal_error`); internals are logged, never returned.
+  - Each HTTP request binds a correlation ID in a `contextvars.ContextVar` via pure ASGI middleware. Valid `X-Correlation-ID` values are reused; invalid values are replaced rather than rejecting the request. The ID is also stored on ASGI scope state because Starlette handles `Exception` in outer `ServerErrorMiddleware`, after the ContextVar scope has exited.
+  - Structured JSON logs use the Python standard library (`logging` + `json`), configured from the composition root. Request completion logs record method, path, status, duration, and correlation ID. Request bodies, credentials, Authorization headers, cookies, and query strings are not logged.
+  - `AdapterDiagnostic` remains a domain ingestion diagnostic and is not reused as the HTTP/application exception format.
+  - OpenTelemetry, Sentry, Prometheus, structlog, and loguru are deferred.
+- **Consequences:** Operators correlate a sanitized client error with an internal JSON log using the same ID, without a vendor observability stack. Application code stays transport-portable. Stdlib JSON logs are less feature-rich than structlog/OTel; that tradeoff is accepted until a later telemetry chunk. ContextVar isolation depends on not using `BaseHTTPMiddleware`, which can break context propagation.

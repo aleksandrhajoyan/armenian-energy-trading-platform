@@ -10,6 +10,7 @@ These can be spoken to from documentation and (for contracts) from executable do
 - **Clean Architecture** with a strict dependency rule (`domain` isolated; infrastructure behind ports).
 - **Anti-Corruption Layer** so CSV/Excel/PDF/API/scrape schemas never reach agents or models.
 - **Canonical contracts:** External data variability is isolated by mapping everything into strict canonical contracts before agents/ML see it.
+- **Resilience:** Every API failure receives a correlation ID that links a sanitized client response to internal structured logs.
 - **ML vs LLM separation:** forecasts from XGBoost/LightGBM (optional Prophet); LLMs for regulatory/news reasoning only.
 - **Data-agnostic ingestion strategy:** schema detection and semantic mapping into canonical contracts (MW, UTC timestamps, Decimal money).
 - **DLQ / resilience:** unnormalizable records park instead of crashing the DAM workflow.
@@ -24,7 +25,8 @@ These can be spoken to from documentation and (for contracts) from executable do
 | LangGraph visualization | Placeholder — graph not implemented |
 | ML metrics | Placeholder — no experiments (`EXPERIMENT_LOG.md`) |
 | Forecasting plots | Placeholder |
-| API demo | Placeholder — endpoints TBD |
+| API 500 response with correlation ID ↔ matching JSON application log | Placeholder — add after a screenshot exists |
+| API demo | Placeholder — health + error envelope exist; business endpoints TBD |
 | End-to-end trading demo | Placeholder |
 | Settlement example | Placeholder — official rules unverified |
 

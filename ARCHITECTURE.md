@@ -61,7 +61,12 @@ ml             ──→ application ports + domain contracts
 - No domain or application module may import a concrete infrastructure adapter or a concrete ML implementation.
 - LLMs must not perform numerical forecasting that belongs to ML models.
 
-This rule is enforced for the domain layer by `tests/architecture/test_domain_dependencies.py` (AST import inspection). Broader application/ML import rules remain for later chunks.
+This rule is enforced by AST import inspection:
+
+- `tests/architecture/test_domain_dependencies.py` — domain imports none of `api`, `application`, `infrastructure`, `ml`, `shared`, or FastAPI.
+- `tests/architecture/test_application_dependencies.py` — application imports none of `api`, `infrastructure`, `ml`, FastAPI, or Starlette.
+
+Broader ML/agent import rules remain for later chunks.
 
 ## Initial folder tree
 
@@ -91,6 +96,7 @@ This rule is enforced for the domain layer by `tests/architecture/test_domain_de
 │       │   ├── services/
 │       │   └── value_objects/
 │       ├── application/
+│       │   ├── errors.py
 │       │   ├── agents/
 │       │   ├── orchestration/
 │       │   ├── ports/
@@ -110,6 +116,9 @@ This rule is enforced for the domain layer by `tests/architecture/test_domain_de
 │       │   └── messaging/
 │       ├── api/
 │       │   ├── app.py
+│       │   ├── errors.py
+│       │   ├── exception_handlers.py
+│       │   ├── middleware.py
 │       │   ├── routers/
 │       │   │   └── health.py
 │       │   └── dependencies/
@@ -117,6 +126,8 @@ This rule is enforced for the domain layer by `tests/architecture/test_domain_de
 │           ├── config/
 │           │   └── settings.py
 │           └── observability/
+│               ├── correlation.py
+│               └── logging.py
 ├── tests/
 │   ├── unit/
 │   ├── integration/
@@ -268,7 +279,7 @@ No store is running in this chunk.
 
 FastAPI is the HTTP surface (`/api/v1`). The application factory `create_app` in `src/energy_trading/api/app.py` is the current composition root: it constructs a testable FastAPI app, registers versioned routers, and will later wire infrastructure and ML implementations into application ports. It must not contain business logic and must not initialize databases, caches, vector stores, ML models, agents, or LangGraph.
 
-Implemented now: process/application health at `GET /api/v1/health`. That endpoint does not report infrastructure readiness. Remaining business endpoints are TBD (`API_CONTRACTS.md`). Routers translate HTTP ↔ canonical contracts and call application use cases. The API layer must not parse vendor CSV/Excel/PDF formats.
+Implemented now: process/application health at `GET /api/v1/health`, standard error envelope, correlation middleware, and structured request logs. The health endpoint does not report infrastructure readiness. Remaining business endpoints are TBD (`API_CONTRACTS.md`). Routers translate HTTP ↔ canonical contracts and call application use cases. The API layer must not parse vendor CSV/Excel/PDF formats.
 
 ## Configuration and secrets
 
@@ -278,22 +289,52 @@ Implemented now: process/application health at `GET /api/v1/health`. That endpoi
 
 ## Error handling
 
-- Typed application errors distinct from infrastructure transport errors.
-- Never silently swallow exceptions.
-- Ingestion: retry transient I/O; DLQ for unrecoverable normalization failures.
-- Orchestration: retries and fallback at the graph, with diagnostics on workflow state.
-- API: standard error envelope and correlation/workflow ID (see `API_CONTRACTS.md`).
+Keep these four responsibilities separate:
+
+| Concern | Owner | Role |
+| --- | --- | --- |
+| Domain diagnostics | `AdapterDiagnostic` / `DLQRecord` | Canonical ingestion diagnostics. Not HTTP exceptions. |
+| Application errors | `ApplicationError` hierarchy | Transport-neutral use-case failure semantics. No HTTP status codes. |
+| API error responses | API exception translator | HTTP status + standard envelope (`API_CONTRACTS.md`). |
+| Operational logs | structured JSON logger | Internal observability. May include exception traces. Never returned to clients. |
+
+Application errors currently implemented: `InvalidRequestError`, `ResourceNotFoundError`, `ConflictError`, `DependencyUnavailableError`. The API translator maps only those explicit subclasses. Bare `ApplicationError` and any unmapped subclass fail closed to a sanitized HTTP 500 (`internal_error`) so a missing mapping cannot be mistaken for a client error. Unexpected programming exceptions are not modeled as application errors; the API boundary also converts them to a sanitized HTTP 500.
+
+Never silently swallow exceptions.
+
+Ingestion (later): retry transient I/O; DLQ for unrecoverable normalization failures. Orchestration (later): retries and fallback at the graph, with diagnostics on workflow state.
+
+### Request failure flow
+
+```text
+HTTP Request
+→ Correlation Middleware
+→ API
+→ Application
+→ ApplicationError (if expected, mapped failure)
+→ API Exception Translator
+→ Standard Error Envelope
+
+Unmapped ApplicationError
+→ Internal structured diagnostic log
+→ sanitized HTTP 500
+
+Unexpected Exception
+→ Internal structured exception log
+→ sanitized HTTP 500
+```
 
 ## Observability
 
-- Structured logging (JSON or equivalent). No operational `print()`.
-- Correlation/workflow IDs propagate from API or scheduler through adapters, agents, and ML jobs.
-- Adapter diagnostics (`AdapterDiagnostic`) are first-class, not log-only afterthoughts.
+- Structured JSON logging via the Python standard library (`logging` + `json`). Configured from `create_app`, not on import. No operational `print()`. Third-party telemetry (OpenTelemetry, Sentry, Prometheus, structlog) is deferred.
+- Per-request correlation IDs use `contextvars.ContextVar`. Incoming `X-Correlation-ID` is reused when valid; otherwise a UUID is generated. The same ID is written to the response header, error envelope, and log records. The ID is also stored on ASGI request state so Starlette's outer unhandled-exception handler can recover it after the ContextVar scope ends.
+- HTTP request completion is logged as `event=http_request_completed` with method, path, status code, duration, and correlation ID. Path only — no query string, body, Authorization header, cookies, or API keys.
+- Adapter diagnostics (`AdapterDiagnostic`) remain first-class canonical records, not a substitute for HTTP errors or log lines.
 - Metrics/tracing exporters are optional later; local RAM budget argues against heavy always-on stacks.
 
 ## Testing boundaries
 
-See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. `tests/architecture/test_domain_dependencies.py` locks the domain import rule.
+See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules.
 
 ## Runtime baseline (implemented)
 

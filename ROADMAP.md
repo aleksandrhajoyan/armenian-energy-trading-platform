@@ -11,13 +11,13 @@ Checkbox legend: `[x]` done · `[ ]` not started.
 - [x] **Chunk 0** — Documentation and repository skeleton (this chunk)
 - [x] **Chunk 1** — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check
 - [x] **Chunk 2** — Canonical Domain Contracts and Value Objects
-- [ ] **Chunk 3** — Error Contracts, Diagnostics, and Observability Foundation
+- [x] **Chunk 3** — Error Contracts, Diagnostics, and Observability Foundation
 
 ## Phase 1 — Anti-Corruption Layer
 
 Split into reviewable chunks; do not implement as one drop.
 
-- [ ] Adapter ports/interfaces
+- [ ] **Chunk 4** — Adapter Ports and Structured Ingestion Boundary
 - [ ] Schema detection / semantic mapping
 - [ ] CSV adapter
 - [ ] Excel adapter
@@ -103,5 +103,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0, Chunk 1, Chunk 2
-- **Next:** Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation
+- **Completed:** Chunk 0, Chunk 1, Chunk 2, Chunk 3
+- **Next:** Chunk 4 — Adapter Ports and Structured Ingestion Boundary

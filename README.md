@@ -17,7 +17,7 @@ Only the Python 3.12 / uv / FastAPI health slice and canonical domain contracts 
 
 ## Current status
 
-**Phase 0 / Chunk 2.** The repository has a reproducible Python 3.12 project, typed application settings, a FastAPI application factory, `GET /api/v1/health`, and implemented canonical Pydantic domain contracts. There are no agents, no ML models, no adapters, and no Docker stack.
+**Phase 0 / Chunk 3.** The repository has a reproducible Python 3.12 project, typed application settings, a FastAPI application factory, `GET /api/v1/health`, canonical Pydantic domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, and structured JSON logging. There are no agents, no ML models, no adapters, and no Docker stack.
 
 See [`CURRENT_STATE.md`](CURRENT_STATE.md) and [`ROADMAP.md`](ROADMAP.md).
 
@@ -50,7 +50,7 @@ Copy [`.env.example`](.env.example) to `.env` locally if you want to override se
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Architecture source of truth |
 | [`AGENTS.md`](AGENTS.md) | 13-agent specifications |
 | [`DATA_CONTRACTS.md`](DATA_CONTRACTS.md) | Canonical data contracts (implemented) |
-| [`API_CONTRACTS.md`](API_CONTRACTS.md) | API contracts (`GET /api/v1/health` implemented) |
+| [`API_CONTRACTS.md`](API_CONTRACTS.md) | API contracts (`GET /api/v1/health` and the standard error envelope implemented) |
 | [`TESTING_STRATEGY.md`](TESTING_STRATEGY.md) | Test boundaries and quality toolchain |
 | [`DECISIONS.md`](DECISIONS.md) | Architecture Decision Records |
 | [`ROADMAP.md`](ROADMAP.md) | Implementation chunks |
