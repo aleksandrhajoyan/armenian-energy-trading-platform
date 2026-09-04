@@ -79,6 +79,7 @@ FORBIDDEN_PORT_TYPES = frozenset(
         "openpyxl",
         "DataFrame",
         "IntervalGrid",
+        "ConsumptionGap",
         "timedelta",
         "bytes",
         "dict",

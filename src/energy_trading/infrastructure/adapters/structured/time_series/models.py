@@ -27,6 +27,9 @@ class ConsumptionSeriesIssueCode(StrEnum):
     INTERVAL_MISALIGNED = "consumption_interval_misaligned"
 
 
+MISSING_INTERVAL_GAP_CODE = "consumption_missing_interval_gap"
+
+
 @dataclass(frozen=True, slots=True)
 class IntervalGrid:
     """Explicit timestamp lattice. Cadence is never inferred."""
@@ -48,6 +51,26 @@ class IntervalGrid:
             raise ValueError(msg)
         delta = timestamp.astimezone(UTC) - self.anchor
         return _timedelta_microseconds(delta) % _timedelta_microseconds(self.interval) == 0
+
+    def step_count_between(self, earlier: datetime, later: datetime) -> int:
+        """Return how many configured intervals lie between two aware instants."""
+
+        if earlier.tzinfo is None or later.tzinfo is None:
+            msg = "timestamp must be timezone-aware"
+            raise ValueError(msg)
+        delta = later.astimezone(UTC) - earlier.astimezone(UTC)
+        return _timedelta_microseconds(delta) // _timedelta_microseconds(self.interval)
+
+    def offset(self, timestamp: datetime, steps: int) -> datetime:
+        """Shift an aware timestamp by an integer number of grid intervals."""
+
+        if timestamp.tzinfo is None:
+            msg = "timestamp must be timezone-aware"
+            raise ValueError(msg)
+        if type(steps) is not int:
+            msg = "steps must be an int"
+            raise TypeError(msg)
+        return timestamp.astimezone(UTC) + (self.interval * steps)
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,11 +110,46 @@ class ConsumptionSeriesIssue:
 
 
 @dataclass(frozen=True, slots=True)
+class ConsumptionGap:
+    """Compact internal missing-interval range for one consumer.
+
+    This is not a source-row finding and has no ``source_position``. It must
+    never cross into application ports or canonical records.
+    """
+
+    consumer_id: str
+    first_missing_timestamp: datetime
+    last_missing_timestamp: datetime
+    missing_count: int
+
+    def __post_init__(self) -> None:
+        consumer_id = _require_non_empty("consumer_id", self.consumer_id)
+        first_missing = _require_aware_timestamp(self.first_missing_timestamp).astimezone(UTC)
+        last_missing = _require_aware_timestamp(self.last_missing_timestamp).astimezone(UTC)
+        missing_count = _require_positive_count(self.missing_count)
+        if first_missing > last_missing:
+            msg = "first_missing_timestamp must not be after last_missing_timestamp"
+            raise ValueError(msg)
+        if missing_count == 1 and first_missing != last_missing:
+            msg = "single-interval gaps must have identical first and last timestamps"
+            raise ValueError(msg)
+        object.__setattr__(self, "consumer_id", consumer_id)
+        object.__setattr__(self, "first_missing_timestamp", first_missing)
+        object.__setattr__(self, "last_missing_timestamp", last_missing)
+        object.__setattr__(self, "missing_count", missing_count)
+
+    def diagnostic_message(self) -> str:
+        noun = "interval" if self.missing_count == 1 else "intervals"
+        return f"Consumption series is missing {self.missing_count} {noun} on the configured grid."
+
+
+@dataclass(frozen=True, slots=True)
 class ConsumptionSeriesValidationResult:
     """Deterministic batch outcome. Valid candidates stay in source order."""
 
     valid_candidates: tuple[ConsumptionRecordCandidate, ...]
     issues: tuple[ConsumptionSeriesIssue, ...]
+    gaps: tuple[ConsumptionGap, ...]
 
     def __post_init__(self) -> None:
         valid_candidates = _require_tuple(
@@ -100,8 +158,10 @@ class ConsumptionSeriesValidationResult:
             ConsumptionRecordCandidate,
         )
         issues = _require_tuple("issues", self.issues, ConsumptionSeriesIssue)
+        gaps = _require_tuple("gaps", self.gaps, ConsumptionGap)
         object.__setattr__(self, "valid_candidates", valid_candidates)
         object.__setattr__(self, "issues", issues)
+        object.__setattr__(self, "gaps", gaps)
 
 
 def duplicate_timestamp_issue(source_position: int) -> ConsumptionSeriesIssue:
@@ -149,6 +209,26 @@ def _require_aware_anchor(value: object) -> datetime:
         raise NormalizationConfigurationError("anchor must be a datetime")
     if value.tzinfo is None:
         raise NormalizationConfigurationError("anchor must be a timezone-aware datetime")
+    return value
+
+
+def _require_aware_timestamp(value: object) -> datetime:
+    if not isinstance(value, datetime):
+        msg = "timestamp must be a datetime"
+        raise TypeError(msg)
+    if value.tzinfo is None:
+        msg = "timestamp must be timezone-aware"
+        raise ValueError(msg)
+    return value
+
+
+def _require_positive_count(value: object) -> int:
+    if type(value) is not int:
+        msg = "missing_count must be an int"
+        raise TypeError(msg)
+    if value < 1:
+        msg = "missing_count must be a positive int"
+        raise ValueError(msg)
     return value
 
 

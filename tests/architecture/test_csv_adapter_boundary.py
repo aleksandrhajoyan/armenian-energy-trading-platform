@@ -52,6 +52,7 @@ FORBIDDEN_PORT_TYPES = frozenset(
         "DictReader",
         "DataFrame",
         "IntervalGrid",
+        "ConsumptionGap",
         "timedelta",
         "bytes",
         "dict",

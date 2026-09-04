@@ -23,8 +23,8 @@ Split into reviewable chunks; do not implement as one drop.
 - [x] **Chunk 7** — Excel Structured Ingestion Adapter
 - [x] **Chunk 8** — Deterministic Consumption Unit and Timezone Normalization
 - [x] **Chunk 9** — Duplicate Timestamp Policy and Interval Validation
-- [ ] **Chunk 10** — Missing-Interval Detection and Gap Reporting
-- [ ] DLQ port and persistence-facing contract
+- [x] **Chunk 10** — Missing-Interval Detection and Gap Reporting
+- [ ] **Chunk 11** — DLQ Persistence Boundary
 - [ ] Unstructured-document boundary (extraction/OCR port; no full RAG yet)
 
 ## Phase 2 — Infrastructure
@@ -105,5 +105,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 9
-- **Next:** Chunk 10 — Missing-Interval Detection and Gap Reporting
+- **Completed:** Chunk 0 through Chunk 10
+- **Next:** Chunk 11 — DLQ Persistence Boundary

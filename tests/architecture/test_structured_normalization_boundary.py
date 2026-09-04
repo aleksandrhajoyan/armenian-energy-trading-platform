@@ -54,6 +54,7 @@ FORBIDDEN_PORT_TYPES = frozenset(
         "Mapping",
         "Any",
         "IntervalGrid",
+        "ConsumptionGap",
         "timedelta",
     }
 )

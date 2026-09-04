@@ -46,6 +46,7 @@ FORBIDDEN_PORT_TYPES = frozenset(
         "ConsumptionRecordCandidate",
         "ConsumptionSeriesIssue",
         "ConsumptionSeriesIssueCode",
+        "ConsumptionGap",
         "timedelta",
         "PowerUnit",
         "ZoneInfo",
@@ -66,9 +67,12 @@ FORBIDDEN_PORT_IMPORTS = frozenset(
         "IntervalGrid",
         "IntervalGridPolicy",
         "ConsumptionRecordCandidate",
+        "ConsumptionGap",
         "timedelta",
         "anchor",
         "source_position",
+        "missing_count",
+        "first_missing_timestamp",
     }
 )
 

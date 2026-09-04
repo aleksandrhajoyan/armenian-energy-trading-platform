@@ -236,4 +236,22 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Output preserves source order after invalid rows are removed. Out-of-order aligned timestamps are accepted and are not sorted. A two-hour gap on an hourly grid is not a Chunk 9 failure.
   - No Armenian DAM interval is hardcoded. No missing-interval detection, interpolation, resampling, or chronological-ordering policy is implemented. Duplicate detection is per `ingest()` batch only; cross-ingestion and persistence uniqueness are deferred.
   - CSV and Excel adapters collect infrastructure-local `ConsumptionRecordCandidate` values (canonical record + source position), run the synchronous validator, and translate findings into adapter-specific row DLQ URIs. The validator does not know CSV/Excel URI schemes.
-- **Consequences:** Operators can reject duplicate Consumption observations and optionally enforce a known reporting lattice without changing canonical contracts. Missing-hour detection remains Chunk 10. Other domains still have no time-series cleaner.
+- **Consequences:** Operators can reject duplicate Consumption observations and optionally enforce a known reporting lattice without changing canonical contracts. Chunk 10 (ADR-020) later added internal compact gap reporting; leading/trailing coverage windows and repair remain deferred. Other domains still have no time-series cleaner.
+
+---
+
+## ADR-020 — Internal gap detection without automatic repair
+
+- **Status:** Accepted
+- **Context:** Chunk 9 rejected duplicate and off-grid Consumption observations but did not describe incompleteness between surviving aligned timestamps. Inferring a DAM delivery window, filling missing hours, or fabricating DLQ rows for timestamps that never existed in the source would smuggle unverified market policy and false provenance into the ACL.
+- **Decision:**
+  - Gap detection remains an infrastructure ACL responsibility inside `structured/time_series/`. Domain contracts, application ports, `AppSettings`, and the API are unchanged.
+  - Detection requires an explicit `IntervalGrid`. `interval_grid=None` still means no cadence and no gap diagnostics. Cadence is never inferred from adjacent records.
+  - Detection runs after duplicate groups and off-grid rows are removed. Rejected source rows keep their existing diagnostics and DLQ metadata. The resulting canonical series may then contain an internal gap.
+  - Evaluation is independent per `consumer_id`. Timelines are not merged across consumers.
+  - Only internal observed-span gaps are detected: between each consumer's earliest and latest surviving timestamps. Leading and trailing coverage cannot be inferred without a future explicit delivery-window contract.
+  - Contiguous missing slots are one compact `ConsumptionGap` (`missing_count`, first/last missing timestamp). Missing timestamps are not materialized one-by-one. Gaps separated by valid observations stay separate. Ordering is `consumer_id` then `first_missing_timestamp`.
+  - Valid observed records remain in `StructuredIngestionResult.records` in source order. Gap detection does not reject, sort, interpolate, fill, resample, or synthesize `ConsumptionRecord` values.
+  - A missing interval has no source row, so adapters emit only a sanitized `AdapterDiagnostic` (`consumption_missing_interval_gap`, severity ERROR, `field_name="timestamp"`, count-only message). No fabricated DLQ URI is created.
+  - No Armenian DAM interval is hardcoded. Cross-batch completeness and persistence of gap objects are deferred.
+- **Consequences:** Operators can see that an explicitly configured cadence is incomplete inside the observed batch without losing valid observations or inventing source provenance. Delivery-window completeness, gap repair, and other domains remain later work.

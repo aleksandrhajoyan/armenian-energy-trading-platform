@@ -4,6 +4,8 @@ from energy_trading.infrastructure.adapters.structured.time_series.consumption i
     validate_consumption_series,
 )
 from energy_trading.infrastructure.adapters.structured.time_series.models import (
+    MISSING_INTERVAL_GAP_CODE,
+    ConsumptionGap,
     ConsumptionRecordCandidate,
     ConsumptionSeriesIssue,
     ConsumptionSeriesIssueCode,
@@ -12,6 +14,8 @@ from energy_trading.infrastructure.adapters.structured.time_series.models import
 )
 
 __all__ = [
+    "MISSING_INTERVAL_GAP_CODE",
+    "ConsumptionGap",
     "ConsumptionRecordCandidate",
     "ConsumptionSeriesIssue",
     "ConsumptionSeriesIssueCode",

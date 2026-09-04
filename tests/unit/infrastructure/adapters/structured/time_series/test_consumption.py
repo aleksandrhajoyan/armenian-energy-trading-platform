@@ -226,6 +226,8 @@ def test_hourly_gap_is_not_a_missing_interval_failure() -> None:
     )
     assert len(result.valid_candidates) == 2
     assert result.issues == ()
+    assert len(result.gaps) == 1
+    assert result.gaps[0].missing_count == 1
     assert all("missing" not in issue.code for issue in result.issues)
     assert all("gap" not in issue.code for issue in result.issues)
 

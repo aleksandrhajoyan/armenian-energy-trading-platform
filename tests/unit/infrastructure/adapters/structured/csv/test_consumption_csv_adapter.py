@@ -686,7 +686,7 @@ async def test_off_grid_row_is_isolated(tmp_path: Path) -> None:
     assert result.dlq_records[0].payload_reference == f"csv://{_SOURCE}/row/3"
 
 
-async def test_hourly_gap_is_not_detected(tmp_path: Path) -> None:
+async def test_hourly_internal_gap_reports_diagnostic_without_dlq(tmp_path: Path) -> None:
     path = _write(
         tmp_path,
         "consumer_id,timestamp,value_mw\n"
@@ -694,9 +694,18 @@ async def test_hourly_gap_is_not_detected(tmp_path: Path) -> None:
         "c1,2026-09-05T02:00:00+00:00,2.0\n",
     )
     result = await _adapter(path, interval_grid=_HOURLY_UTC).ingest()
-    assert len(result.records) == 2
+    assert [record.timestamp for record in result.records] == [
+        datetime(2026, 9, 5, 0, 0, tzinfo=UTC),
+        datetime(2026, 9, 5, 2, 0, tzinfo=UTC),
+    ]
     assert result.dlq_records == ()
-    assert all("missing" not in item.code and "gap" not in item.code for item in result.diagnostics)
+    assert len(result.diagnostics) == 1
+    assert result.diagnostics[0].code == "consumption_missing_interval_gap"
+    assert result.diagnostics[0].severity is DiagnosticSeverity.ERROR
+    assert result.diagnostics[0].field_name == "timestamp"
+    assert result.diagnostics[0].message == (
+        "Consumption series is missing 1 interval on the configured grid."
+    )
 
 
 async def test_out_of_order_aligned_source_order_is_preserved(tmp_path: Path) -> None:
@@ -777,3 +786,182 @@ async def test_structural_diagnostics_do_not_leak_source_sentinels(tmp_path: Pat
     codes = {item.code for item in result.diagnostics}
     assert "consumption_duplicate_timestamp" in codes
     assert "consumption_interval_misaligned" in codes
+
+
+async def test_no_grid_does_not_report_internal_gaps(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "consumer_id,timestamp,value_mw\n"
+        "c1,2026-09-05T00:00:00+00:00,1.0\n"
+        "c1,2026-09-05T05:00:00+00:00,2.0\n",
+    )
+    result = await _adapter(path).ingest()
+    assert len(result.records) == 2
+    assert result.dlq_records == ()
+    assert all(item.code != "consumption_missing_interval_gap" for item in result.diagnostics)
+
+
+async def test_multi_slot_gap_emits_one_compact_diagnostic(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "consumer_id,timestamp,value_mw\n"
+        "c1,2026-09-05T00:00:00+00:00,1.0\n"
+        "c1,2026-09-05T05:00:00+00:00,2.0\n",
+    )
+    result = await _adapter(path, interval_grid=_HOURLY_UTC).ingest()
+    assert len(result.records) == 2
+    assert result.dlq_records == ()
+    gaps = [item for item in result.diagnostics if item.code == "consumption_missing_interval_gap"]
+    assert len(gaps) == 1
+    assert gaps[0].message == "Consumption series is missing 4 intervals on the configured grid."
+
+
+async def test_multiple_gaps_emit_separate_diagnostics(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "consumer_id,timestamp,value_mw\n"
+        "c1,2026-09-05T00:00:00+00:00,1.0\n"
+        "c1,2026-09-05T02:00:00+00:00,2.0\n"
+        "c1,2026-09-05T03:00:00+00:00,3.0\n"
+        "c1,2026-09-05T06:00:00+00:00,4.0\n",
+    )
+    result = await _adapter(path, interval_grid=_HOURLY_UTC).ingest()
+    assert len(result.records) == 4
+    gaps = [item for item in result.diagnostics if item.code == "consumption_missing_interval_gap"]
+    assert len(gaps) == 2
+    assert result.dlq_records == ()
+
+
+async def test_gap_detection_is_independent_per_consumer(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "consumer_id,timestamp,value_mw\n"
+        "consumer-a,2026-09-05T00:00:00+00:00,1.0\n"
+        "consumer-b,2026-09-05T00:00:00+00:00,2.0\n"
+        "consumer-a,2026-09-05T02:00:00+00:00,3.0\n"
+        "consumer-b,2026-09-05T01:00:00+00:00,4.0\n"
+        "consumer-b,2026-09-05T02:00:00+00:00,5.0\n",
+    )
+    result = await _adapter(path, interval_grid=_HOURLY_UTC).ingest()
+    assert len(result.records) == 5
+    gaps = [item for item in result.diagnostics if item.code == "consumption_missing_interval_gap"]
+    assert len(gaps) == 1
+    assert "consumer-a" not in _outward_text(result)
+    assert "consumer-b" not in _outward_text(result)
+
+
+async def test_duplicate_induced_gap_has_row_dlq_but_no_gap_dlq(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "consumer_id,timestamp,value_mw\n"
+        "c1,2026-09-05T00:00:00+00:00,1.0\n"
+        "c1,2026-09-05T01:00:00+00:00,2.0\n"
+        "c1,2026-09-05T01:00:00+00:00,3.0\n"
+        "c1,2026-09-05T02:00:00+00:00,4.0\n",
+    )
+    result = await _adapter(path, interval_grid=_HOURLY_UTC).ingest()
+    assert [record.value_mw for record in result.records] == [1.0, 4.0]
+    assert len(result.dlq_records) == 2
+    assert all("row/" in record.payload_reference for record in result.dlq_records)
+    assert all("missing" not in record.payload_reference for record in result.dlq_records)
+    codes = [item.code for item in result.diagnostics]
+    assert codes.count("consumption_duplicate_timestamp") == 2
+    assert codes.count("consumption_missing_interval_gap") == 1
+
+
+async def test_off_grid_induced_gap_keeps_row_dlq_and_gap_diagnostic(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "consumer_id,timestamp,value_mw\n"
+        "c1,2026-09-05T00:00:00+00:00,1.0\n"
+        "c1,2026-09-05T00:30:00+00:00,2.0\n"
+        "c1,2026-09-05T02:00:00+00:00,3.0\n",
+    )
+    result = await _adapter(path, interval_grid=_HOURLY_UTC).ingest()
+    assert [record.value_mw for record in result.records] == [1.0, 3.0]
+    assert len(result.dlq_records) == 1
+    assert result.dlq_records[0].payload_reference == f"csv://{_SOURCE}/row/3"
+    codes = [item.code for item in result.diagnostics]
+    assert codes == [
+        "consumption_interval_misaligned",
+        "consumption_missing_interval_gap",
+    ]
+
+
+async def test_out_of_order_source_preserves_order_and_reports_gap(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "consumer_id,timestamp,value_mw\n"
+        "c1,2026-09-05T03:00:00+00:00,3.0\n"
+        "c1,2026-09-05T00:00:00+00:00,0.0\n"
+        "c1,2026-09-05T02:00:00+00:00,2.0\n",
+    )
+    result = await _adapter(path, interval_grid=_HOURLY_UTC).ingest()
+    assert [record.timestamp for record in result.records] == [
+        datetime(2026, 9, 5, 3, 0, tzinfo=UTC),
+        datetime(2026, 9, 5, 0, 0, tzinfo=UTC),
+        datetime(2026, 9, 5, 2, 0, tzinfo=UTC),
+    ]
+    assert result.dlq_records == ()
+    assert result.diagnostics[0].code == "consumption_missing_interval_gap"
+
+
+async def test_kw_timezone_path_still_reports_internal_gap(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "consumer_id,timestamp,Consumption_kW\n"
+        "keep,2026-01-15T11:00:00,12500\n"
+        "keep,2026-01-15T13:00:00,1000\n",
+    )
+    result = await _adapter(
+        path,
+        source_power_unit=PowerUnit.KW,
+        source_timezone="UTC",
+        interval_grid=IntervalGrid(
+            interval=timedelta(hours=1),
+            anchor=datetime(2026, 1, 15, 0, 0, tzinfo=UTC),
+        ),
+    ).ingest()
+    assert [record.value_mw for record in result.records] == [12.5, 1.0]
+    assert result.dlq_records == ()
+    assert result.diagnostics[0].code == "consumption_missing_interval_gap"
+
+
+async def test_gap_diagnostics_do_not_leak_source_or_gap_sentinels(tmp_path: Path) -> None:
+    consumer = "GAP-CONSUMER-SENTINEL-m4q8"
+    path = _write(
+        tmp_path,
+        "consumer_id,timestamp,value_mw\n"
+        f"{consumer},2026-04-11T07:13:00+00:00,11.017\n"
+        f"{consumer},2026-04-11T12:13:00+00:00,22.019\n",
+    )
+    grid = IntervalGrid(
+        interval=timedelta(hours=1),
+        anchor=datetime(2026, 4, 11, 7, 13, tzinfo=UTC),
+    )
+    result = await _adapter(path, interval_grid=grid).ingest()
+    assert len(result.records) == 2
+    assert result.dlq_records == ()
+    outward = _outward_text(result)
+    assert consumer not in outward
+    assert "11.017" not in outward
+    assert "22.019" not in outward
+    assert "2026-04-11T08:13:00" not in outward
+    assert "07:13" not in outward
+    assert "GAP-CONSUMER" not in outward
+    assert result.diagnostics[0].code == "consumption_missing_interval_gap"
+    assert "4 intervals" in result.diagnostics[0].message
+
+
+async def test_gap_does_not_insert_synthetic_records(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "consumer_id,timestamp,value_mw\n"
+        "c1,2026-09-05T00:00:00+00:00,1.0\n"
+        "c1,2026-09-05T02:00:00+00:00,2.0\n",
+    )
+    result = await _adapter(path, interval_grid=_HOURLY_UTC).ingest()
+    assert len(result.records) == 2
+    assert datetime(2026, 9, 5, 1, 0, tzinfo=UTC) not in {
+        record.timestamp for record in result.records
+    }

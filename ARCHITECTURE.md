@@ -70,7 +70,8 @@ This rule is enforced by AST import inspection:
 - `tests/architecture/test_csv_adapter_boundary.py` — the Consumption CSV adapter imports none of pandas/Polars/openpyxl, HTTP clients, FastAPI/Starlette, database clients, LangChain/LangGraph/OpenAI, or ML libraries. Application ingestion ports still accept no CSV/path/raw-row types.
 - `tests/architecture/test_excel_adapter_boundary.py` — the Consumption Excel adapter may import openpyxl and the shared Consumption mapping helper, but none of pandas/Polars/xlrd, HTTP clients, FastAPI/Starlette, database clients, LangChain/LangGraph/OpenAI, or ML libraries. Application ingestion ports still accept no Workbook/Worksheet/Cell/path types.
 - `tests/architecture/test_structured_normalization_boundary.py` — the Consumption unit/timezone normalization package imports none of application/API/ML, pandas/openpyxl, HTTP clients, databases, or LLM/graph libraries. Application ports still expose no `PowerUnit`, `ZoneInfo`, or normalization config.
-- `tests/architecture/test_time_series_validation_boundary.py` — the Consumption time-series validation package imports none of application/API/ML, pandas/openpyxl, HTTP clients, databases, or LLM/graph libraries. Application ports still expose no `IntervalGrid`, duplicate policy, or source-position configuration.
+- `tests/architecture/test_time_series_validation_boundary.py` — the Consumption time-series validation package imports none of application/API/ML, pandas/openpyxl, HTTP clients, databases, or LLM/graph libraries. Application ports still expose no `IntervalGrid`, duplicate policy, source-position configuration, or `ConsumptionGap`.
+- `tests/architecture/test_time_series_gap_boundary.py` — gap reports stay infrastructure-local; application ports expose no gap ranges, missing-timestamp collections, or coverage windows.
 
 Broader ML/agent import rules remain for later chunks.
 
@@ -150,7 +151,7 @@ Broader ML/agent import rules remain for later chunks.
 └── docs/
 ```
 
-Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Consumption duplicate-timestamp policy and optional interval-grid alignment live under `structured/time_series/`. Empty architectural directories still use `.gitkeep`.
+Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Consumption duplicate-timestamp policy, optional interval-grid alignment, and internal compact gap reporting live under `structured/time_series/`. Empty architectural directories still use `.gitkeep`.
 
 ## Anti-Corruption Layer
 
@@ -188,6 +189,7 @@ CSV Consumption Source
   → ConsumptionRecord validation
   → duplicate timestamp validation
   → optional interval-grid alignment
+  → internal missing-interval detection and compact gap reporting
   → StructuredIngestionResult[ConsumptionRecord]
   → application
 
@@ -201,13 +203,16 @@ XLSX Consumption Source
   → ConsumptionRecord validation
   → duplicate timestamp validation
   → optional interval-grid alignment
+  → internal missing-interval detection and compact gap reporting
   → StructuredIngestionResult[ConsumptionRecord]
   → application
 ```
 
 CSV and Excel acquisition remain infrastructure-only. Paths, worksheet names, `source_power_unit`, `source_timezone`, and `interval_grid` are constructor-injected and never appear on `ingest()`. Both adapters produce `StructuredIngestionResult[ConsumptionRecord]`. Blocking filesystem and library work stays behind async `asyncio.to_thread`. Excel loading uses openpyxl in `read_only=True` and `data_only=True` mode; formulas are not calculated. Raw workbook objects, cells, headers, and filesystem paths do not cross into application. Partial success is supported. Neither adapter infers units, timezones, or interval cadence.
 
-Consumption duplicate identity is `(consumer_id, canonical UTC timestamp)`. Every member of a duplicate group fails closed; there is no first-wins, last-wins, or aggregation policy. Interval-grid alignment runs only when an explicit infrastructure `IntervalGrid` is configured (positive `timedelta` plus timezone-aware anchor, normalized to UTC internally). The default `interval_grid` is `None`: duplicates are still detected, but cadence is not checked. Off-grid rows fail individually. Source order of surviving records is preserved; out-of-order aligned timestamps are neither sorted nor rejected. Multi-interval gaps are **not** identified here. Missing-interval detection belongs to a later chunk. No Armenian DAM interval is assumed. Duplicate detection is per `ingest()` batch only; there is no persistence or cross-file duplicate registry. Interpolation and DLQ persistence are not implemented.
+Consumption duplicate identity is `(consumer_id, canonical UTC timestamp)`. Every member of a duplicate group fails closed; there is no first-wins, last-wins, or aggregation policy. Interval-grid alignment and missing-interval detection run only when an explicit infrastructure `IntervalGrid` is configured (positive `timedelta` plus timezone-aware anchor, normalized to UTC internally). The default `interval_grid` is `None`: duplicates are still detected, but cadence is not checked and no gaps are inferred. Off-grid rows fail individually. Source order of surviving records is preserved; out-of-order aligned timestamps are neither sorted nor rejected.
+
+Gap detection is per `consumer_id` and only between that consumer's earliest and latest surviving observations. A compact contiguous range (`missing_count`, first/last missing timestamp) is kept infrastructure-local; missing timestamps are not expanded one-by-one. Surviving observed records remain valid. A missing interval has no source row, so it produces a sanitized `AdapterDiagnostic` (`consumption_missing_interval_gap`) and **no** fabricated DLQ record. Leading/trailing delivery-window completeness is not inferred. No Armenian DAM interval is assumed. Duplicate and gap detection are per `ingest()` batch only. Interpolation, synthetic fill, and DLQ persistence are not implemented.
 
 Canonical Consumption output remains MW. `PowerUnit.MW` is the default source unit; `PowerUnit.KW` may convert kW→MW only when explicitly configured. `Consumption_MW` maps to canonical `value_mw` under the MW profile; `Consumption_kW` maps under the kW profile. Energy-like headers (`Consumption_MWh`, `Consumption_kWh`, `Consumption_MW_h`) fail regardless of `PowerUnit`. Header/config mismatches such as `PowerUnit.KW` with `value_mw` fail closed. No MW↔MWh conversion and no interval-length assumption.
 
@@ -226,7 +231,7 @@ raw header
   → later adapter validation / normalization
 ```
 
-An optional infrastructure-local semantic/LLM fallback remains deferred. No provider SDK is installed. Missing-interval detection and time-series repair are not implemented.
+An optional infrastructure-local semantic/LLM fallback remains deferred. No provider SDK is installed. Leading/trailing coverage-window completeness and time-series repair are not implemented.
 
 Partial success is first-class: a batch may contain canonical records together with diagnostics and DLQ references. Complete normalization failure (empty records plus DLQ references) and a valid empty source (all collections empty) are also valid results; they must not crash the workflow by themselves.
 
@@ -273,7 +278,7 @@ External Source
   → Application / Agent / ML layer
 ```
 
-The application-facing port and immutable result envelope are implemented. Deterministic schema field resolution is implemented inside infrastructure. Concrete structured adapters are `ConsumptionCsvAdapter` (UTF-8 CSV) and `ConsumptionExcelAdapter` (modern `.xlsx` via openpyxl). Explicit Consumption MW/kW power normalization, explicit IANA source-timezone normalization, fail-closed duplicate timestamp detection, and optional interval-grid alignment are implemented in infrastructure. They do not construct records for other domains, infer units, timezones, or DAM intervals, calculate Excel formulas, detect missing gaps, sort output, or persist DLQ entries. REST adapters, semantic/LLM mapping, gap repair, and adapter runtimes for other sources are **not** implemented. Failures that cannot safely be normalized are represented as `DLQRecord` metadata on the result rather than crashing the workflow. File acquisition failures are `DependencyUnavailableError`.
+The application-facing port and immutable result envelope are implemented. Deterministic schema field resolution is implemented inside infrastructure. Concrete structured adapters are `ConsumptionCsvAdapter` (UTF-8 CSV) and `ConsumptionExcelAdapter` (modern `.xlsx` via openpyxl). Explicit Consumption MW/kW power normalization, explicit IANA source-timezone normalization, fail-closed duplicate timestamp detection, optional interval-grid alignment, and internal compact gap reporting are implemented in infrastructure. They do not construct records for other domains, infer units, timezones, or DAM intervals, calculate Excel formulas, invent leading/trailing coverage, sort output, interpolate missing slots, or persist DLQ entries. REST adapters, semantic/LLM mapping, gap repair, and adapter runtimes for other sources are **not** implemented. Failures that cannot safely be normalized are represented as `DLQRecord` metadata on the result rather than crashing the workflow. File acquisition failures are `DependencyUnavailableError`. Missing intervals have no source row and therefore do not fabricate DLQ records.
 
 ## Unstructured / RAG conceptual flow
 
@@ -440,7 +445,7 @@ Unexpected Exception
 
 ## Testing boundaries
 
-See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, the Consumption Excel adapter provider boundary, the Consumption unit/timezone normalization boundary, and the Consumption time-series validation boundary.
+See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, the Consumption Excel adapter provider boundary, the Consumption unit/timezone normalization boundary, and the Consumption time-series validation and gap-reporting boundary.
 
 ## Runtime baseline (implemented)
 

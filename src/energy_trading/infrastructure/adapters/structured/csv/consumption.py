@@ -47,6 +47,8 @@ from energy_trading.infrastructure.adapters.structured.schema_mapping import (
     SchemaResolution,
 )
 from energy_trading.infrastructure.adapters.structured.time_series import (
+    MISSING_INTERVAL_GAP_CODE,
+    ConsumptionGap,
     ConsumptionRecordCandidate,
     ConsumptionSeriesIssue,
     IntervalGrid,
@@ -219,6 +221,8 @@ class ConsumptionCsvAdapter:
             diagnostic = _series_diagnostic(issue)
             diagnostics.append(diagnostic)
             dlq_records.append(self._row_dlq(issue.source_position, (diagnostic,)))
+        for gap in series.gaps:
+            diagnostics.append(_gap_diagnostic(gap))
         return self._result(
             [candidate.record for candidate in series.valid_candidates],
             diagnostics,
@@ -367,4 +371,13 @@ def _series_diagnostic(issue: ConsumptionSeriesIssue) -> AdapterDiagnostic:
         message=issue.message,
         severity=DiagnosticSeverity.ERROR,
         field_name=issue.field_name,
+    )
+
+
+def _gap_diagnostic(gap: ConsumptionGap) -> AdapterDiagnostic:
+    return AdapterDiagnostic(
+        code=MISSING_INTERVAL_GAP_CODE,
+        message=gap.diagnostic_message(),
+        severity=DiagnosticSeverity.ERROR,
+        field_name="timestamp",
     )
