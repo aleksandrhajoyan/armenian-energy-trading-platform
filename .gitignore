@@ -1,0 +1,98 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.venv-wsl/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# Test / coverage / type caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+coverage.xml
+*.cover
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+pip-wheel-metadata/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ML artifacts (do not commit trained weights or run outputs by accident)
+mlruns/
+lightning_logs/
+wandb/
+models/artifacts/
+artifacts/models/
+*.pkl
+*.joblib
+*.onnx
+*.h5
+*.pt
+*.pth
+!tests/fixtures/**/*.pkl
+
+# Local data / temporary datasets
+data/raw/
+data/interim/
+data/processed/
+data/external/
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Local database / service volumes
+docker-data/
+pgdata/
+timescaledb-data/
+redis-data/
+qdrant-data/
+*.sqlite
+*.db
+
+# Logs
+logs/
+*.log
+
+# Cursor / local tooling
+.cursor/debug.log

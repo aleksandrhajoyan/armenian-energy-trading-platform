@@ -1,0 +1,115 @@
+# AI Energy Trading Platform — Cursor Rules
+# Authoritative. Read before every implementation chunk.
+
+## Mandatory pre-chunk reading
+
+Before implementing any chunk, read in this order:
+
+1. `.cursorrules`
+2. `ARCHITECTURE.md`
+3. `CURRENT_STATE.md`
+4. `ROADMAP.md`
+
+Then read only the implementation-specific files required for that chunk.
+Do not implement features from a future chunk. Do not skip documentation updates.
+
+## Clean Architecture dependency rule
+
+```text
+domain
+  ↑
+application
+  ↑
+api / composition root
+
+infrastructure ──→ application ports + domain contracts
+ml             ──→ application ports + domain contracts
+```
+
+- `domain` is the innermost layer. It depends on nothing application-specific or infrastructure-specific.
+- `application` depends inward on `domain` only (plus shared kernel types that are not infrastructure).
+- `application` owns interfaces/ports needed by use cases and agents.
+- `infrastructure` implements application ports and may use domain contracts.
+- `ml` is an outer implementation layer for forecasting and model execution. It may depend on application port interfaces and canonical domain contracts. It must not depend on LLM agents or LangGraph orchestration.
+- Application agents must never import XGBoost, LightGBM, Prophet, concrete model classes, or other concrete ML implementations. Future ML-backed agents receive forecasting services through dependency injection.
+- `api` / the application composition root wires concrete infrastructure and ML implementations into application abstractions. `api` may invoke application use cases / orchestration and must not contain business logic.
+- Agents belong to the application layer.
+- LangGraph orchestration belongs to the application layer. LangGraph nodes must depend on application abstractions, not concrete infrastructure or ML packages.
+- Concrete clients (databases, HTTP, scrapers, Redis, Qdrant, filesystem, Excel, PDF) belong to infrastructure.
+- No domain or application code may import concrete infrastructure adapters or concrete ML implementations.
+- Prefer dependency injection through interfaces/ports.
+
+## Anti-Corruption Layer (mandatory)
+
+External data must NEVER reach agents, ML models, or domain services directly.
+
+All external inputs MUST pass through infrastructure adapters:
+
+External Source → Source Adapter → Schema Detection / Semantic Mapping → Validation → Unit Normalization → Timezone Normalization → Time-Series Cleaning → Canonical Model → Application / Agent / ML
+
+Unrecoverable normalization failures go to a Dead Letter Queue (DLQ). Do not crash the workflow for a single bad payload. Never silently drop failed records.
+
+Unstructured regulatory path (conceptual): PDF/Document → Extraction/OCR Adapter → structured metadata/chunks → embedding/indexing → Qdrant → Regulatory Intelligence Agent retrieval.
+
+No external schema, Armenian header names, vendor column names, or raw units may leak into application or domain layers.
+
+## Canonical contracts and typing
+
+- Strict typing is required. Unannotated public functions are not acceptable.
+- Canonical data is Pydantic models defined in the domain (or shared contracts derived from domain).
+- Agents consume and return canonical typed contracts only.
+- Do not invent ad-hoc dict payloads between layers.
+
+## ML vs LLM
+
+- LLMs must not perform numerical forecasting that belongs to ML models.
+- Consumer Load Forecast Agent and DAM Price Forecast Agent call forecasting services through injected application ports; they do not import concrete ML implementations and do not ask an LLM to calculate forecasts.
+- LangGraph nodes stay thin: routing, state, retries, fallback, diagnostics. No business formulas inside graph nodes. Nodes depend on application abstractions, not concrete infrastructure or ML packages.
+
+## Runtime and configuration
+
+- Async I/O for network, database, and filesystem operations where appropriate.
+- No hardcoded business configuration. Configuration lives in the environment/settings layer.
+- No secrets in source control. Use `.env` locally; commit `.env.example` only.
+- Do not introduce OS-specific shell assumptions into application code. Windows 11 + WSL2 must both remain viable.
+- Avoid unnecessarily heavy always-on services (local RAM/VRAM constraints).
+
+## Errors, logging, tests
+
+- Robust exception handling. Never silently swallow exceptions.
+- Structured logging only. No ad-hoc `print()` for operational output.
+- Tests are required for new behavior. Default tests must not call live external APIs.
+- No premature abstraction or giant modules. Prefer small, reviewable units.
+
+## Documentation duty
+
+Update living documentation at the end of every chunk: at minimum `CURRENT_STATE.md` and `ROADMAP.md`, plus any contract/architecture files the chunk changed.
+
+## Git workflow (mandatory)
+
+### Architect-approved checkpoint rule
+
+For every implementation chunk:
+
+1. Cursor implements exactly the assigned chunk.
+2. Cursor runs all required validation/tests.
+3. Cursor returns its completion report.
+4. The user sends the report to the Architect.
+5. The Architect reviews the chunk.
+6. Only after Architect approval may the completed chunk be committed and pushed to `main`.
+7. After successful push, development may proceed to the next chunk.
+
+Additional rules:
+
+- One logical approved chunk should normally correspond to one Git commit.
+- Never mix the next chunk into the previous chunk's commit.
+- Never commit failing tests knowingly.
+- Never commit secrets.
+- Never force-push `main` unless explicitly instructed by the Architect.
+- Never rewrite published history without explicit approval.
+- Keep commit messages descriptive and include the chunk number.
+- Documentation updates belonging to the chunk must be included in the same chunk commit.
+- `uv.lock` changes must be committed whenever project dependencies change.
+- Do not automatically commit or push before Architect review.
+
+Chunks 0 and 1 predate this workflow and are captured in one initial baseline commit. Subsequent approved chunks should be tagged `chunk-2`, `chunk-3`, and so on after their approved commit.
