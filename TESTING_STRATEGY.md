@@ -121,6 +121,19 @@ Implemented for application (Chunk 3): fail if `src/energy_trading/application/`
 
 Implemented for the structured ingestion ACL boundary (Chunk 4): fail if application ingestion ports import raw-source libraries or annotate `ingest`/`enqueue` with `bytes`, `dict`, `Mapping`, `Any`, `DataFrame`, or similar escape hatches. Application ports may import canonical domain contracts. Infrastructure may later import application ports.
 
+Chunk 6 Consumption CSV adapter tests (`tests/unit/infrastructure/adapters/structured/csv/`):
+
+- tmp_path fixtures only; no live services. Stdlib CSV files, including UTF-8 Armenian identifiers and a test-only Armenian header alias.
+- Exact canonical headers and the MW-safe `Consumption_MW` alias produce `ConsumptionRecord` values in source order with UTC timestamps and no DLQ.
+- `Consumpton_MW` is accepted as fuzzy MW mapping with a warning whose `field_name` is canonical `value_mw`; the raw typo does not appear in outward diagnostics.
+- Default profile rejects unit-ambiguous or energy-like headers (`Consumption_kW`, `Consumption_MWh`, `Consumption_MW_h`, and similar) as canonical MW (schema fail-closed, no unit conversion).
+- Naive timestamps, negative/nonnumeric/NaN/Inf MW, and row-width mismatches isolate the bad row (diagnostic + DLQ) and keep siblings.
+- Partial success, complete row-normalization failure, empty file, and header-only success.
+- Fatal schema for missing required fields, header collisions, and forced ambiguity; unresolved extra columns warn and continue.
+- Missing/unreadable files raise sanitized `DependencyUnavailableError` without the filesystem path. Malformed CSV and invalid UTF-8 are normalization failures with source-level DLQ metadata, not dependency errors.
+- A unique raw bad cell value must not appear in diagnostics, DLQ metadata (except opaque source/row references), or serialized result fields.
+- Architecture test (`tests/architecture/test_csv_adapter_boundary.py`): CSV adapter must not import pandas/Polars/openpyxl, HTTP clients, FastAPI, databases, LangChain/LangGraph/OpenAI, or ML libraries. Application ports still have no CSV/path/raw-row surface.
+
 Still planned: fail if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 
 ## CI expectations (future)

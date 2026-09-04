@@ -19,7 +19,7 @@ Split into reviewable chunks; do not implement as one drop.
 
 - [x] **Chunk 4** — Adapter Ports and Structured Ingestion Boundary
 - [x] **Chunk 5** — Semantic Schema Mapping and Field Resolution Engine
-- [ ] CSV adapter
+- [x] **Chunk 6** — CSV Structured Ingestion Adapter
 - [ ] Excel adapter
 - [ ] Time-series normalization (units, timezone, missing hours, duplicates)
 - [ ] DLQ port and persistence-facing contract
@@ -103,5 +103,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0, Chunk 1, Chunk 2, Chunk 3, Chunk 4, Chunk 5
-- **Next:** CSV adapter
+- **Completed:** Chunk 0 through Chunk 6
+- **Next:** Excel adapter

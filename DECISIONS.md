@@ -160,3 +160,23 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - No new dependency is required. RapidFuzz, pandas, OpenAI, LangChain, LangGraph, embeddings, and transliteration libraries are out of scope.
   - A future optional infrastructure-local semantic/LLM fallback may run after the deterministic path. It must not be required for resolution to work, and any abstraction that carries raw external field names must stay inside infrastructure.
 - **Consequences:** CSV/Excel/REST adapters can later call this engine before validating row values. Mapping tables remain adapter configuration. Semantic/LLM mapping, if ever added, cannot push raw headers across the application boundary. Ambiguous source schemas will surface as schema diagnostics rather than invented canonical fields.
+
+---
+
+## ADR-016 — First concrete structured adapter: Consumption CSV
+
+- **Status:** Accepted
+- **Context:** Chunk 4 defined the application ingestion port. Chunk 5 provided deterministic header resolution. The platform still needed one real source adapter that acquires a file, maps headers, validates rows into `ConsumptionRecord`, and preserves ACL privacy. Pandas would add a heavy dependency for a narrow CSV job. Blocking the event loop on filesystem I/O would violate the async port. Guessing kW→MW or attaching `Asia/Yerevan` would smuggle unverified semantics into canonical data.
+- **Decision:**
+  - `ConsumptionCsvAdapter` lives in infrastructure and structurally implements the existing async `StructuredIngestionPort[ConsumptionRecord]`. It does not inherit a base adapter class and does not change the port.
+  - Path, `source_name`, optional Consumption field specs, and an optional UTC clock are constructor-injected. `ingest()` accepts no path, file, or raw payload.
+  - The Python standard library `csv` reader is sufficient. pandas, Polars, Excel, and HTTP clients are out of scope.
+  - Synchronous filesystem parsing runs behind `asyncio.to_thread` so the async port does not block the event loop.
+  - Files are opened as UTF-8 with BOM tolerance (`utf-8-sig`, `newline=""`). Encoding detection is not implemented.
+  - Chunk 5 `DeterministicFieldResolver` is reused. The default profile requires `consumer_id`, `timestamp`, and `value_mw`, with an exact MW-safe alias `Consumption_MW`. `Consumption_kW`, `Load`, and `Energy Usage` are not default aliases.
+  - Ambiguous headers, missing required canonical fields, and destination collisions fail closed: no data rows are interpreted; diagnostics plus one schema-level `DLQRecord` are returned. Unresolved extra columns emit a warning and are ignored. Fuzzy MW-safe mappings are accepted with a warning on the canonical field name.
+  - Fuzzy mapping to `value_mw` is accepted only when the source header still explicitly and safely identifies MW (after Chunk 5 normalization, the final token is exactly `mw`). Unit-ambiguous or energy-like headers fail closed. No numeric unit conversion is performed.
+  - Row validation uses `ConsumptionRecord.model_validate` on an infrastructure-local three-key dict. Pydantic `ValidationError` is isolated per row. Broad `Exception` is not caught. CSV values must already be MW. Source timestamps must already carry timezone information; naive timestamps fail the row. Canonical UTC normalization remains the domain contract.
+  - File acquisition `OSError` becomes `DependencyUnavailableError` with a generic message. Malformed CSV syntax and invalid UTF-8 are normalization failures, not dependency unavailability.
+  - Raw headers, rows, cell values, file paths, and Pydantic `input` values must not appear on `StructuredIngestionResult`, `AdapterDiagnostic`, or `DLQRecord`. DLQ metadata uses opaque `csv://<source_name>/...` references. No DLQ persistence is implemented.
+- **Consequences:** Application call sites can ingest Consumption CSV through the existing port. Other domains, Excel, REST, unit conversion, timezone inference, and time-series cleaning remain later chunks. A later unit-normalization stage can distinguish `Consumption_kW` because the raw header never becomes canonical MW here.
