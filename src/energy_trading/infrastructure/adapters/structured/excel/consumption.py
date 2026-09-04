@@ -1,9 +1,10 @@
 """Consumption Excel adapter: structured ``.xlsx`` source reader.
 
 Workbook acquisition, worksheet selection, schema interpretation, optional
-explicit unit/timezone normalization, and row validation stay inside
-infrastructure. The application receives only ``StructuredIngestionResult``.
-Units and timezones are never inferred. Excel formulas are not calculated.
+explicit unit/timezone normalization, row validation, and batch time-series
+structural validation stay inside infrastructure. The application receives
+only ``StructuredIngestionResult``. Units, timezones, and interval cadence
+are never inferred. Excel formulas are not calculated.
 """
 
 from __future__ import annotations
@@ -48,6 +49,12 @@ from energy_trading.infrastructure.adapters.structured.schema_mapping import (
     FieldResolutionMethod,
     FieldResolutionStatus,
     SchemaResolution,
+)
+from energy_trading.infrastructure.adapters.structured.time_series import (
+    ConsumptionRecordCandidate,
+    ConsumptionSeriesIssue,
+    IntervalGrid,
+    validate_consumption_series,
 )
 
 _ADAPTER_NAME = "consumption_excel"
@@ -100,6 +107,7 @@ class ConsumptionExcelAdapter:
         clock: Callable[[], datetime] | None = None,
         source_power_unit: PowerUnit = PowerUnit.MW,
         source_timezone: str | None = None,
+        interval_grid: IntervalGrid | None = None,
     ) -> None:
         self._path = _require_xlsx_path(path)
         cleaned_source = source_name.strip()
@@ -111,6 +119,7 @@ class ConsumptionExcelAdapter:
             raise NormalizationConfigurationError("source_power_unit must be a PowerUnit")
         self._source_power_unit = source_power_unit
         self._source_timezone = resolve_source_timezone(source_timezone)
+        self._interval_grid = _optional_interval_grid(interval_grid)
         specs = (
             default_consumption_field_specs(source_power_unit)
             if field_specs is None
@@ -160,7 +169,7 @@ class ConsumptionExcelAdapter:
         self,
         worksheet: object,
     ) -> StructuredIngestionResult[ConsumptionRecord]:
-        records: list[ConsumptionRecord] = []
+        candidates: list[ConsumptionRecordCandidate] = []
         diagnostics: list[AdapterDiagnostic] = []
         dlq_records: list[DLQRecord] = []
         column_index: dict[str, int] = {}
@@ -181,18 +190,18 @@ class ConsumptionExcelAdapter:
                 diagnostics.extend(schema_diagnostics)
                 if fatal_errors:
                     dlq_records.append(self._schema_dlq(fatal_errors))
-                    return self._result(records, diagnostics, dlq_records)
+                    return self._result([], diagnostics, dlq_records)
                 column_index = canonical_column_index(schema)
                 continue
             self._ingest_data_row(
                 row=raw_row,
                 logical_row=logical_row,
                 column_index=column_index,
-                records=records,
+                candidates=candidates,
                 diagnostics=diagnostics,
                 dlq_records=dlq_records,
             )
-        return self._result(records, diagnostics, dlq_records)
+        return self._with_series_validation(candidates, diagnostics, dlq_records)
 
     def _ingest_data_row(
         self,
@@ -200,7 +209,7 @@ class ConsumptionExcelAdapter:
         row: tuple[object, ...],
         logical_row: int,
         column_index: dict[str, int],
-        records: list[ConsumptionRecord],
+        candidates: list[ConsumptionRecordCandidate],
         diagnostics: list[AdapterDiagnostic],
         dlq_records: list[DLQRecord],
     ) -> None:
@@ -222,7 +231,12 @@ class ConsumptionExcelAdapter:
                 ),
                 "value_mw": normalize_power_to_mw(raw_mw, self._source_power_unit),
             }
-            records.append(ConsumptionRecord.model_validate(payload))
+            candidates.append(
+                ConsumptionRecordCandidate(
+                    record=ConsumptionRecord.model_validate(payload),
+                    source_position=logical_row,
+                )
+            )
         except (
             UnrecognizedConsumptionSourceValue,
             SourceValueNormalizationError,
@@ -231,6 +245,23 @@ class ConsumptionExcelAdapter:
             diagnostic = _error("excel_row_validation_failed", _MSG_ROW_VALIDATION)
             diagnostics.append(diagnostic)
             dlq_records.append(self._row_dlq(logical_row, (diagnostic,)))
+
+    def _with_series_validation(
+        self,
+        candidates: list[ConsumptionRecordCandidate],
+        diagnostics: list[AdapterDiagnostic],
+        dlq_records: list[DLQRecord],
+    ) -> StructuredIngestionResult[ConsumptionRecord]:
+        series = validate_consumption_series(candidates, self._interval_grid)
+        for issue in series.issues:
+            diagnostic = _series_diagnostic(issue)
+            diagnostics.append(diagnostic)
+            dlq_records.append(self._row_dlq(issue.source_position, (diagnostic,)))
+        return self._result(
+            [candidate.record for candidate in series.valid_candidates],
+            diagnostics,
+            dlq_records,
+        )
 
     def _result(
         self,
@@ -294,6 +325,14 @@ def _require_xlsx_path(value: object) -> Path:
     if value.suffix.lower() != ".xlsx":
         msg = "Excel adapter accepts .xlsx sources only"
         raise ValueError(msg)
+    return value
+
+
+def _optional_interval_grid(value: IntervalGrid | None) -> IntervalGrid | None:
+    if value is None:
+        return None
+    if not isinstance(value, IntervalGrid):
+        raise NormalizationConfigurationError("interval_grid must be an IntervalGrid")
     return value
 
 
@@ -413,4 +452,13 @@ def _error(code: str, message: str) -> AdapterDiagnostic:
         message=message,
         severity=DiagnosticSeverity.ERROR,
         field_name=None,
+    )
+
+
+def _series_diagnostic(issue: ConsumptionSeriesIssue) -> AdapterDiagnostic:
+    return AdapterDiagnostic(
+        code=issue.code,
+        message=issue.message,
+        severity=DiagnosticSeverity.ERROR,
+        field_name=issue.field_name,
     )

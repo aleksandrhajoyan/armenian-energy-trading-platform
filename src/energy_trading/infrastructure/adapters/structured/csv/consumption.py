@@ -1,9 +1,10 @@
 """Consumption CSV adapter: the first concrete structured source reader.
 
 CSV acquisition, schema interpretation, optional explicit unit/timezone
-normalization, and row validation stay inside infrastructure. The application
-receives only ``StructuredIngestionResult``. Units and timezones are never
-inferred.
+normalization, row validation, and batch time-series structural validation
+stay inside infrastructure. The application receives only
+``StructuredIngestionResult``. Units, timezones, and interval cadence are
+never inferred.
 """
 
 from __future__ import annotations
@@ -45,6 +46,12 @@ from energy_trading.infrastructure.adapters.structured.schema_mapping import (
     FieldResolutionStatus,
     SchemaResolution,
 )
+from energy_trading.infrastructure.adapters.structured.time_series import (
+    ConsumptionRecordCandidate,
+    ConsumptionSeriesIssue,
+    IntervalGrid,
+    validate_consumption_series,
+)
 
 _ADAPTER_NAME = "consumption_csv"
 
@@ -76,6 +83,7 @@ class ConsumptionCsvAdapter:
         clock: Callable[[], datetime] | None = None,
         source_power_unit: PowerUnit = PowerUnit.MW,
         source_timezone: str | None = None,
+        interval_grid: IntervalGrid | None = None,
     ) -> None:
         self._path = _require_path(path)
         cleaned_source = source_name.strip()
@@ -86,6 +94,7 @@ class ConsumptionCsvAdapter:
             raise NormalizationConfigurationError("source_power_unit must be a PowerUnit")
         self._source_power_unit = source_power_unit
         self._source_timezone = resolve_source_timezone(source_timezone)
+        self._interval_grid = _optional_interval_grid(interval_grid)
         specs = (
             default_consumption_field_specs(source_power_unit)
             if field_specs is None
@@ -109,7 +118,7 @@ class ConsumptionCsvAdapter:
             raise DependencyUnavailableError(_MSG_UNAVAILABLE) from exc
 
     def _read_and_normalize(self) -> StructuredIngestionResult[ConsumptionRecord]:
-        records: list[ConsumptionRecord] = []
+        candidates: list[ConsumptionRecordCandidate] = []
         diagnostics: list[AdapterDiagnostic] = []
         dlq_records: list[DLQRecord] = []
         try:
@@ -133,7 +142,7 @@ class ConsumptionCsvAdapter:
                         diagnostics.extend(schema_diagnostics)
                         if fatal_errors:
                             dlq_records.append(self._schema_dlq(fatal_errors))
-                            return self._result(records, diagnostics, dlq_records)
+                            return self._result([], diagnostics, dlq_records)
                         column_index = canonical_column_index(schema)
                         expected_width = len(header)
                         continue
@@ -142,7 +151,7 @@ class ConsumptionCsvAdapter:
                         logical_row=logical_row,
                         expected_width=expected_width,
                         column_index=column_index,
-                        records=records,
+                        candidates=candidates,
                         diagnostics=diagnostics,
                         dlq_records=dlq_records,
                     )
@@ -154,7 +163,7 @@ class ConsumptionCsvAdapter:
             diagnostic = _error("csv_parse_failed", _MSG_PARSE)
             diagnostics.append(diagnostic)
             dlq_records.append(self._source_dlq((diagnostic,)))
-        return self._result(records, diagnostics, dlq_records)
+        return self._with_series_validation(candidates, diagnostics, dlq_records)
 
     def _ingest_data_row(
         self,
@@ -163,7 +172,7 @@ class ConsumptionCsvAdapter:
         logical_row: int,
         expected_width: int,
         column_index: dict[str, int],
-        records: list[ConsumptionRecord],
+        candidates: list[ConsumptionRecordCandidate],
         diagnostics: list[AdapterDiagnostic],
         dlq_records: list[DLQRecord],
     ) -> None:
@@ -184,7 +193,12 @@ class ConsumptionCsvAdapter:
                     self._source_power_unit,
                 ),
             }
-            records.append(ConsumptionRecord.model_validate(payload))
+            candidates.append(
+                ConsumptionRecordCandidate(
+                    record=ConsumptionRecord.model_validate(payload),
+                    source_position=logical_row,
+                )
+            )
         except (
             UnrecognizedConsumptionSourceValue,
             SourceValueNormalizationError,
@@ -193,6 +207,23 @@ class ConsumptionCsvAdapter:
             diagnostic = _error("csv_row_validation_failed", _MSG_ROW_VALIDATION)
             diagnostics.append(diagnostic)
             dlq_records.append(self._row_dlq(logical_row, (diagnostic,)))
+
+    def _with_series_validation(
+        self,
+        candidates: list[ConsumptionRecordCandidate],
+        diagnostics: list[AdapterDiagnostic],
+        dlq_records: list[DLQRecord],
+    ) -> StructuredIngestionResult[ConsumptionRecord]:
+        series = validate_consumption_series(candidates, self._interval_grid)
+        for issue in series.issues:
+            diagnostic = _series_diagnostic(issue)
+            diagnostics.append(diagnostic)
+            dlq_records.append(self._row_dlq(issue.source_position, (diagnostic,)))
+        return self._result(
+            [candidate.record for candidate in series.valid_candidates],
+            diagnostics,
+            dlq_records,
+        )
 
     def _result(
         self,
@@ -253,6 +284,14 @@ def _require_path(value: object) -> Path:
     if not isinstance(value, Path):
         msg = "path must be a pathlib.Path"
         raise TypeError(msg)
+    return value
+
+
+def _optional_interval_grid(value: IntervalGrid | None) -> IntervalGrid | None:
+    if value is None:
+        return None
+    if not isinstance(value, IntervalGrid):
+        raise NormalizationConfigurationError("interval_grid must be an IntervalGrid")
     return value
 
 
@@ -319,4 +358,13 @@ def _error(code: str, message: str) -> AdapterDiagnostic:
         message=message,
         severity=DiagnosticSeverity.ERROR,
         field_name=None,
+    )
+
+
+def _series_diagnostic(issue: ConsumptionSeriesIssue) -> AdapterDiagnostic:
+    return AdapterDiagnostic(
+        code=issue.code,
+        message=issue.message,
+        severity=DiagnosticSeverity.ERROR,
+        field_name=issue.field_name,
     )

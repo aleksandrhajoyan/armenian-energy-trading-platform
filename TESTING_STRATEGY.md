@@ -81,11 +81,11 @@ Chunk 8 covers explicit IANA localization (`zoneinfo` + `tzdata`) with `Europe/B
 
 ### Missing-hour tests
 
-Gaps in hourly (or whatever interval is later verified) series: cleaning policy vs DLQ must be explicit and tested.
+Gaps in hourly (or whatever interval is later verified) series: cleaning policy vs DLQ must be explicit and tested. Chunk 9 does **not** treat integer-multiple gaps as failures; that belongs to Chunk 10.
 
 ### Duplicate-timestamp tests
 
-Duplicate interval keys: reject or deterministically coalesce per documented rule; never average silently without a test that names that rule.
+Chunk 9 covers Consumption duplicate interval keys: every member of a `(consumer_id, canonical UTC timestamp)` group is rejected. There is no silent first/last/average winner. Tests name that fail-closed rule.
 
 ### DLQ tests
 
@@ -159,6 +159,13 @@ Chunk 8 Consumption unit/timezone normalization tests:
 - Excel adapter additions: explicit kW numeric conversion; default kW rejection; MW/kW header-config mismatch; typed naive datetime + explicit IANA succeeds; typed naive datetime without timezone still fails; aware timestamp strings remain authoritative; numeric Excel timestamps still rejected; boolean MW/kW cells still rejected; ambiguous and nonexistent local datetimes fail; partial success and raw-source privacy are preserved. Existing Chunk 7 cases remain the Excel regression suite.
 - Shared mapping tests cover KW-profile exact/fuzzy aliases and reject conflicting MW or energy-like headers.
 - Architecture test (`tests/architecture/test_structured_normalization_boundary.py`): the normalization package must not import application/API/ML, pandas/openpyxl, HTTP clients, databases, or LLM/graph libraries. Application ports still expose no `PowerUnit`, `ZoneInfo`, timezone string, or normalization config.
+
+Chunk 9 Consumption duplicate/interval validation tests:
+
+- Primitive tests (`tests/unit/infrastructure/adapters/structured/time_series/`): `IntervalGrid` accepts positive 1-hour and 15-minute intervals; rejects zero/negative intervals and naive anchors; normalizes aware non-UTC anchors to UTC; remains frozen and equality-stable. Different timestamps for one consumer and the same timestamp for different consumers are valid. No grid means no cadence restriction. Exact and conflicting duplicates fail every group member. Canonically equivalent offsets collide. Nonadjacent and 3+ member groups are detected. Valid output keeps source order. Hourly on-grid timestamps succeed; 00:30 fails; pre-anchor timestamps use integer-microsecond modulo; `00:00` + `02:00` is not a missing-gap failure; out-of-order aligned timestamps stay unsorted; a duplicate that is also off-grid is classified as a duplicate only.
+- CSV adapter additions: default ingest detects duplicates without an interval grid; conflicting MW values fail closed; different consumers at one instant survive; offset-equivalent aware strings collide; nonadjacent duplicates are removed; an explicit 1-hour UTC grid accepts aligned rows; 00:30 is isolated; a 2-hour gap is allowed; source order of `02:00, 00:00, 01:00` is preserved; kW and explicit timezone paths still work with structural validation; unique consumer/timestamp/value sentinels are absent from diagnostics and DLQ metadata.
+- Excel adapter additions: duplicate canonical and typed-naive (explicit timezone) rows fail closed; conflicting duplicates fail; different consumers remain valid; offset-equivalent aware strings collide; explicit hourly grid accepts aligned typed rows; off-grid typed and aware timestamps are isolated; a 2-hour gap is allowed; out-of-order aligned rows keep source order; kW conversion and explicit timezone localization still work; naive timestamps without a configured zone still fail before interval classification; privacy sentinels stay out of outward metadata. Existing Chunk 7/8 cases remain the Excel regression suite.
+- Architecture test (`tests/architecture/test_time_series_validation_boundary.py`): the time-series package must not import application/API/ML, pandas/openpyxl, HTTP clients, databases, or LLM/graph libraries. Application ports still expose no `IntervalGrid`, `timedelta` cadence config, duplicate policy, or source positions.
 
 Still planned: fail if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 

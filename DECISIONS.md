@@ -218,4 +218,22 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - DST-ambiguous (fold 0 vs 1 differ) and nonexistent (spring-forward skipped) naive local clocks fail closed as `SourceValueNormalizationError`. Chunk 8 does not invent a fold/repair policy.
   - Configuration failures (unknown zone, unsupported unit) fail at construction. Source-value failures stay row-isolated (diagnostic + DLQ metadata). File `OSError` remains `DependencyUnavailableError`. Diagnostics still must not leak raw values, headers, paths, or exception reprs.
   - Duplicate timestamps, missing intervals, interpolation, resampling, Unix/Excel serial parsing, automatic unit/timezone detection, and DST repair are deferred.
-- **Consequences:** Operators can opt into kW and IANA localization without changing canonical contracts. Default paths remain fail-closed. Duplicate/gap/repair policy remains a later chunk. Units and timezones for other domains are still unimplemented.
+- **Consequences:** Operators can opt into kW and IANA localization without changing canonical contracts. Default paths remain fail-closed. Duplicate/gap/repair policy remains a later chunk. Units and timezones for other domains are still unimplemented. Chunk 9 (ADR-019) later implemented fail-closed duplicate detection and optional interval-grid alignment; missing-interval detection remains deferred.
+
+---
+
+## ADR-019 — Fail-closed duplicate timestamps and explicit interval-grid validation
+
+- **Status:** Accepted
+- **Context:** Chunk 8 normalized Consumption units and timezones into canonical `ConsumptionRecord` values, but a batch could still contain duplicate `(consumer_id, timestamp)` observations or timestamps that do not lie on a known reporting cadence. Silently keeping the first or last row, averaging MW, inferring an hourly DAM product, or reporting missing hours would smuggle unverified market policy into the ACL. Application ports must not grow source-cadence configuration.
+- **Decision:**
+  - Structural time-series validation stays in the infrastructure ACL (`structured/time_series/`). `StructuredIngestionPort`, `StructuredIngestionResult`, domain models, `AppSettings`, and the API are unchanged. `ingest()` still takes no configuration arguments.
+  - Duplicate identity is `(consumer_id, canonical UTC timestamp)`. Source offsets that represent the same instant collide after UTC normalization. Different consumers at the same instant are not duplicates.
+  - Every member of a duplicate group is rejected. There is no first-wins, last-wins, highest-value, average, or sum policy. Exact duplicate MW values and conflicting MW values are treated the same: all members fail closed with `consumption_duplicate_timestamp`.
+  - Interval alignment is opt-in. Adapters accept `interval_grid: IntervalGrid | None = None`. `None` (the default) still detects duplicates but does not impose a cadence. An `IntervalGrid` requires a positive `timedelta` and a timezone-aware anchor; the anchor is normalized to UTC. Naive anchors and non-positive intervals fail at construction as `NormalizationConfigurationError`.
+  - Alignment uses exact integer-microsecond arithmetic: `(timestamp - anchor_utc)` converted to microseconds, modulo interval microseconds equals zero. Pre-anchor timestamps are included. Floating-point seconds are not used.
+  - Off-grid rows fail individually (`consumption_interval_misaligned`) without discarding unrelated valid rows. Duplicate classification precedes interval classification; one structural reason per rejected candidate is sufficient.
+  - Output preserves source order after invalid rows are removed. Out-of-order aligned timestamps are accepted and are not sorted. A two-hour gap on an hourly grid is not a Chunk 9 failure.
+  - No Armenian DAM interval is hardcoded. No missing-interval detection, interpolation, resampling, or chronological-ordering policy is implemented. Duplicate detection is per `ingest()` batch only; cross-ingestion and persistence uniqueness are deferred.
+  - CSV and Excel adapters collect infrastructure-local `ConsumptionRecordCandidate` values (canonical record + source position), run the synchronous validator, and translate findings into adapter-specific row DLQ URIs. The validator does not know CSV/Excel URI schemes.
+- **Consequences:** Operators can reject duplicate Consumption observations and optionally enforce a known reporting lattice without changing canonical contracts. Missing-hour detection remains Chunk 10. Other domains still have no time-series cleaner.

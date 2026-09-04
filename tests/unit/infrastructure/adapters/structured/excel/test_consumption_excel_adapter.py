@@ -1,6 +1,6 @@
 """Consumption Excel adapter unit tests."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -15,6 +15,7 @@ from energy_trading.infrastructure.adapters.structured.normalization import (
     PowerUnit,
 )
 from energy_trading.infrastructure.adapters.structured.schema_mapping import CanonicalFieldSpec
+from energy_trading.infrastructure.adapters.structured.time_series import IntervalGrid
 
 _FIXED_TIME = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 _SOURCE = "test-consumption"
@@ -22,6 +23,10 @@ _LEAK_TOKEN = "RAW-LEAK-TOKEN-9f3c1a"
 _VALID_TS = "2026-09-05T00:00:00+04:00"
 _VALID_TS_UTC = datetime(2026, 9, 4, 20, 0, tzinfo=UTC)
 _EXACT_HEADERS = ["consumer_id", "timestamp", "value_mw"]
+_HOURLY_UTC = IntervalGrid(
+    interval=timedelta(hours=1),
+    anchor=datetime(2026, 9, 5, 0, 0, tzinfo=UTC),
+)
 
 _AMBIGUOUS_SPECS = (
     CanonicalFieldSpec(canonical_name="consumer_id", aliases=("load_mw",), required=True),
@@ -69,6 +74,7 @@ def _adapter(
     field_specs: tuple[CanonicalFieldSpec, ...] | None = None,
     source_power_unit: PowerUnit = PowerUnit.MW,
     source_timezone: str | None = None,
+    interval_grid: IntervalGrid | None = None,
 ) -> ConsumptionExcelAdapter:
     return ConsumptionExcelAdapter(
         path=path,
@@ -78,6 +84,7 @@ def _adapter(
         clock=lambda: _FIXED_TIME,
         source_power_unit=source_power_unit,
         source_timezone=source_timezone,
+        interval_grid=interval_grid,
     )
 
 
@@ -732,3 +739,252 @@ async def test_dst_ambiguous_and_nonexistent_excel_rows_are_isolated(tmp_path: P
     assert "Berlin" not in outward
     assert "2026-10-25" not in outward
     assert "ambiguous" not in outward
+
+
+def test_constructor_rejects_non_interval_grid(tmp_path: Path) -> None:
+    with pytest.raises(NormalizationConfigurationError, match="IntervalGrid"):
+        ConsumptionExcelAdapter(
+            path=tmp_path / "x.xlsx",
+            source_name=_SOURCE,
+            interval_grid="hourly",  # type: ignore[arg-type]
+        )
+
+
+async def test_duplicate_canonical_rows_fail_all_members(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["keep", _VALID_TS, 1.0],
+            ["consumer-1", "2026-09-05T03:00:00+00:00", 12.5],
+            ["other", "2026-09-05T04:00:00+00:00", 2.0],
+            ["consumer-1", "2026-09-05T03:00:00+00:00", 12.5],
+        ],
+    )
+    result = await _adapter(path).ingest()
+    assert [record.consumer_id for record in result.records] == ["keep", "other"]
+    duplicates = [
+        item for item in result.diagnostics if item.code == "consumption_duplicate_timestamp"
+    ]
+    assert len(duplicates) == 2
+    assert all(item.field_name == "timestamp" for item in duplicates)
+    assert {record.payload_reference for record in result.dlq_records} == {
+        f"excel://{_SOURCE}/row/3",
+        f"excel://{_SOURCE}/row/5",
+    }
+
+
+async def test_conflicting_duplicate_values_fail_closed(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["consumer-1", "2026-09-05T03:00:00+00:00", 12.5],
+            ["consumer-1", "2026-09-05T03:00:00+00:00", 13.0],
+            ["keep", "2026-09-05T04:00:00+00:00", 2.0],
+        ],
+    )
+    result = await _adapter(path).ingest()
+    assert [record.consumer_id for record in result.records] == ["keep"]
+    assert all(item.code == "consumption_duplicate_timestamp" for item in result.diagnostics)
+    assert len(result.dlq_records) == 2
+
+
+async def test_same_timestamp_different_consumers_remain_valid(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["consumer-a", _VALID_TS, 12.5],
+            ["consumer-b", _VALID_TS, 8.0],
+        ],
+    )
+    result = await _adapter(path).ingest()
+    assert [record.consumer_id for record in result.records] == ["consumer-a", "consumer-b"]
+    assert result.dlq_records == ()
+
+
+async def test_offset_equivalent_aware_timestamp_strings_are_duplicates(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["same", "2026-09-05T00:00:00+04:00", 12.5],
+            ["same", "2026-09-04T20:00:00+00:00", 12.5],
+        ],
+    )
+    result = await _adapter(path).ingest()
+    assert result.records == ()
+    assert all(item.code == "consumption_duplicate_timestamp" for item in result.diagnostics)
+    assert len(result.dlq_records) == 2
+
+
+async def test_typed_naive_duplicates_with_explicit_timezone_fail_closed(tmp_path: Path) -> None:
+    stamp = datetime(2026, 9, 5, 3, 0, 0)
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["consumer-1", stamp, 12.5],
+            ["keep", datetime(2026, 9, 5, 4, 0, 0), 2.0],
+            ["consumer-1", stamp, 12.5],
+        ],
+    )
+    result = await _adapter(path, source_timezone="UTC").ingest()
+    assert [record.consumer_id for record in result.records] == ["keep"]
+    assert all(item.code == "consumption_duplicate_timestamp" for item in result.diagnostics)
+
+
+async def test_explicit_hourly_grid_accepts_aligned_typed_rows(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["c1", datetime(2026, 9, 5, 0, 0, 0), 1.0],
+            ["c1", datetime(2026, 9, 5, 1, 0, 0), 2.0],
+            ["c1", datetime(2026, 9, 5, 2, 0, 0), 3.0],
+        ],
+    )
+    result = await _adapter(path, source_timezone="UTC", interval_grid=_HOURLY_UTC).ingest()
+    assert [record.value_mw for record in result.records] == [1.0, 2.0, 3.0]
+    assert result.dlq_records == ()
+
+
+async def test_off_grid_typed_timestamp_is_isolated(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["keep-1", datetime(2026, 9, 5, 0, 0, 0), 1.0],
+            ["off", datetime(2026, 9, 5, 0, 30, 0), 2.0],
+            ["keep-2", datetime(2026, 9, 5, 1, 0, 0), 3.0],
+        ],
+    )
+    result = await _adapter(path, source_timezone="UTC", interval_grid=_HOURLY_UTC).ingest()
+    assert [record.consumer_id for record in result.records] == ["keep-1", "keep-2"]
+    assert result.diagnostics[0].code == "consumption_interval_misaligned"
+    assert result.dlq_records[0].payload_reference == f"excel://{_SOURCE}/row/3"
+
+
+async def test_aware_off_grid_timestamp_string_is_isolated(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["keep-1", "2026-09-05T00:00:00+00:00", 1.0],
+            ["off", "2026-09-05T00:30:00+00:00", 2.0],
+            ["keep-2", "2026-09-05T01:00:00+00:00", 3.0],
+        ],
+    )
+    result = await _adapter(path, interval_grid=_HOURLY_UTC).ingest()
+    assert [record.consumer_id for record in result.records] == ["keep-1", "keep-2"]
+    assert result.diagnostics[0].code == "consumption_interval_misaligned"
+
+
+async def test_hourly_gap_is_not_detected(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["c1", datetime(2026, 9, 5, 0, 0, 0), 1.0],
+            ["c1", datetime(2026, 9, 5, 2, 0, 0), 2.0],
+        ],
+    )
+    result = await _adapter(path, source_timezone="UTC", interval_grid=_HOURLY_UTC).ingest()
+    assert len(result.records) == 2
+    assert result.dlq_records == ()
+    assert all("missing" not in item.code and "gap" not in item.code for item in result.diagnostics)
+
+
+async def test_out_of_order_aligned_source_order_is_preserved(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["c1", datetime(2026, 9, 5, 2, 0, 0), 2.0],
+            ["c1", datetime(2026, 9, 5, 0, 0, 0), 0.0],
+            ["c1", datetime(2026, 9, 5, 1, 0, 0), 1.0],
+        ],
+    )
+    result = await _adapter(path, source_timezone="UTC", interval_grid=_HOURLY_UTC).ingest()
+    assert [record.timestamp for record in result.records] == [
+        datetime(2026, 9, 5, 2, 0, tzinfo=UTC),
+        datetime(2026, 9, 5, 0, 0, tzinfo=UTC),
+        datetime(2026, 9, 5, 1, 0, tzinfo=UTC),
+    ]
+
+
+async def test_kw_normalization_still_works_with_structural_validation(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            ["consumer_id", "timestamp", "Consumption_kW"],
+            ["keep", _VALID_TS, 12500],
+            ["dup", "2026-09-05T03:00:00+00:00", 1000],
+            ["dup", "2026-09-05T03:00:00+00:00", 2000],
+        ],
+    )
+    result = await _adapter(path, source_power_unit=PowerUnit.KW).ingest()
+    assert len(result.records) == 1
+    assert result.records[0].value_mw == 12.5
+    assert result.records[0].timestamp == _VALID_TS_UTC
+    assert all(item.code == "consumption_duplicate_timestamp" for item in result.diagnostics)
+
+
+async def test_explicit_timezone_still_localizes_with_interval_grid(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["c1", datetime(2026, 1, 15, 12, 0, 0), 12.5],
+        ],
+    )
+    result = await _adapter(
+        path,
+        source_timezone="Europe/Berlin",
+        interval_grid=IntervalGrid(
+            interval=timedelta(hours=1),
+            anchor=datetime(2026, 1, 15, 0, 0, tzinfo=UTC),
+        ),
+    ).ingest()
+    assert len(result.records) == 1
+    assert result.records[0].timestamp == datetime(2026, 1, 15, 11, 0, tzinfo=UTC)
+    assert result.dlq_records == ()
+
+
+async def test_naive_unconfigured_timestamp_still_fails_without_timezone(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["c1", datetime(2026, 9, 5, 0, 0, 0), 12.5],
+        ],
+    )
+    result = await _adapter(path, interval_grid=_HOURLY_UTC).ingest()
+    assert result.records == ()
+    assert result.diagnostics[0].code == "excel_row_validation_failed"
+    assert "consumption_interval_misaligned" not in {item.code for item in result.diagnostics}
+
+
+async def test_structural_diagnostics_do_not_leak_source_sentinels(tmp_path: Path) -> None:
+    consumer = "SENTINEL-CONSUMER-e8w1"
+    stamp = "2026-11-17T13:41:08+04:00"
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            [consumer, stamp, 64.017],
+            [consumer, stamp, 65.0],
+            ["keep", datetime(2026, 9, 5, 0, 30, 0), 1.0],
+        ],
+    )
+    result = await _adapter(path, source_timezone="UTC", interval_grid=_HOURLY_UTC).ingest()
+    outward = _outward_text(result)
+    assert consumer not in outward
+    assert stamp not in outward
+    assert "64.017" not in outward
+    assert "SENTINEL" not in outward
+    assert "2026-11-17" not in outward
+    codes = {item.code for item in result.diagnostics}
+    assert "consumption_duplicate_timestamp" in codes
+    assert "consumption_interval_misaligned" in codes

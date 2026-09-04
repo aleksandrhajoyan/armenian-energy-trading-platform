@@ -53,6 +53,8 @@ FORBIDDEN_PORT_TYPES = frozenset(
         "dict",
         "Mapping",
         "Any",
+        "IntervalGrid",
+        "timedelta",
     }
 )
 
