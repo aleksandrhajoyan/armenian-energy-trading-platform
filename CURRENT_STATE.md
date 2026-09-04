@@ -5,21 +5,23 @@ Living snapshot. Update at the end of every chunk. Do not list features that do 
 ## Phase and chunk
 
 - **Current phase:** Phase 0 — Foundation
-- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check
-- **Next recommended chunk:** Chunk 2 — Canonical Domain Contracts and Value Objects
+- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects
+- **Next recommended chunk:** Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation
 
 ## What this repository is
 
-A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, and process health. It is **not** a running trading platform.
+A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, and canonical domain contracts. It is **not** a running trading platform.
 
 ## What is not implemented
 
-- Domain canonical models
+- Structured adapters
+- Unstructured adapters
+- Semantic mapping
+- Time-series cleaning pipeline
+- Runtime DLQ
 - Business agents
 - LangGraph
-- ML models
-- Adapters
-- DLQ runtime
+- ML implementations
 - Databases (PostgreSQL / TimescaleDB)
 - Redis
 - Qdrant
@@ -36,12 +38,18 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Typed application settings (`AppSettings`)
 - FastAPI application factory (`create_app`)
 - `GET /api/v1/health` (process/application health only)
+- Canonical Pydantic domain contracts (`energy_trading.domain.models`)
+- Canonical UTC timestamp normalization (`UtcDateTime`)
+- Typed MW / MWh constraints
+- Decimal monetary and energy-price value objects (`MoneyAmount`, `EnergyPrice`)
+- Regulatory, forecast, risk, trading, and settlement contracts
+- Adapter diagnostics and DLQ metadata contract (`payload_reference` only)
+- Domain dependency architecture test
 - Initial automated quality/test toolchain: pytest, pytest-asyncio, HTTPX, Ruff, mypy
-- Empty architectural folders under `src/energy_trading/` for domain, application, ml, and infrastructure (still `.gitkeep` where no code exists)
 
 ## Pending work
 
-Everything from Chunk 2 onward in `ROADMAP.md`. Highest priority: canonical domain contracts and value objects. Do not install LangGraph, databases, ML stacks, or Docker services until those chunks.
+Everything from Chunk 3 onward in `ROADMAP.md`. Highest priority: error contracts, diagnostics, and observability foundations. Do not install LangGraph, databases, ML stacks, or Docker services until those chunks.
 
 ## Known issues
 
@@ -53,7 +61,8 @@ Everything from Chunk 2 onward in `ROADMAP.md`. Highest priority: canonical doma
 
 - Clean Architecture: `domain` ← `application` ← `api` / composition root; `infrastructure` and `ml` implement application ports and use domain contracts
 - Mandatory Anti-Corruption Layer
-- Canonical Pydantic contracts (specified, not coded)
+- Canonical Pydantic contracts (implemented)
+- UTC timestamps; MW vs MWh; Decimal money; explicit currency codes
 - ML ≠ LLM for numerical forecasts; agents never import concrete ML implementations
 - No secrets in git; `.env` must not be committed
 - Avoid always-on heavy local services
@@ -68,7 +77,7 @@ None.
 
 ## Current agents
 
-None implemented. Thirteen agents are specified in `AGENTS.md` only.
+None implemented. Thirteen agents are specified in `AGENTS.md` only. They will consume the implemented canonical contracts.
 
 ## Current ML models
 

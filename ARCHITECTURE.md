@@ -61,7 +61,7 @@ ml             ──→ application ports + domain contracts
 - No domain or application module may import a concrete infrastructure adapter or a concrete ML implementation.
 - LLMs must not perform numerical forecasting that belongs to ML models.
 
-This rule will be enforced by architecture tests in a later chunk (`tests/architecture`).
+This rule is enforced for the domain layer by `tests/architecture/test_domain_dependencies.py` (AST import inspection). Broader application/ML import rules remain for later chunks.
 
 ## Initial folder tree
 
@@ -126,7 +126,7 @@ This rule will be enforced by architecture tests in a later chunk (`tests/archit
 └── docs/
 ```
 
-Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12), and `__init__.py` only in packages that currently contain code. Empty architectural directories still use `.gitkeep`.
+Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Empty architectural directories still use `.gitkeep`.
 
 ## Anti-Corruption Layer
 
@@ -138,11 +138,18 @@ Structured adapters normalize external data into canonical internal Pydantic con
 
 ## Canonical data contracts
 
-Canonical contracts are Pydantic models owned by the domain layer (implemented in a later chunk). They are the only payloads agents, ML, and use cases may exchange.
+Canonical contracts are implemented as frozen Pydantic `CanonicalModel` types in `src/energy_trading/domain`. They are the only payloads agents, ML, and use cases may exchange. See `DATA_CONTRACTS.md`.
 
-Planned contracts (not yet implemented): `ConsumptionRecord`, `WeatherRecord`, `HydroRecord`, `GenerationAvailabilityRecord`, `MarketPriceRecord`, `NewsEvent`, `RegulatoryConstraint`, `LoadForecastPoint`, `PriceForecastPoint`, `RiskAssessment`, `MarketBid`, `MarketClearingResult`, `SettlementResult`, `AdapterDiagnostic`, `DLQRecord`.
+Implemented contracts: `ConsumptionRecord`, `WeatherRecord`, `HydroRecord`, `GenerationAvailabilityRecord`, `MarketPriceRecord`, `NewsEvent`, `RegulatoryConstraint`, `LoadForecastPoint`, `PriceForecastPoint`, `RiskAssessment`, `MarketBid`, `MarketClearingResult`, `SettlementResult`, `AdapterDiagnostic`, `DLQRecord`.
 
-Canonical power unit is **MW** unless a future verified business contract explicitly requires another representation. Energy, when needed, is **MWh** over an explicit interval. Timestamps must become timezone-aware canonical timestamps. Currency, DAM interval length, and market timezone interpretation of gate closure remain TBD until verified.
+Internal canonical semantics (independent of external source representation):
+
+- **Power** is MW. **Energy** is MWh. The two are not automatically equated; DAM interval length remains unverified.
+- **Timestamps** (`UtcDateTime`) must be timezone-aware on input and are normalized to **UTC**. Naive datetimes are rejected. Adapters must resolve missing source timezones; the domain does not guess.
+- **Money and energy prices** use `Decimal` (`MoneyAmount`, `EnergyPrice`) with an explicit ISO-style three-letter `CurrencyCode`. AMD is a valid code, not a hardcoded market assumption. `float` is rejected for monetary amounts.
+- **DLQ:** `DLQRecord` carries `payload_reference` only. Raw external payloads must not enter the canonical envelope.
+
+Unknown fields are forbidden. Models are immutable. `NaN` / infinities are rejected.
 
 ## Structured ingestion conceptual flow
 
@@ -177,9 +184,9 @@ Document bytes, vendor OCR schemas, and raw chunk dictionaries stay inside infra
 
 - A record that fails validation, unit conversion, timezone normalization, or time-series cleaning after adapter retries is written as a `DLQRecord`.
 - The workflow continues for remaining records.
-- DLQ records retain source identity, stage, error, correlation/workflow ID, and a payload reference.
+- DLQ records retain source identity, adapter name, diagnostics, correlation ID, and a **payload reference** — not the raw vendor payload.
 - Reprocessing is an explicit later operation. Silent drops are forbidden.
-- Transport for the DLQ (outbox table, Redis stream, etc.) is an infrastructure decision; application code depends only on a port.
+- Transport for the DLQ (outbox table, Redis stream, etc.) is an infrastructure decision; application code depends only on a port. The domain `DLQRecord` contract exists; runtime persistence does not.
 
 ## ML / LLM separation
 
@@ -286,7 +293,7 @@ Implemented now: process/application health at `GET /api/v1/health`. That endpoi
 
 ## Testing boundaries
 
-See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests will lock the dependency rule.
+See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. `tests/architecture/test_domain_dependencies.py` locks the domain import rule.
 
 ## Runtime baseline (implemented)
 

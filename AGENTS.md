@@ -2,7 +2,7 @@
 
 Compact specification for all 13 agents. Names in this file are canonical. Do not rename or invent aliases in code or docs.
 
-**Status:** specification only. No agent is implemented.
+**Status:** specification only. No agent is implemented. Canonical input/output contracts are implemented in `energy_trading.domain.models`.
 
 Agents live in the application layer. They consume and return canonical typed contracts (`DATA_CONTRACTS.md`). They never import concrete infrastructure adapters or concrete ML implementations; they depend on application ports. The composition root injects implementations from `infrastructure` and `ml`.
 
@@ -26,7 +26,7 @@ External tools listed below are **capability classes**, not vendor products. Con
 - **Kind:** LLM / reasoning (RAG)
 - **Purpose:** Interpret market rules, licenses, and regulatory documents into structured constraints the rest of the workflow can enforce.
 - **Canonical inputs:** retrieved document chunks (infrastructure-normalized), `RegulatoryConstraint` drafts, workflow/correlation ID, delivery-day window.
-- **Canonical outputs:** `RegulatoryConstraint` set; adapter/retrieval diagnostics as needed.
+- **Canonical outputs:** `RegulatoryConstraint` set; `AdapterDiagnostic` as needed.
 - **External tools/systems (eventual):** unstructured document adapters, OCR/extraction port, Qdrant retrieval port, LLM provider port.
 - **Dependencies:** Chief Orchestrator Agent (invocation); unstructured ACL; Qdrant. Does not call ML forecast modules.
 - **Failure behavior:** If retrieval or LLM inference fails, emit diagnostics, keep previously valid constraints if the orchestrator policy allows, and never invent enforceable numeric limits. Unreadable documents follow the unstructured ACL / DLQ path.
@@ -45,8 +45,8 @@ External tools listed below are **capability classes**, not vendor products. Con
 
 - **Kind:** Deterministic service (optional future ML in `ml/`, never LLM-calculated weather)
 - **Purpose:** Provide canonical weather and renewable-resource forecasts used as features and operational context.
-- **Canonical inputs:** raw weather/renewable payloads **only after** structured adapters; location and horizon identifiers.
-- **Canonical outputs:** `WeatherRecord` series; renewable availability in MW where applicable.
+- **Canonical inputs:** adapter-normalized weather/renewable payloads (never raw vendor schemas); location and horizon identifiers.
+- **Canonical outputs:** `WeatherRecord` series.
 - **External tools/systems (eventual):** weather/renewable source adapters (HTTP, files, or scrapers — providers TBD), time-series cleaning, persistence.
 - **Dependencies:** ACL structured adapters; persistence. Parallel with other Phase 2 agents.
 - **Failure behavior:** Source outage → orchestrator fallback (last good forecast, persistence, or skip with degraded-feature flag). Malformed points → DLQ, not interpolated fiction unless a documented cleaning rule applies.
@@ -56,7 +56,7 @@ External tools listed below are **capability classes**, not vendor products. Con
 - **Kind:** Deterministic service
 - **Purpose:** Normalize hydro storage, inflow/outflow, and hydro generation availability into canonical records for risk and bidding.
 - **Canonical inputs:** adapter-normalized hydro telemetry or operator files.
-- **Canonical outputs:** `HydroRecord` series; hydro available generation in MW.
+- **Canonical outputs:** `HydroRecord` series.
 - **External tools/systems (eventual):** structured file/API adapters, persistence, time-series cleaning.
 - **Dependencies:** ACL; Generation Availability Agent may consume hydro MW but must not scrape hydro files itself.
 - **Failure behavior:** Unnormalizable hydro files → DLQ. Do not assume reservoir operating policy that has not been verified.
@@ -96,7 +96,7 @@ External tools listed below are **capability classes**, not vendor products. Con
 - **Kind:** ML-backed
 - **Purpose:** Produce consumer load forecasts in MW for the DAM horizon.
 - **Canonical inputs:** `ConsumptionRecord` history, `WeatherRecord`, calendar/features as canonical structures, `NewsEvent` / `RegulatoryConstraint` only as **features or flags**, not as LLM prompts that output MW.
-- **Canonical outputs:** `LoadForecastPoint` series (MW), model identifier, issue time, optional quantiles.
+- **Canonical outputs:** `LoadForecastPoint` series (MW).
 - **External tools/systems (eventual):** `ml/load_forecast` (XGBoost / LightGBM / optional Prophet baseline) behind application ports; feature store/persistence; not an LLM calculator.
 - **Dependencies:** Phase 2 canonical series; forecasting ports injected by the composition root. Chief Orchestrator Agent invokes this agent. The agent must not import XGBoost, LightGBM, Prophet, or concrete model classes.
 - **Failure behavior:** ML runtime failure → documented fallback (previous model, naive baseline, or abort per orchestrator policy). LLM is not an allowed fallback for the numeric forecast.
@@ -106,7 +106,7 @@ External tools listed below are **capability classes**, not vendor products. Con
 - **Kind:** ML-backed
 - **Purpose:** Produce Day-Ahead price forecasts for each delivery interval.
 - **Canonical inputs:** `MarketPriceRecord` history, `LoadForecastPoint`, `GenerationAvailabilityRecord`, `WeatherRecord`, `HydroRecord`, `NewsEvent` features/flags, `RegulatoryConstraint` flags.
-- **Canonical outputs:** `PriceForecastPoint` series (price unit/currency TBD until verified), model identifier, issue time, optional quantiles.
+- **Canonical outputs:** `PriceForecastPoint` series (`EnergyPrice`, currency explicit).
 - **External tools/systems (eventual):** `ml/price_forecast` behind application ports; persistence. Not an LLM calculator.
 - **Dependencies:** Load forecast and Phase 2 series as available; forecasting ports injected by the composition root. The agent must not import XGBoost, LightGBM, Prophet, or concrete model classes.
 - **Failure behavior:** Same policy as load forecast: no LLM-generated prices. Degraded feature sets must be explicit on the output metadata.
@@ -126,7 +126,7 @@ External tools listed below are **capability classes**, not vendor products. Con
 - **Kind:** Hybrid application agent — deterministic bid construction; optional LLM narrative. **Not** numerical forecasting.
 - **Purpose:** Form DAM `MarketBid` objects consistent with risk limits, availability, load, and constraints.
 - **Canonical inputs:** `RiskAssessment`, `LoadForecastPoint`, `PriceForecastPoint`, `GenerationAvailabilityRecord`, `RegulatoryConstraint`, commercial constraints.
-- **Canonical outputs:** `MarketBid` set (MW and price fields); strategy diagnostics.
+- **Canonical outputs:** `MarketBid` set.
 - **External tools/systems (eventual):** persistence; later a market-gateway adapter (official interface TBD — do not invent a vendor).
 - **Dependencies:** Portfolio & Risk Agent; forecast agents; regulatory/pricing outputs.
 - **Failure behavior:** If risk is incomplete or constraints conflict, emit no bid (or a documented safe default only if a verified rule exists — none yet). LLM must not invent bid MW or prices.

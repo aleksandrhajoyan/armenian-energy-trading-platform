@@ -4,13 +4,14 @@ Tracking what is demo-ready versus still conceptual. Update when architecture, M
 
 ## Current presentation-worthy points (conceptual)
 
-These can be spoken to from documentation only; there is **no running demo** after Chunk 0.
+These can be spoken to from documentation and (for contracts) from executable domain models; there is **no running trading demo**.
 
 - **13-agent architecture** covering regulation, pricing, weather/renewables, hydro, availability, news, market monitoring, ML load and price forecasts, risk, strategy, settlement, and a Chief Orchestrator Agent.
 - **Clean Architecture** with a strict dependency rule (`domain` isolated; infrastructure behind ports).
 - **Anti-Corruption Layer** so CSV/Excel/PDF/API/scrape schemas never reach agents or models.
+- **Canonical contracts:** External data variability is isolated by mapping everything into strict canonical contracts before agents/ML see it.
 - **ML vs LLM separation:** forecasts from XGBoost/LightGBM (optional Prophet); LLMs for regulatory/news reasoning only.
-- **Data-agnostic ingestion strategy:** schema detection and semantic mapping into canonical contracts (MW, timezone-aware timestamps).
+- **Data-agnostic ingestion strategy:** schema detection and semantic mapping into canonical contracts (MW, UTC timestamps, Decimal money).
 - **DLQ / resilience:** unnormalizable records park instead of crashing the DAM workflow.
 - **Armenian DAM business flow:** five phases — contract/regulatory alignment → parallel ingestion → forecasting → portfolio/risk/strategy → clearing/billing/settlement.
 
@@ -19,6 +20,7 @@ These can be spoken to from documentation only; there is **no running demo** aft
 | Artifact | Status |
 | --- | --- |
 | Architecture screenshots | Placeholder — add after diagrams exist |
+| Canonical contract diagram | Placeholder — Messy external schemas → Adapter Layer → Canonical Pydantic Contracts → Agents / ML |
 | LangGraph visualization | Placeholder — graph not implemented |
 | ML metrics | Placeholder — no experiments (`EXPERIMENT_LOG.md`) |
 | Forecasting plots | Placeholder |

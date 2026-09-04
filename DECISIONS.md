@@ -26,7 +26,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 
 - **Status:** Accepted
 - **Context:** Layers need a single typed language for records, forecasts, bids, and diagnostics. Untyped dicts will reintroduce external schemas.
-- **Decision:** Canonical contracts are Pydantic models owned by the domain (implementation in Chunk 2). Agents consume and return those models. See `DATA_CONTRACTS.md`.
+- **Decision:** Canonical contracts are Pydantic models owned by the domain. Agents consume and return those models. Implemented in Chunk 2; see `DATA_CONTRACTS.md`.
 - **Consequences:** Validation cost at boundaries. Versioning of contracts must be deliberate. Alternative serializers (e.g. msgspec) remain possible later behind the same shapes.
 
 ---
@@ -100,3 +100,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Context:** The repository needs reproducible installs on Windows and WSL without Poetry, Pipenv, Conda, or a hand-maintained `requirements.txt`.
 - **Decision:** Use uv as the project dependency manager. Commit `uv.lock`. Create and use a local `.venv` that remains gitignored. Execute tools with `uv run` so activation of the virtual environment is not required. Do not add Poetry, Pipenv, Conda, or `requirements.txt` unless a future ADR changes this.
 - **Consequences:** Contributors must have uv installed; the project does not silently install system software. Lockfile drift is detectable with `uv lock --check`. Dependency additions happen in explicit later chunks rather than opportunistic installs.
+
+---
+
+## ADR-012 — Canonical internal data semantics
+
+- **Status:** Accepted
+- **Context:** External Armenian and vendor sources will mix units, timezones, currencies, and file schemas. Agents and ML models need one internal language that does not silently guess missing source metadata.
+- **Decision:** Internal canonical semantics are independent of external representation:
+  - Timestamps are timezone-aware on input and normalized to **UTC** (`UtcDateTime`). Naive datetimes are rejected. Adapters resolve missing source timezones.
+  - Power is **MW**. Energy is **MWh**. The two are not equated; DAM interval length is not assumed.
+  - Money and energy prices use **`Decimal`** (`MoneyAmount`, `EnergyPrice`), not `float`.
+  - Currency is an explicit ISO-style three-letter code. `AMD` is a valid value, not a hardcoded market default.
+  - `DLQRecord` stores a `payload_reference` rather than the raw external payload so vendor schemas cannot leak past the ACL envelope.
+- **Consequences:** Adapters must perform unit and timezone conversion before constructing domain models. JSON money should travel as Decimal-safe strings. Unverified DAM product, gate, and tariff rules remain outside these types.

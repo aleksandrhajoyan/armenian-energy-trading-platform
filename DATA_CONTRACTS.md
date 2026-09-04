@@ -1,125 +1,141 @@
-# Data Contracts — Canonical Models (Planned)
+# Data Contracts — Canonical Models (Implemented)
 
-This document specifies **planned** canonical contracts. Python/Pydantic models are **not** implemented yet (Chunk 2).
+Canonical contracts are Pydantic models owned by the domain layer (`src/energy_trading/domain`). Application agents, ML components, and use cases speak these contracts only.
 
-All application agents, ML components, and domain services speak these contracts only. External column names, Armenian headers, vendor units, and file-specific timestamp strings stop at the Anti-Corruption Layer.
+External column names, Armenian headers, vendor units, naive timestamps, and file-specific payload shapes stop at the Anti-Corruption Layer. **Source adapters**, not domain models, are responsible for resolving ambiguous or missing source units and timezones. Domain validation fails closed: it does not guess.
 
-## Cross-cutting rules
+Python types live under `energy_trading.domain.models` and `energy_trading.domain.value_objects`.
 
-- **Power:** megawatts (MW) unless a future verified business contract explicitly requires another representation.
-- **Energy:** megawatt-hours (MWh) over an **explicit interval**. Interval length for Armenian DAM (hourly vs other) is **TBD until verified**.
-- **Timestamps:** adapters must emit timezone-aware canonical timestamps. Naive datetimes are invalid at the domain boundary. Internal storage timezone strategy (UTC vs market-local) will be decided in implementation; market-local civil time is expected to follow `Asia/Yerevan` but must be confirmed before encoding gate-closure rules.
-- **Currency and price unit** (e.g. AMD/MWh): **TBD until verified**. Contracts include a currency/unit field rather than assuming a code.
-- **Identifiers:** opaque string IDs. Do not embed vendor primary keys as domain types.
-- **Provenance:** records that originate from ingestion should retain `source_system` (logical name) and `ingested_at`, not raw vendor payloads.
-- Do **not** encode unverified regulator or DAM bid-format, lot-size, or imbalance-price rules here.
+## Cross-cutting canonical semantics
+
+| Concern | Canonical rule |
+| --- | --- |
+| Power | **MW**. Types: `NonNegativeMW`, `PositiveMW`. |
+| Energy | **MWh**. Type: `NonNegativeMWh`. MW and MWh are not equated. |
+| Timestamp | Timezone-aware input, stored/normalized as **UTC** (`UtcDateTime`). Naive datetimes are invalid. |
+| Money / price | **`Decimal`**, never `float`. Types: `MoneyAmount`, `EnergyPrice`. |
+| Currency | Explicit ISO-style three-letter code (`CurrencyCode`, e.g. `AMD` is valid). Not hardcoded as the market currency. |
+| Identifiers | Opaque non-empty strings (`EntityId`). Not vendor primary-key types. |
+| Unknown fields | Forbidden on every `CanonicalModel`. |
+| Mutability | Models are frozen. |
+| Non-finite numbers | `NaN` and infinities are rejected. |
+
+Interval length for Armenian DAM (hourly vs other) remains **TBD until verified**. Domain timestamps are instants, not an assumed market product duration.
+
+Do **not** encode unverified regulator or DAM bid-format, lot-size, gate-closure, or imbalance-price rules in these models.
+
+---
+
+## Value objects and constrained types
+
+| Type | Meaning | Validation |
+| --- | --- | --- |
+| `UtcDateTime` | Canonical timestamp | Aware datetime required; converted to UTC |
+| `EntityId` | Opaque identifier | Non-empty; whitespace stripped |
+| `NonEmptyString` | Required text | Non-empty; whitespace stripped |
+| `CurrencyCode` | ISO-style currency | Exactly three uppercase letters `A-Z` |
+| `NonNegativeMW` | Power in MW | `>= 0`, finite |
+| `PositiveMW` | Power in MW | `> 0`, finite |
+| `NonNegativeMWh` | Energy in MWh | `>= 0`, finite |
+| `UnitInterval` | Score / probability | `0 <= x <= 1`, finite |
+| `FiniteDecimal` | Monetary scalar | Finite `Decimal`; `float` rejected |
+| `MoneyAmount` | `{amount, currency}` | Finite Decimal amount; explicit currency |
+| `EnergyPrice` | `{amount_per_mwh, currency}` | Price per MWh; sign not constrained |
+
+Money and prices do **not** assume non-negativity. Electricity market rules are not yet verified. No FX conversion is performed.
 
 ---
 
 ## ConsumptionRecord
 
-- **Purpose:** Observed consumer load/consumption at a metering or portfolio grain.
-- **Important fields:** `record_id`; `portfolio_or_meter_id`; `interval_start`; `interval_end` (or explicit `interval_minutes`); `power_mw` and/or `energy_mwh` (at least one required; the other may be derived when interval is known); `quality_flag`; `source_system`; `ingested_at`.
-- **Units:** `power_mw` in MW; `energy_mwh` in MWh.
-- **Time:** timezone-aware `interval_start` / `interval_end`. Missing hours and duplicates are cleaning/DLQ concerns, not silent coalescing.
+- **Purpose:** Observed consumer load at one instant.
+- **Fields:** `consumer_id` (`EntityId`); `timestamp` (`UtcDateTime`); `value_mw` (`NonNegativeMW`).
+- **Units:** MW.
+- **Invariants:** non-negative finite MW; UTC timestamp; no source column names.
 
 ## WeatherRecord
 
-- **Purpose:** Weather observation or forecast point used as operational context and ML features.
-- **Important fields:** `record_id`; `location_id`; `issued_at` (forecasts); `valid_at`; `is_forecast`; `temperature_c`; `relative_humidity_pct`; `wind_speed_ms`; `global_horizontal_irradiance_wm2`; `precipitation_mm`; `source_system`.
-- **Units:** °C, percent, m/s, W/m², mm. Adapters convert other unit systems before this contract.
-- **Time:** timezone-aware `valid_at` / `issued_at`.
+- **Purpose:** Weather observation or forecast point used as operational context and future ML features.
+- **Fields:** `location_id` (`EntityId`); `timestamp` (`UtcDateTime`); `temperature_c` (finite °C, may be negative); optional `solar_irradiance_w_m2` (W/m², non-negative); optional `precipitation_mm` (mm, non-negative).
+- **Invariants:** no weather-provider identity. Adapters convert foreign units before this contract.
 
 ## HydroRecord
 
-- **Purpose:** Hydro storage and flow context plus hydro generation availability.
-- **Important fields:** `record_id`; `asset_id`; `valid_at`; `water_level_m`; `inflow_m3s`; `outflow_m3s`; `storage_mcm` (million cubic metres, if provided); `available_generation_mw`; `source_system`.
-- **Units:** m, m³/s, million m³, MW. Operating constraints (min/max reservoir) are **not** assumed until verified.
-- **Time:** timezone-aware `valid_at`.
+- **Purpose:** Hydro storage/flow context and optional available generation.
+- **Fields:** `resource_id` (`EntityId`); `timestamp` (`UtcDateTime`); optional `reservoir_level_m` (m, non-negative); optional `river_flow_m3_s` (m³/s, non-negative); optional `available_generation_mw` (`NonNegativeMW`).
+- **Invariants:** no hydrological calculations; reservoir operating policy is not assumed.
 
 ## GenerationAvailabilityRecord
 
-- **Purpose:** Available capacity of a unit, plant, or aggregated fleet for a delivery interval.
-- **Important fields:** `record_id`; `asset_id`; `interval_start`; `interval_end`; `available_capacity_mw`; `installed_capacity_mw` (optional); `outage_or_derate_flag`; `technology` (canonical enum later); `source_system`.
-- **Units:** MW.
-- **Time:** timezone-aware interval bounds. Unverified technology taxonomies stay as strings until an enum is justified.
+- **Purpose:** Available capacity of an unnamed asset at one instant.
+- **Fields:** `asset_id` (`EntityId`); `timestamp` (`UtcDateTime`); `status` (`GenerationStatus`: `available` \| `maintenance` \| `outage` \| `unknown`); `available_capacity_mw` (`NonNegativeMW`); optional `total_capacity_mw` (`NonNegativeMW`).
+- **Invariants:** if `total_capacity_mw` is present, `available_capacity_mw <= total_capacity_mw` (data consistency, not a market rule). No plant names are hardcoded.
 
 ## MarketPriceRecord
 
-- **Purpose:** Observed DAM (or other verified market) price and volume points — history and official publications, not forecasts.
-- **Important fields:** `record_id`; `market_code` (e.g. conceptual `AM-DAM` — not an official identifier until verified); `interval_start`; `interval_end`; `price`; `price_currency`; `price_unit` (e.g. per MWh); `volume_mwh`; `source_system`.
-- **Units:** volume in MWh; price in explicit currency/unit. Do not assume AMD.
-- **Time:** timezone-aware interval bounds.
+- **Purpose:** Observed market price (history / official publication), not a forecast.
+- **Fields:** `market_id` (`EntityId`); `timestamp` (`UtcDateTime`); `price` (`EnergyPrice`); optional `volume_mwh` (`NonNegativeMWh`).
+- **Invariants:** currency is explicit on `EnergyPrice`. Interval length is not assumed. AMD is not implied.
 
 ## NewsEvent
 
-- **Purpose:** Canonical news or public-information event for qualitative context and optional ML features/flags.
-- **Important fields:** `event_id`; `published_at`; `ingested_at`; `headline`; `summary`; `language`; `source_system`; `relevance_score` (optional, documented scale later); `entities`; `tags`.
-- **Units:** none for text; any extracted numeric claims are **not** load or price forecasts.
-- **Time:** timezone-aware `published_at` / `ingested_at`. If source TZ is missing, adapter policy must be explicit or the record goes to DLQ.
+- **Purpose:** Qualitative public-information event. Not a substitute for ML forecasts.
+- **Fields:** `event_id` (`EntityId`); `timestamp` (`UtcDateTime`); `headline` (`NonEmptyString`); `summary` (`NonEmptyString`); optional `category` (`NonEmptyString`); optional `severity` (`NewsSeverity`: `low` \| `medium` \| `high`).
+- **Invariants:** no raw HTML, scrape blobs, or LLM runtime fields.
 
 ## RegulatoryConstraint
 
-- **Purpose:** Structured, enforceable or advisory constraint derived from regulation or licenses.
-- **Important fields:** `constraint_id`; `source_document_id`; `effective_from`; `effective_to`; `jurisdiction`; `constraint_type`; `severity` (advisory vs blocking — enum later); `summary`; `structured_parameters` (only keys that survived validation); `citation`.
-- **Units:** any numeric parameters must declare unit in-field or via a nested unit object. Do not smuggle “as in the PDF”.
-- **Time:** timezone-aware effective window. Unparseable legal dates → unstructured ACL / DLQ, not guessed years.
+- **Purpose:** Generic structured constraint. Official PSRC/DAM rule tables are **not** encoded.
+- **Fields:** `constraint_id` (`EntityId`); `constraint_type` (`NonEmptyString`); `description` (`NonEmptyString`); `effective_from` (`date`); optional `effective_to` (`date`); optional `minimum_value` / `maximum_value` (finite numbers); optional `unit` (`NonEmptyString`); optional `currency` (`CurrencyCode`); optional `source_document_id` (`EntityId`).
+- **Invariants:** if both dates exist, `effective_to >= effective_from`; if both numeric bounds exist, `minimum_value <= maximum_value`. No tariff values, network costs, PSRC IDs, or effective dates are hardcoded.
 
 ## LoadForecastPoint
 
-- **Purpose:** ML-produced consumer load forecast for one delivery interval.
-- **Important fields:** `forecast_id`; `model_id`; `model_version`; `issued_at`; `interval_start`; `interval_end`; `load_mw`; optional `quantile_p10_mw` / `quantile_p90_mw`; `feature_completeness`; `portfolio_or_meter_id`.
-- **Units:** MW (quantiles in MW).
-- **Time:** timezone-aware `issued_at` and interval bounds. Produced by `ml/load_forecast`, not by an LLM.
+- **Purpose:** Output of a future load-forecast port/model for one target instant.
+- **Fields:** `forecast_run_id` (`EntityId`); `consumer_id` (`EntityId`); `generated_at` (`UtcDateTime`); `target_timestamp` (`UtcDateTime`); `value_mw` (`NonNegativeMW`).
+- **Invariants:** no XGBoost/LightGBM/Prophet objects. This model does not calculate a forecast.
 
 ## PriceForecastPoint
 
-- **Purpose:** ML-produced DAM price forecast for one delivery interval.
-- **Important fields:** `forecast_id`; `model_id`; `model_version`; `issued_at`; `interval_start`; `interval_end`; `price`; `price_currency`; `price_unit`; optional quantiles; `feature_completeness`; `market_code`.
-- **Units:** price with explicit currency/unit; not assumed.
-- **Time:** timezone-aware `issued_at` and interval bounds. Produced by `ml/price_forecast`, not by an LLM.
+- **Purpose:** Output of a future price-forecast port/model for one target instant.
+- **Fields:** `forecast_run_id` (`EntityId`); `market_id` (`EntityId`); `generated_at` (`UtcDateTime`); `target_timestamp` (`UtcDateTime`); `price` (`EnergyPrice`).
+- **Invariants:** currency explicit; no ML library types; no forecast calculation.
 
 ## RiskAssessment
 
-- **Purpose:** Portfolio risk snapshot used as a gate before bidding.
-- **Important fields:** `assessment_id`; `portfolio_id`; `as_of`; `horizon_start`; `horizon_end`; `exposures` (MW and monetary, units explicit); `limit_breaches`; `scenario_results`; `is_complete`; `gaps`.
-- **Units:** MW for volume risk; monetary amounts with currency TBD.
-- **Time:** timezone-aware `as_of` and horizon. Incomplete assessments must set `is_complete=false` rather than omitting gaps.
+- **Purpose:** Portfolio risk snapshot for a future Portfolio & Risk Agent. Not a calculator.
+- **Fields:** `assessment_id` (`EntityId`); `assessed_at` (`UtcDateTime`); `delivery_timestamp` (`UtcDateTime`); `risk_score` (`UnitInterval`); optional `expected_margin` (`MoneyAmount`); optional `price_volatility` (`FiniteDecimal`); optional `expected_balancing_penalty` (`MoneyAmount`); optional `value_at_risk` (`MoneyAmount`); optional `notes` (`NonEmptyString`).
+- **Invariants:** `0 <= risk_score <= 1`. VaR, margin, and Armenian balancing penalties are not computed or invented here.
 
 ## MarketBid
 
-- **Purpose:** Intention to buy/sell in the DAM for a delivery interval, ready for a future market gateway.
-- **Important fields:** `bid_id`; `portfolio_id`; `interval_start`; `interval_end`; `side` (buy/sell); `quantity_mw`; `price`; `price_currency`; `price_unit`; `status` (draft/submitted/cancelled — enum later); `strategy_id`.
-- **Units:** quantity in MW; price with explicit currency/unit. Lot size / tick size **TBD until verified**.
-- **Time:** timezone-aware interval bounds. Gate-closure time is **not** encoded until verified.
+- **Purpose:** Intention to buy or sell for one delivery instant.
+- **Fields:** `bid_id` (`EntityId`); `created_at` (`UtcDateTime`); `delivery_timestamp` (`UtcDateTime`); `side` (`BidSide`: `buy` \| `sell`); `quantity_mw` (`PositiveMW`); `limit_price` (`EnergyPrice`).
+- **Invariants:** `quantity_mw > 0`. Gate closure, lot size, and product rules are not encoded. Nothing is submitted externally.
 
 ## MarketClearingResult
 
-- **Purpose:** Official (or operator-published) clearing outcome for an interval, ingested via ACL — not computed by an LLM.
-- **Important fields:** `result_id`; `market_code`; `interval_start`; `interval_end`; `clearing_price`; `price_currency`; `price_unit`; `cleared_quantity_mw`; `accepted_bid_ids`; `rejected_bid_ids`; `source_system`.
-- **Units:** MW; price with explicit currency/unit.
-- **Time:** timezone-aware interval bounds.
+- **Purpose:** Canonical internal clearing outcome for a bid. Not an external market-gateway schema.
+- **Fields:** `bid_id` (`EntityId`); `delivery_timestamp` (`UtcDateTime`); `cleared_at` (`UtcDateTime`); `status` (`ClearingStatus`: `cleared` \| `partially_cleared` \| `rejected`); `cleared_quantity_mw` (`NonNegativeMW`); optional `clearing_price` (`EnergyPrice`).
+- **Invariants:** `clearing_price` is required unless `status` is `rejected`. Clearing is not calculated here.
 
 ## SettlementResult
 
-- **Purpose:** Financial and energy settlement outcome for a period.
-- **Important fields:** `settlement_id`; `portfolio_id`; `period_start`; `period_end`; `energy_mwh`; `amount`; `currency`; `fees`; `net_position_mwh`; `source_system`; `is_official`.
-- **Units:** MWh; monetary `amount`/`fees` with currency TBD. Imbalance components TBD until rules are verified.
-- **Time:** timezone-aware period bounds.
+- **Purpose:** Validates a supplied settlement outcome. Does **not** produce one.
+- **Fields:** `settlement_id` (`EntityId`); `period_start` / `period_end` (`UtcDateTime`); `delivered_energy_mwh` (`NonNegativeMWh`); `revenue`, `procurement_cost`, `balancing_cost`, `profit` (`MoneyAmount`).
+- **Invariants:** `period_end > period_start`; all monetary fields share one currency. `profit` is **not** computed as `revenue - costs`.
 
 ## AdapterDiagnostic
 
-- **Purpose:** First-class telemetry for one adapter run (not a substitute for logs).
-- **Important fields:** `diagnostic_id`; `adapter_name`; `source_system`; `started_at`; `finished_at`; `correlation_id`; `records_in`; `records_out`; `records_dlq`; `mapping_issues`; `dropped_fields`; `warnings`.
-- **Units:** counts dimensionless; durations derived from timestamps.
-- **Time:** timezone-aware `started_at` / `finished_at`.
+- **Purpose:** Canonical diagnostic envelope for a future adapter. Not a Python exception.
+- **Fields:** `code` (`NonEmptyString`); `message` (`NonEmptyString`); `severity` (`DiagnosticSeverity`: `info` \| `warning` \| `error`); optional `field_name` (`NonEmptyString`).
+- **Invariants:** no stack traces or exception objects.
 
 ## DLQRecord
 
-- **Purpose:** Poison / unnormalizable payload parked for later reprocessing.
-- **Important fields:** `dlq_id`; `correlation_id`; `workflow_id` (optional); `source_system`; `adapter_name`; `failed_stage` (schema/validation/units/timezone/cleaning); `error_type`; `error_message`; `payload_ref` (URI or blob id — not necessarily inline bytes); `occurred_at`; `retry_count`.
-- **Units:** n/a.
-- **Time:** timezone-aware `occurred_at`. Payload bodies may retain original naive timestamps; the DLQ envelope itself must be timezone-aware.
+- **Purpose:** Metadata for an ingestion normalization failure. Queue/persistence is not implemented.
+- **Fields:** `record_id` (`EntityId`); `failed_at` (`UtcDateTime`); `source_name` (`NonEmptyString`); `adapter_name` (`NonEmptyString`); `diagnostics` (tuple of `AdapterDiagnostic`, min length 1); `payload_reference` (`NonEmptyString`); optional `correlation_id` (`EntityId`).
+- **Invariants:** at least one diagnostic. **Raw external payloads are forbidden**; infrastructure may store the original bytes/file behind `payload_reference`.
 
 ---
 

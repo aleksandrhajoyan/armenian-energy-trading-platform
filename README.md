@@ -13,11 +13,11 @@ Multi-agent decision-support system for participation in Armenia’s electricity
 
 Python 3.12, uv, FastAPI, asyncio, Pydantic, LangGraph (planned), PostgreSQL/TimescaleDB, Qdrant, Redis, XGBoost, LightGBM, optional Prophet baseline, n8n/Python scrapers, Docker Compose. Development target: Windows 11 + WSL2 under tight local RAM/VRAM budgets.
 
-Only the Python 3.12 / uv / FastAPI health slice is installed and wired. Do not expect databases, Docker, agents, or ML runtimes yet.
+Only the Python 3.12 / uv / FastAPI health slice and canonical domain contracts are installed and wired. Do not expect databases, Docker, agents, or ML runtimes yet.
 
 ## Current status
 
-**Phase 0 / Chunk 1.** The repository has a reproducible Python 3.12 project, typed application settings, a FastAPI application factory, and `GET /api/v1/health`. There are no agents, no ML models, no adapters, and no Docker stack.
+**Phase 0 / Chunk 2.** The repository has a reproducible Python 3.12 project, typed application settings, a FastAPI application factory, `GET /api/v1/health`, and implemented canonical Pydantic domain contracts. There are no agents, no ML models, no adapters, and no Docker stack.
 
 See [`CURRENT_STATE.md`](CURRENT_STATE.md) and [`ROADMAP.md`](ROADMAP.md).
 
@@ -49,7 +49,7 @@ Copy [`.env.example`](.env.example) to `.env` locally if you want to override se
 | --- | --- |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Architecture source of truth |
 | [`AGENTS.md`](AGENTS.md) | 13-agent specifications |
-| [`DATA_CONTRACTS.md`](DATA_CONTRACTS.md) | Planned canonical data contracts |
+| [`DATA_CONTRACTS.md`](DATA_CONTRACTS.md) | Canonical data contracts (implemented) |
 | [`API_CONTRACTS.md`](API_CONTRACTS.md) | API contracts (`GET /api/v1/health` implemented) |
 | [`TESTING_STRATEGY.md`](TESTING_STRATEGY.md) | Test boundaries and quality toolchain |
 | [`DECISIONS.md`](DECISIONS.md) | Architecture Decision Records |

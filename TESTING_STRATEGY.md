@@ -18,13 +18,17 @@ All commands are run through uv so a separately activated virtualenv is not requ
 
 Settings tests must not depend on a developer’s local `.env`. Construct `AppSettings` / `load_settings(env_file=None)` and call `clear_settings_cache()` between cases. Health tests inject settings through `create_app(settings=...)`.
 
+Domain contract tests live in `tests/unit/domain/` and do not use FastAPI. They cover UTC timestamp normalization, frozen/extra-forbid behavior, MW/MWh constraints, Decimal money (including float rejection), generation/regulatory/bid/settlement/DLQ invariants, and JSON serialization.
+
+`tests/architecture/test_domain_dependencies.py` uses the standard library `ast` module to fail if `energy_trading.domain` imports `energy_trading.api`, `application`, `infrastructure`, `ml`, `shared`, or FastAPI. No extra architecture-testing dependency is used.
+
 Infrastructure integration tests against PostgreSQL, Redis, or Qdrant are **not** run (those services are not implemented).
 
 ## Layout
 
 | Directory | Intent |
 | --- | --- |
-| `tests/unit/` | Domain, mapping, agent (with fakes), ML unit (small fixtures); currently settings and health |
+| `tests/unit/` | Domain contracts/value objects, settings, health; later mapping, agents (with fakes), ML unit |
 | `tests/integration/` | Real adapters against local files/containers when those exist |
 | `tests/architecture/` | Import-graph / layering rules |
 | `tests/fixtures/` | CSV/Excel/PDF snippets, malformed series, canonical JSON |
@@ -33,7 +37,9 @@ Infrastructure integration tests against PostgreSQL, Redis, or Qdrant are **not*
 
 ### Domain unit tests
 
-Value objects, invariants (MW vs MWh consistency when interval is known), refuse naive datetimes, incomplete `RiskAssessment` flags.
+Implemented in Chunk 2 (`tests/unit/domain/`): value objects, UTC vs naive timestamps, unknown-field / frozen-model behavior, non-negative MW, positive bid quantity, NaN/Infinity rejection, currency format, Decimal money, generation available≤total, regulatory date/bound windows, settlement period and single-currency, DLQ non-empty diagnostics, Pydantic JSON serialization.
+
+Later: MW vs MWh consistency when a verified interval exists; incomplete `RiskAssessment` completeness flags when that field is added.
 
 ### Adapter normalization tests
 
@@ -85,7 +91,9 @@ Walk-forward or holdout on **versioned local datasets**. Metrics recorded in `EX
 
 ### Architecture / dependency tests
 
-Fail the build if `domain` or `application` imports `energy_trading.infrastructure` concrete modules; if `application` imports `energy_trading.ml` concrete implementations; if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases (heuristic + import checks).
+Implemented for domain: fail if `src/energy_trading/domain/` imports `energy_trading.api`, `energy_trading.application`, `energy_trading.infrastructure`, `energy_trading.ml`, `energy_trading.shared`, or FastAPI.
+
+Still planned: fail if `application` imports infrastructure or `ml` concretes; if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 
 ## CI expectations (future)
 
