@@ -128,11 +128,29 @@ Chunk 6 Consumption CSV adapter tests (`tests/unit/infrastructure/adapters/struc
 - `Consumpton_MW` is accepted as fuzzy MW mapping with a warning whose `field_name` is canonical `value_mw`; the raw typo does not appear in outward diagnostics.
 - Default profile rejects unit-ambiguous or energy-like headers (`Consumption_kW`, `Consumption_MWh`, `Consumption_MW_h`, and similar) as canonical MW (schema fail-closed, no unit conversion).
 - Naive timestamps, negative/nonnumeric/NaN/Inf MW, and row-width mismatches isolate the bad row (diagnostic + DLQ) and keep siblings.
+- Bare numeric timestamp strings (for example `1710000000`) fail closed and are not treated as Unix timestamps.
 - Partial success, complete row-normalization failure, empty file, and header-only success.
 - Fatal schema for missing required fields, header collisions, and forced ambiguity; unresolved extra columns warn and continue.
 - Missing/unreadable files raise sanitized `DependencyUnavailableError` without the filesystem path. Malformed CSV and invalid UTF-8 are normalization failures with source-level DLQ metadata, not dependency errors.
 - A unique raw bad cell value must not appear in diagnostics, DLQ metadata (except opaque source/row references), or serialized result fields.
 - Architecture test (`tests/architecture/test_csv_adapter_boundary.py`): CSV adapter must not import pandas/Polars/openpyxl, HTTP clients, FastAPI, databases, LangChain/LangGraph/OpenAI, or ML libraries. Application ports still have no CSV/path/raw-row surface.
+
+Chunk 7 Consumption Excel adapter tests (`tests/unit/infrastructure/adapters/structured/excel/`):
+
+- Temporary `.xlsx` workbooks generated in `tmp_path`; no external Excel files and no live services.
+- Exact canonical headers and the MW-safe `Consumption_MW` alias produce `ConsumptionRecord` values in worksheet order with UTC timestamps and no DLQ.
+- `Consumpton_MW` is accepted as fuzzy MW mapping with a warning whose `field_name` is canonical `value_mw`; the raw typo does not appear in outward diagnostics.
+- Default profile rejects unit-ambiguous or energy-like headers (`Consumption_kW`, `Consumption_MWh`, `Consumption_MW_h`, and similar) as canonical MW (schema fail-closed, no unit conversion).
+- Timezone-aware ISO timestamp strings normalize to UTC. Excel typed naive datetime cells fail the row without timezone inference; sibling valid rows survive.
+- Numeric timestamp cells (integers/floats such as Unix-like or Excel-serial numbers) and boolean `value_mw` cells fail closed and are not coerced; sibling valid rows survive.
+- Negative/nonnumeric/NaN/Inf MW and missing required cells isolate the bad row (diagnostic + DLQ) and keep siblings.
+- Partial success, empty worksheet, and header-only success.
+- Fatal schema for missing required fields, header collisions, and forced ambiguity; unresolved extra columns warn and continue.
+- Explicit `sheet_name` selects that worksheet. A missing configured worksheet is a sanitized source/schema failure with DLQ metadata, not a silent active-sheet fallback and not a leaked worksheet name.
+- Missing/unreadable files raise sanitized `DependencyUnavailableError` without the filesystem path. Corrupt `.xlsx` bytes are normalization failures with source-level DLQ metadata, not dependency errors.
+- A unique raw bad cell value must not appear in diagnostics, DLQ metadata (except opaque source/row references), or serialized result fields.
+- Shared Consumption mapping tests (`tests/unit/infrastructure/adapters/structured/test_consumption_mapping.py`) prove CSV and Excel reuse the same MW-safety policy; existing CSV adapter tests remain the CSV regression suite.
+- Architecture test (`tests/architecture/test_excel_adapter_boundary.py`): Excel adapter may import openpyxl and the shared mapping helper, but must not import pandas/Polars/xlrd, HTTP clients, FastAPI, databases, LangChain/LangGraph/OpenAI, or ML libraries. Application ports still have no Workbook/Worksheet/Cell/path surface.
 
 Still planned: fail if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 

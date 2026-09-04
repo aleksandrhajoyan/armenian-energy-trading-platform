@@ -19,25 +19,25 @@ from energy_trading.application.errors import DependencyUnavailableError
 from energy_trading.application.ports.structured_ingestion import StructuredIngestionResult
 from energy_trading.domain.models.ingestion import AdapterDiagnostic, DiagnosticSeverity, DLQRecord
 from energy_trading.domain.models.observations import ConsumptionRecord
+from energy_trading.infrastructure.adapters.structured.consumption_mapping import (
+    DEFAULT_CONSUMPTION_FIELD_SPECS,
+    apply_consumption_unit_safety,
+    canonical_column_index,
+    validated_consumption_field_specs,
+)
+from energy_trading.infrastructure.adapters.structured.consumption_values import (
+    UnrecognizedConsumptionSourceValue,
+    consumption_timestamp_from_csv,
+)
 from energy_trading.infrastructure.adapters.structured.schema_mapping import (
-    CanonicalFieldCollision,
     CanonicalFieldSpec,
     DeterministicFieldResolver,
-    FieldResolution,
     FieldResolutionMethod,
     FieldResolutionStatus,
     SchemaResolution,
 )
 
 _ADAPTER_NAME = "consumption_csv"
-_REQUIRED_CANONICAL_FIELDS = frozenset({"consumer_id", "timestamp", "value_mw"})
-_REQUIRED_CANONICAL_ORDER = ("consumer_id", "timestamp", "value_mw")
-_MW_TOKEN = "mw"
-_DEFAULT_FIELD_SPECS = (
-    CanonicalFieldSpec(canonical_name="consumer_id", aliases=(), required=True),
-    CanonicalFieldSpec(canonical_name="timestamp", aliases=(), required=True),
-    CanonicalFieldSpec(canonical_name="value_mw", aliases=("Consumption_MW",), required=True),
-)
 
 _MSG_MISSING_REQUIRED = "CSV schema is missing a required canonical field."
 _MSG_AMBIGUOUS = "CSV schema contains an ambiguous header mapping."
@@ -71,10 +71,10 @@ class ConsumptionCsvAdapter:
         if not cleaned_source:
             msg = "source_name must be a non-empty string"
             raise ValueError(msg)
-        specs = _DEFAULT_FIELD_SPECS if field_specs is None else field_specs
+        specs = DEFAULT_CONSUMPTION_FIELD_SPECS if field_specs is None else field_specs
         self._source_name = cleaned_source
         self._clock = clock if clock is not None else _utc_now
-        self._resolver = DeterministicFieldResolver(_validated_consumption_specs(specs))
+        self._resolver = DeterministicFieldResolver(validated_consumption_field_specs(specs))
 
     @property
     def source_name(self) -> str:
@@ -106,7 +106,7 @@ class ConsumptionCsvAdapter:
                     logical_row += 1
                     if header is None:
                         header = list(raw_row)
-                        schema = _apply_consumption_unit_safety(
+                        schema = apply_consumption_unit_safety(
                             self._resolver.resolve_schema(header)
                         )
                         schema_diagnostics, fatal_errors = _schema_diagnostics(schema)
@@ -114,7 +114,7 @@ class ConsumptionCsvAdapter:
                         if fatal_errors:
                             dlq_records.append(self._schema_dlq(fatal_errors))
                             return self._result(records, diagnostics, dlq_records)
-                        column_index = _canonical_column_index(schema)
+                        column_index = canonical_column_index(schema)
                         expected_width = len(header)
                         continue
                     self._ingest_data_row(
@@ -152,14 +152,14 @@ class ConsumptionCsvAdapter:
             diagnostics.append(diagnostic)
             dlq_records.append(self._row_dlq(logical_row, (diagnostic,)))
             return
-        payload = {
-            "consumer_id": row[column_index["consumer_id"]],
-            "timestamp": row[column_index["timestamp"]],
-            "value_mw": row[column_index["value_mw"]],
-        }
         try:
+            payload = {
+                "consumer_id": row[column_index["consumer_id"]],
+                "timestamp": consumption_timestamp_from_csv(row[column_index["timestamp"]]),
+                "value_mw": row[column_index["value_mw"]],
+            }
             records.append(ConsumptionRecord.model_validate(payload))
-        except ValidationError:
+        except (UnrecognizedConsumptionSourceValue, ValidationError):
             diagnostic = _error("csv_row_validation_failed", _MSG_ROW_VALIDATION)
             diagnostics.append(diagnostic)
             dlq_records.append(self._row_dlq(logical_row, (diagnostic,)))
@@ -226,83 +226,8 @@ def _require_path(value: object) -> Path:
     return value
 
 
-def _validated_consumption_specs(
-    field_specs: Sequence[CanonicalFieldSpec],
-) -> tuple[CanonicalFieldSpec, ...]:
-    specs = tuple(field_specs)
-    names = tuple(spec.canonical_name for spec in specs)
-    if frozenset(names) != _REQUIRED_CANONICAL_FIELDS or len(names) != len(
-        _REQUIRED_CANONICAL_FIELDS
-    ):
-        msg = "Consumption CSV field specs must be exactly consumer_id, timestamp, and value_mw"
-        raise ValueError(msg)
-    if not all(spec.required for spec in specs):
-        msg = "Consumption CSV canonical fields must all be required"
-        raise ValueError(msg)
-    return specs
-
-
 def _is_blank_row(row: Sequence[str]) -> bool:
     return all(not cell.strip() for cell in row)
-
-
-def _apply_consumption_unit_safety(schema: SchemaResolution) -> SchemaResolution:
-    """Reject fuzzy value_mw mappings that are not standalone MW.
-
-    Chunk 5 may fuzzy-match energy-like headers to the MW alias. This adapter
-    accepts a fuzzy ``value_mw`` mapping only when the normalized source's
-    final token is exactly ``mw``. Exact ``Consumption_MW`` is unchanged.
-    """
-
-    resolutions = tuple(_downgrade_unsafe_fuzzy_mw(item) for item in schema.field_resolutions)
-    resolved_sources: dict[str, list[str]] = {}
-    for resolution in resolutions:
-        if (
-            resolution.status is FieldResolutionStatus.RESOLVED
-            and resolution.canonical_field is not None
-        ):
-            resolved_sources.setdefault(resolution.canonical_field, []).append(
-                resolution.source_field
-            )
-    missing = tuple(name for name in _REQUIRED_CANONICAL_ORDER if name not in resolved_sources)
-    collisions = tuple(
-        CanonicalFieldCollision(
-            canonical_field=canonical_field,
-            source_fields=tuple(source_fields),
-        )
-        for canonical_field, source_fields in sorted(resolved_sources.items())
-        if len(source_fields) > 1
-    )
-    return SchemaResolution(
-        field_resolutions=resolutions,
-        missing_required_fields=missing,
-        collisions=collisions,
-    )
-
-
-def _downgrade_unsafe_fuzzy_mw(resolution: FieldResolution) -> FieldResolution:
-    if (
-        resolution.status is not FieldResolutionStatus.RESOLVED
-        or resolution.canonical_field != "value_mw"
-        or resolution.method is not FieldResolutionMethod.FUZZY
-    ):
-        return resolution
-    if _normalized_source_is_mw_safe(resolution.normalized_source_field):
-        return resolution
-    return FieldResolution(
-        source_field=resolution.source_field,
-        normalized_source_field=resolution.normalized_source_field,
-        status=FieldResolutionStatus.UNRESOLVED,
-        canonical_field=None,
-        method=None,
-        confidence=resolution.confidence,
-        candidates=resolution.candidates,
-    )
-
-
-def _normalized_source_is_mw_safe(normalized_source: str) -> bool:
-    tokens = normalized_source.split()
-    return bool(tokens) and tokens[-1] == _MW_TOKEN
 
 
 def _schema_diagnostics(
@@ -356,17 +281,6 @@ def _schema_diagnostics(
         diagnostics.append(diagnostic)
         fatal.append(diagnostic)
     return diagnostics, tuple(fatal)
-
-
-def _canonical_column_index(schema: SchemaResolution) -> dict[str, int]:
-    mapping: dict[str, int] = {}
-    for index, resolution in enumerate(schema.field_resolutions):
-        if (
-            resolution.status is FieldResolutionStatus.RESOLVED
-            and resolution.canonical_field is not None
-        ):
-            mapping[resolution.canonical_field] = index
-    return mapping
 
 
 def _error(code: str, message: str) -> AdapterDiagnostic:

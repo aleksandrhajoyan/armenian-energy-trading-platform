@@ -68,6 +68,7 @@ This rule is enforced by AST import inspection:
 - `tests/architecture/test_structured_ingestion_boundary.py` — structured-ingestion application ports expose no raw-source types (CSV/Excel/HTTP/HTML libraries, `DataFrame`, `bytes`, `dict`, `Mapping`, `Any`).
 - `tests/architecture/test_schema_mapping_boundary.py` — the infrastructure schema-mapping package imports none of OpenAI/LangChain/LangGraph, pandas/Polars/openpyxl, FastAPI/Starlette, database clients, or application/domain contracts.
 - `tests/architecture/test_csv_adapter_boundary.py` — the Consumption CSV adapter imports none of pandas/Polars/openpyxl, HTTP clients, FastAPI/Starlette, database clients, LangChain/LangGraph/OpenAI, or ML libraries. Application ingestion ports still accept no CSV/path/raw-row types.
+- `tests/architecture/test_excel_adapter_boundary.py` — the Consumption Excel adapter may import openpyxl and the shared Consumption mapping helper, but none of pandas/Polars/xlrd, HTTP clients, FastAPI/Starlette, database clients, LangChain/LangGraph/OpenAI, or ML libraries. Application ingestion ports still accept no Workbook/Worksheet/Cell/path types.
 
 Broader ML/agent import rules remain for later chunks.
 
@@ -114,6 +115,7 @@ Broader ML/agent import rules remain for later chunks.
 │       │   ├── adapters/
 │       │   │   ├── structured/
 │       │   │   │   ├── csv/
+│       │   │   │   ├── excel/
 │       │   │   │   └── schema_mapping/
 │       │   │   ├── unstructured/
 │       │   │   └── external_services/
@@ -144,7 +146,7 @@ Broader ML/agent import rules remain for later chunks.
 └── docs/
 ```
 
-Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. The first concrete structured adapter is `ConsumptionCsvAdapter` under `src/energy_trading/infrastructure/adapters/structured/csv/`. Empty architectural directories still use `.gitkeep`.
+Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Empty architectural directories still use `.gitkeep`.
 
 ## Anti-Corruption Layer
 
@@ -168,9 +170,9 @@ Application / agents / ML
 
 Raw payloads do not cross into application. The application never receives CSV rows, Excel rows, pandas DataFrames, arbitrary dictionaries, API JSON, vendor schemas, HTML, raw bytes, or source-specific column names. It receives only canonical domain models, canonical `AdapterDiagnostic` values, and canonical `DLQRecord` metadata (`payload_reference` only).
 
-The application owns `StructuredIngestionPort[TRecord]`. Infrastructure adapters implement that protocol structurally. The first concrete implementation is Consumption CSV only. There is **no** Excel or REST adapter yet.
+The application owns `StructuredIngestionPort[TRecord]`. Infrastructure adapters implement that protocol structurally. Concrete implementations are Consumption CSV and Consumption Excel (`.xlsx` only). There is **no** REST adapter yet.
 
-Implemented Consumption CSV path:
+Implemented structured paths:
 
 ```text
 CSV Consumption Source
@@ -180,11 +182,20 @@ CSV Consumption Source
   → ConsumptionRecord validation
   → StructuredIngestionResult[ConsumptionRecord]
   → application
+
+XLSX Consumption Source
+  → ConsumptionExcelAdapter
+  → worksheet acquisition
+  → DeterministicFieldResolver
+  → schema safety
+  → ConsumptionRecord validation
+  → StructuredIngestionResult[ConsumptionRecord]
+  → application
 ```
 
-CSV acquisition remains infrastructure-only. The path is constructor-injected and never appears on `ingest()`. The async port delegates synchronous stdlib CSV/filesystem parsing with `asyncio.to_thread` so the event loop is not blocked. Raw rows and headers do not cross into application. Partial success is supported. The adapter performs no unit conversion, no source timezone inference, no time-series cleaning, and no DLQ persistence.
+CSV and Excel acquisition remain infrastructure-only. Paths and worksheet names are constructor-injected and never appear on `ingest()`. Both adapters produce `StructuredIngestionResult[ConsumptionRecord]`. Blocking filesystem and library work stays behind async `asyncio.to_thread`. Excel loading uses openpyxl in `read_only=True` and `data_only=True` mode; formulas are not calculated. Raw workbook objects, cells, headers, and filesystem paths do not cross into application. Partial success is supported. Neither adapter performs unit conversion, source timezone inference, time-series cleaning, or DLQ persistence.
 
-`Consumption_MW` may map to canonical `value_mw`. `Consumption_kW` is not treated as MW. Source timestamps must already be timezone-aware; naive values fail at the row boundary.
+`Consumption_MW` may map to canonical `value_mw`. `Consumption_kW` is not treated as MW. Source timestamps must already be timezone-aware; naive values — including Excel typed naive datetimes — fail at the row boundary. Timezone is never inferred. Excel source values are type-narrowed before canonical validation so numeric timestamp cells and boolean MW cells are not silently coerced. CSV timestamp strings that are bare numbers are not treated as Unix timestamps.
 
 Deterministic schema field resolution is implemented inside the infrastructure ACL (`DeterministicFieldResolver`). It interprets raw headers only. Raw external field names do not cross into application, domain, `StructuredIngestionPort`, or `DeadLetterQueuePort`. There is no application-layer schema-mapping port.
 
@@ -246,7 +257,7 @@ External Source
   → Application / Agent / ML layer
 ```
 
-The application-facing port and immutable result envelope are implemented. Deterministic schema field resolution is implemented inside infrastructure. The first concrete structured adapter is `ConsumptionCsvAdapter` (Consumption records from a local UTF-8 CSV only). It does not construct records for other domains, convert units, infer timezones, or persist DLQ entries. Excel/REST adapters, semantic/LLM mapping, unit/timezone cleaning, and adapter runtimes for other sources are **not** implemented. Failures that cannot safely be normalized are represented as `DLQRecord` metadata on the result rather than crashing the workflow. File acquisition failures are `DependencyUnavailableError`.
+The application-facing port and immutable result envelope are implemented. Deterministic schema field resolution is implemented inside infrastructure. Concrete structured adapters are `ConsumptionCsvAdapter` (UTF-8 CSV) and `ConsumptionExcelAdapter` (modern `.xlsx` via openpyxl). They do not construct records for other domains, convert units, infer timezones, calculate Excel formulas, or persist DLQ entries. REST adapters, semantic/LLM mapping, unit/timezone cleaning, and adapter runtimes for other sources are **not** implemented. Failures that cannot safely be normalized are represented as `DLQRecord` metadata on the result rather than crashing the workflow. File acquisition failures are `DependencyUnavailableError`.
 
 ## Unstructured / RAG conceptual flow
 
@@ -413,7 +424,7 @@ Unexpected Exception
 
 ## Testing boundaries
 
-See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, and the Consumption CSV adapter provider boundary.
+See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, and the Consumption Excel adapter provider boundary.
 
 ## Runtime baseline (implemented)
 

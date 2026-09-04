@@ -150,6 +150,28 @@ async def test_naive_timestamp_is_isolated_without_timezone_inference(tmp_path: 
     assert "+04:00" not in result.diagnostics[0].message
 
 
+async def test_bare_numeric_timestamp_string_is_not_unix_epoch(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "consumer_id,timestamp,value_mw\n"
+        f"good-1,{_VALID_TS},1.5\n"
+        "numeric-ts,1710000000,9.0\n"
+        f"good-2,{_VALID_TS},2.5\n",
+    )
+    result = await _adapter(path).ingest()
+    assert [record.consumer_id for record in result.records] == ["good-1", "good-2"]
+    assert len(result.dlq_records) == 1
+    assert result.diagnostics[0].code == "csv_row_validation_failed"
+    coerced = datetime.fromtimestamp(1_710_000_000, tz=UTC)
+    assert all(record.timestamp != coerced for record in result.records)
+    outward = _outward_text(result)
+    assert "1710000000" not in outward
+    assert "numeric-ts" not in outward
+    assert "Unix" not in outward
+    assert "epoch" not in outward
+    assert "1710000000" not in repr(result)
+
+
 async def test_invalid_mw_values_are_isolated(tmp_path: Path) -> None:
     path = _write(
         tmp_path,
