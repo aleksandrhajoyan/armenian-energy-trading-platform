@@ -1,0 +1,1 @@
+"""Structured adapter unit tests."""

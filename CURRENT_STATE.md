@@ -5,12 +5,12 @@ Living snapshot. Update at the end of every chunk. Do not list features that do 
 ## Phase and chunk
 
 - **Current phase:** Phase 1 — Anti-Corruption Layer
-- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary
-- **Next recommended chunk:** Chunk 5 — Semantic Schema Mapping and Field Resolution Engine
+- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine
+- **Next recommended chunk:** CSV adapter
 
 ## What this repository is
 
-A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, and an application-facing structured ingestion boundary (ports only). It is **not** a running trading platform.
+A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary (ports only), and a deterministic infrastructure-local schema field-resolution engine. It is **not** a running trading platform.
 
 ## What is not implemented
 
@@ -18,8 +18,6 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - CSV adapter
 - Excel adapter
 - REST/API adapters
-- Schema mapping
-- Fuzzy mapping
 - Semantic/LLM mapping
 - Unit normalization
 - Timezone source inference
@@ -62,13 +60,17 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Canonical diagnostics/DLQ metadata propagation on the ingestion envelope
 - Application-owned DLQ sink port (`DeadLetterQueuePort`)
 - Partial-success ingestion semantics (success, partial, complete normalization failure, valid empty source)
+- Deterministic schema field resolution inside the infrastructure ACL (`DeterministicFieldResolver`)
+- Unicode field-name normalization, exact alias matching, and stdlib fuzzy matching with confidence/ambiguity
+- Schema-level missing-required-field and destination-collision reporting
 - ACL boundary architecture tests (no raw-source types on application ingestion ports)
+- Schema-mapping architecture tests (no provider SDKs, file readers, or application/domain leakage)
 - Domain and application architecture dependency tests
 - Initial automated quality/test toolchain: pytest, pytest-asyncio, HTTPX, Ruff, mypy
 
 ## Pending work
 
-Everything from Chunk 5 onward in `ROADMAP.md`. Highest priority: semantic schema mapping and field resolution. Do not install LangGraph, databases, ML stacks, or Docker services until those chunks.
+Everything after Chunk 5 in `ROADMAP.md`. Highest priority: CSV adapter. Do not install LangGraph, databases, ML stacks, or Docker services until those chunks.
 
 ## Known issues
 
@@ -82,6 +84,7 @@ Everything from Chunk 5 onward in `ROADMAP.md`. Highest priority: semantic schem
 - Mandatory Anti-Corruption Layer
 - Canonical Pydantic contracts (implemented)
 - Application-facing structured ingestion receives canonical models only
+- Raw external field names stay inside infrastructure schema mapping; they do not cross Chunk 4 application ports
 - UTC timestamps; MW vs MWh; Decimal money; explicit currency codes
 - Application/domain exceptions contain no HTTP semantics; HTTP translation is API-only
 - Unexpected exception details are never sent to clients

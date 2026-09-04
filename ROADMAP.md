@@ -18,7 +18,7 @@ Checkbox legend: `[x]` done · `[ ]` not started.
 Split into reviewable chunks; do not implement as one drop.
 
 - [x] **Chunk 4** — Adapter Ports and Structured Ingestion Boundary
-- [ ] **Chunk 5** — Semantic Schema Mapping and Field Resolution Engine
+- [x] **Chunk 5** — Semantic Schema Mapping and Field Resolution Engine
 - [ ] CSV adapter
 - [ ] Excel adapter
 - [ ] Time-series normalization (units, timezone, missing hours, duplicates)
@@ -103,5 +103,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0, Chunk 1, Chunk 2, Chunk 3, Chunk 4
-- **Next:** Chunk 5 — Semantic Schema Mapping and Field Resolution Engine
+- **Completed:** Chunk 0, Chunk 1, Chunk 2, Chunk 3, Chunk 4, Chunk 5
+- **Next:** CSV adapter

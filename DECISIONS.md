@@ -144,3 +144,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - DLQ persistence is abstracted behind `DeadLetterQueuePort`. Application/orchestration may later enqueue `dlq_records` from a result; infrastructure will persist them in a later chunk.
   - Source-specific adapter implementations (CSV, Excel, REST, schema mapping, unit/timezone cleaning) are deferred.
 - **Consequences:** Call sites can be written and tested against fakes before any vendor parser exists. Adapters must finish acquisition and normalization before crossing the port. An extra mapping from infrastructure result → application envelope is avoided because the adapter *is* the port implementation. The tradeoff is that configuration (paths, credentials, URLs) cannot appear on the port and must be injected into concrete adapters later. Runtime DLQ transport remains undecided.
+
+---
+
+## ADR-015 — Deterministic-first schema field resolution
+
+- **Status:** Accepted
+- **Context:** Structured adapters will later read CSV, Excel, and APIs whose headers are renamed, inconsistently cased, punctuated, or written in Unicode (including Armenian). Chunk 4 already forbids raw schemas on the application ingestion boundary. Field meaning must be interpreted before validation and unit normalization, without guessing, without new fuzzy/LLM dependencies, and without leaking vendor headers into application or domain.
+- **Decision:**
+  - Schema field interpretation is an infrastructure/ACL responsibility. The engine lives under `energy_trading.infrastructure.adapters.structured.schema_mapping`. No application-layer schema-mapping port is added. Chunk 4's `StructuredIngestionPort` / `StructuredIngestionResult` / `DeadLetterQueuePort` signatures are unchanged.
+  - Callers supply `CanonicalFieldSpec` values. There is no production global vendor alias catalog. Canonical names are exact matches even when not repeated as aliases.
+  - The implemented path is deterministic and synchronous: Unicode NFKC normalization and `casefold()`, exact alias matching, then `difflib.SequenceMatcher` fuzzy matching. Default `fuzzy_threshold = 0.85` and `ambiguity_margin = 0.05` are resolver constructor parameters, not environment/business settings.
+  - Ambiguous and low-confidence matches fail closed: `canonical_field` stays `None`; the resolver does not pick the first candidate. Schema-level missing required fields and destination collisions are reported, not silently overwritten.
+  - The resolver performs no unit conversion, record parsing, file I/O, DLQ emission, or canonical-model construction. Aliases such as `Consumption_MW` and `Consumption_kW` may share a destination field; values are not converted here.
+  - No new dependency is required. RapidFuzz, pandas, OpenAI, LangChain, LangGraph, embeddings, and transliteration libraries are out of scope.
+  - A future optional infrastructure-local semantic/LLM fallback may run after the deterministic path. It must not be required for resolution to work, and any abstraction that carries raw external field names must stay inside infrastructure.
+- **Consequences:** CSV/Excel/REST adapters can later call this engine before validating row values. Mapping tables remain adapter configuration. Semantic/LLM mapping, if ever added, cannot push raw headers across the application boundary. Ambiguous source schemas will surface as schema diagnostics rather than invented canonical fields.

@@ -66,6 +66,7 @@ This rule is enforced by AST import inspection:
 - `tests/architecture/test_domain_dependencies.py` — domain imports none of `api`, `application`, `infrastructure`, `ml`, `shared`, or FastAPI.
 - `tests/architecture/test_application_dependencies.py` — application (including ports) imports none of `api`, `infrastructure`, `ml`, FastAPI, or Starlette.
 - `tests/architecture/test_structured_ingestion_boundary.py` — structured-ingestion application ports expose no raw-source types (CSV/Excel/HTTP/HTML libraries, `DataFrame`, `bytes`, `dict`, `Mapping`, `Any`).
+- `tests/architecture/test_schema_mapping_boundary.py` — the infrastructure schema-mapping package imports none of OpenAI/LangChain/LangGraph, pandas/Polars/openpyxl, FastAPI/Starlette, database clients, or application/domain contracts.
 
 Broader ML/agent import rules remain for later chunks.
 
@@ -111,6 +112,7 @@ Broader ML/agent import rules remain for later chunks.
 │       ├── infrastructure/
 │       │   ├── adapters/
 │       │   │   ├── structured/
+│       │   │   │   └── schema_mapping/
 │       │   │   ├── unstructured/
 │       │   │   └── external_services/
 │       │   ├── persistence/
@@ -140,7 +142,7 @@ Broader ML/agent import rules remain for later chunks.
 └── docs/
 ```
 
-Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented; empty architectural directories still use `.gitkeep`.
+Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Empty architectural directories still use `.gitkeep`.
 
 ## Anti-Corruption Layer
 
@@ -164,7 +166,22 @@ Application / agents / ML
 
 Raw payloads do not cross into application. The application never receives CSV rows, Excel rows, pandas DataFrames, arbitrary dictionaries, API JSON, vendor schemas, HTML, raw bytes, or source-specific column names. It receives only canonical domain models, canonical `AdapterDiagnostic` values, and canonical `DLQRecord` metadata (`payload_reference` only).
 
-The application owns `StructuredIngestionPort[TRecord]`. Future infrastructure adapters implement that protocol structurally. There is **no** CSV, Excel, REST, or mapping adapter implementation yet.
+The application owns `StructuredIngestionPort[TRecord]`. Future infrastructure adapters implement that protocol structurally. There is **no** CSV, Excel, or REST adapter implementation yet.
+
+Deterministic schema field resolution is implemented inside the infrastructure ACL (`DeterministicFieldResolver`). It interprets raw headers only. Raw external field names do not cross into application, domain, `StructuredIngestionPort`, or `DeadLetterQueuePort`. There is no application-layer schema-mapping port.
+
+Field-resolution flow:
+
+```text
+raw header
+  → Unicode normalization
+  → exact aliases
+  → deterministic fuzzy matching
+  → confidence / ambiguity result
+  → later adapter validation / normalization
+```
+
+An optional infrastructure-local semantic/LLM fallback remains deferred. No provider SDK is installed. Unit, timezone, and time-series normalization are not implemented.
 
 Partial success is first-class: a batch may contain canonical records together with diagnostics and DLQ references. Complete normalization failure (empty records plus DLQ references) and a valid empty source (all collections empty) are also valid results; they must not crash the workflow by themselves.
 
@@ -211,7 +228,7 @@ External Source
   → Application / Agent / ML layer
 ```
 
-The application-facing port and immutable result envelope are implemented. Schema detection, mapping, file/API adapters, unit/timezone cleaning, and adapter runtimes are **not** implemented. Failures that cannot safely be normalized are represented as `DLQRecord` metadata on the result rather than crashing the workflow.
+The application-facing port and immutable result envelope are implemented. The "Schema Detection / Semantic Mapping" step currently means deterministic field resolution inside infrastructure (Unicode normalization, exact aliases, then `difflib` fuzzy matching with confidence/ambiguity). It does not construct canonical records and does not cross into application. File/API adapters, semantic/LLM mapping, unit/timezone cleaning, and adapter runtimes are **not** implemented. Failures that cannot safely be normalized are represented as `DLQRecord` metadata on the result rather than crashing the workflow.
 
 ## Unstructured / RAG conceptual flow
 
@@ -378,7 +395,7 @@ Unexpected Exception
 
 ## Testing boundaries
 
-See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules and the structured-ingestion ACL boundary.
+See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, and the infrastructure schema-mapping provider/file-I/O boundary.
 
 ## Runtime baseline (implemented)
 
