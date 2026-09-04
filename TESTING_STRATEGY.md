@@ -33,6 +33,15 @@ Chunk 3 observability and error-boundary tests:
 - Idempotent logging setup: repeated `configure_logging` / `create_app` calls do not stack duplicate handlers and do not reconfigure pytest's root capture.
 - Application-layer dependency enforcement (`tests/architecture/test_application_dependencies.py`): `energy_trading.application` must not import `energy_trading.api`, `infrastructure`, `ml`, FastAPI, or Starlette.
 
+Chunk 4 structured-ingestion boundary tests:
+
+- Structural Protocol implementation with a test-only `FakeConsumptionAdapter` (`tests/unit/application/`): the fake does not inherit an infrastructure base class; `async ingest()` returns `StructuredIngestionResult[ConsumptionRecord]`.
+- Canonical success, partial success, complete normalization failure, and valid empty source. Partial success keeps the canonical record and isolates the failure as `DLQRecord.payload_reference`.
+- Immutable batch collections: `StructuredIngestionResult` is a frozen dataclass; `records`, `diagnostics`, and `dlq_records` are tuples.
+- No raw payload is embedded in the result envelope.
+- Test-only in-memory `DeadLetterQueuePort` fake accepts canonical `DLQRecord` without Redis or other infrastructure.
+- ACL/port architecture tests (`tests/architecture/test_structured_ingestion_boundary.py`): AST inspection of the ingestion-port modules for forbidden raw-source imports and annotations (`pandas`, `openpyxl`, `csv`, `requests`, `httpx`, `aiohttp`, BeautifulSoup, `bytes`, `bytearray`, `dict`, `Mapping`, `Any`, `DataFrame`). Application ports must not import `energy_trading.infrastructure`, `energy_trading.api`, `energy_trading.ml`, FastAPI, or Starlette.
+
 `tests/architecture/test_domain_dependencies.py` uses the standard library `ast` module to fail if `energy_trading.domain` imports `energy_trading.api`, `application`, `infrastructure`, `ml`, `shared`, or FastAPI. No extra architecture-testing dependency is used.
 
 Infrastructure integration tests against PostgreSQL, Redis, or Qdrant are **not** run (those services are not implemented).
@@ -41,7 +50,7 @@ Infrastructure integration tests against PostgreSQL, Redis, or Qdrant are **not*
 
 | Directory | Intent |
 | --- | --- |
-| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability |
+| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports |
 | `tests/integration/` | Real adapters against local files/containers when those exist |
 | `tests/architecture/` | Import-graph / layering rules |
 | `tests/fixtures/` | CSV/Excel/PDF snippets, malformed series, canonical JSON |
@@ -82,6 +91,8 @@ Duplicate interval keys: reject or deterministically coalesce per documented rul
 
 Unrecoverable records produce `DLQRecord` with stage, source, correlation ID, and payload ref. Workflow continues for siblings. No silent swallow.
 
+Chunk 4 covers the application sink Protocol with an in-memory fake (`enqueue(DLQRecord)`). Persistence/runtime tests remain for a later chunk.
+
 ### Agent tests
 
 Each agent tested with port fakes. Assert canonical in/out. Especially: Consumer Load Forecast Agent and DAM Price Forecast Agent call forecasting **ports**, **not** an LLM port and **not** concrete ML libraries, for numeric outputs.
@@ -107,6 +118,8 @@ Walk-forward or holdout on **versioned local datasets**. Metrics recorded in `EX
 Implemented for domain: fail if `src/energy_trading/domain/` imports `energy_trading.api`, `energy_trading.application`, `energy_trading.infrastructure`, `energy_trading.ml`, `energy_trading.shared`, or FastAPI.
 
 Implemented for application (Chunk 3): fail if `src/energy_trading/application/` imports `energy_trading.api`, `energy_trading.infrastructure`, `energy_trading.ml`, FastAPI, or Starlette.
+
+Implemented for the structured ingestion ACL boundary (Chunk 4): fail if application ingestion ports import raw-source libraries or annotate `ingest`/`enqueue` with `bytes`, `dict`, `Mapping`, `Any`, `DataFrame`, or similar escape hatches. Application ports may import canonical domain contracts. Infrastructure may later import application ports.
 
 Still planned: fail if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 

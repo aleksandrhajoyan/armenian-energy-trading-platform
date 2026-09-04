@@ -14,6 +14,7 @@ These can be spoken to from documentation and (for contracts) from executable do
 - **ML vs LLM separation:** forecasts from XGBoost/LightGBM (optional Prophet); LLMs for regulatory/news reasoning only.
 - **Data-agnostic ingestion strategy:** schema detection and semantic mapping into canonical contracts (MW, UTC timestamps, Decimal money).
 - **DLQ / resilience:** unnormalizable records park instead of crashing the DAM workflow.
+- **Record-level adapter isolation:** Adapters can fail record-by-record without poisoning the full ingestion batch: valid canonical records continue, failed records are isolated by DLQ references.
 - **Armenian DAM business flow:** five phases — contract/regulatory alignment → parallel ingestion → forecasting → portfolio/risk/strategy → clearing/billing/settlement.
 
 ## Placeholders (not yet available)
@@ -22,6 +23,7 @@ These can be spoken to from documentation and (for contracts) from executable do
 | --- | --- |
 | Architecture screenshots | Placeholder — add after diagrams exist |
 | Canonical contract diagram | Placeholder — Messy external schemas → Adapter Layer → Canonical Pydantic Contracts → Agents / ML |
+| Structured ingestion split | Placeholder — visual not created yet |
 | LangGraph visualization | Placeholder — graph not implemented |
 | ML metrics | Placeholder — no experiments (`EXPERIMENT_LOG.md`) |
 | Forecasting plots | Placeholder |
@@ -30,6 +32,18 @@ These can be spoken to from documentation and (for contracts) from executable do
 | End-to-end trading demo | Placeholder |
 | Settlement example | Placeholder — official rules unverified |
 
+Future structured-ingestion diagram (not drawn):
+
+```text
+External CSV / Excel / API
+        ↓
+Adapter
+   ↙          ↘
+Canonical     DLQ reference
+records       + diagnostics
+   ↓
+Application
+```
 ## Talk track notes
 
 - Stress that the platform is **decision support**, not the official market system.

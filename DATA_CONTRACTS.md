@@ -139,6 +139,22 @@ Money and prices do **not** assume non-negativity. Electricity market rules are 
 
 ---
 
+## Application ingestion envelope (not a domain entity)
+
+`StructuredIngestionResult[T]` is an **application orchestration contract** defined in `energy_trading.application.ports`. It is a frozen generic envelope, not a new persisted domain data entity and not a duplicate of the Pydantic models above.
+
+It references only:
+
+- canonical records (`tuple[T, ...]`, `T` bound to `CanonicalModel`)
+- `AdapterDiagnostic`
+- `DLQRecord`
+
+It never embeds a raw source payload. Failed raw data stays outside the application and is referenced solely through `DLQRecord.payload_reference`.
+
+Valid batch outcomes include complete success, partial success, complete normalization failure, and a valid empty source. Emptiness is not automatically treated as malformed data.
+
+---
+
 ## Intentionally deferred contracts
 
 Additional contracts (tariff tables, official bid-message envelopes, imbalance components, user/identity) will be added when a chunk has verified requirements. Do not pre-create parallel “shadow” schemas in application code.

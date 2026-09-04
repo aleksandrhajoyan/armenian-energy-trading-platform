@@ -129,3 +129,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - `AdapterDiagnostic` remains a domain ingestion diagnostic and is not reused as the HTTP/application exception format.
   - OpenTelemetry, Sentry, Prometheus, structlog, and loguru are deferred.
 - **Consequences:** Operators correlate a sanitized client error with an internal JSON log using the same ID, without a vendor observability stack. Application code stays transport-portable. Stdlib JSON logs are less feature-rich than structlog/OTel; that tradeoff is accepted until a later telemetry chunk. ContextVar isolation depends on not using `BaseHTTPMiddleware`, which can break context propagation.
+
+---
+
+## ADR-014 — Structured ingestion application boundary
+
+- **Status:** Accepted
+- **Context:** Phase 1 must stop raw vendor payloads before agents, ML, or use cases see them. Adapters will later read CSV, Excel, and APIs, but the application-facing signature has to be stable now. Record-level normalization failures must not crash an entire DAM ingestion batch, and failed raw bytes must not leak into canonical envelopes.
+- **Decision:**
+  - The application owns `StructuredIngestionPort[TRecord]` (`typing.Protocol`) and the immutable generic envelope `StructuredIngestionResult[TRecord]`. Infrastructure adapters will implement the protocol structurally; there is no mandatory infrastructure base class.
+  - Application-facing signatures contain canonical domain models only, plus `AdapterDiagnostic` and `DLQRecord`. `ingest` accepts no raw payload (`dict`, `bytes`, DataFrame, vendor JSON, file path, or URL).
+  - Partial success is first-class: a batch may return canonical records together with diagnostics and DLQ metadata. Complete normalization failure and a valid empty source are also valid results. The port must not raise merely because DLQ entries are present or because the source contained no rows.
+  - Raw failed payload stays outside the application and is referenced only through `DLQRecord.payload_reference`.
+  - DLQ persistence is abstracted behind `DeadLetterQueuePort`. Application/orchestration may later enqueue `dlq_records` from a result; infrastructure will persist them in a later chunk.
+  - Source-specific adapter implementations (CSV, Excel, REST, schema mapping, unit/timezone cleaning) are deferred.
+- **Consequences:** Call sites can be written and tested against fakes before any vendor parser exists. Adapters must finish acquisition and normalization before crossing the port. An extra mapping from infrastructure result → application envelope is avoided because the adapter *is* the port implementation. The tradeoff is that configuration (paths, credentials, URLs) cannot appear on the port and must be injected into concrete adapters later. Runtime DLQ transport remains undecided.

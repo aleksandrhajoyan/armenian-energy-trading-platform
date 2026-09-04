@@ -4,28 +4,35 @@ Living snapshot. Update at the end of every chunk. Do not list features that do 
 
 ## Phase and chunk
 
-- **Current phase:** Phase 0 — Foundation (complete)
-- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation
-- **Next recommended chunk:** Chunk 4 — Adapter Ports and Structured Ingestion Boundary
+- **Current phase:** Phase 1 — Anti-Corruption Layer
+- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary
+- **Next recommended chunk:** Chunk 5 — Semantic Schema Mapping and Field Resolution Engine
 
 ## What this repository is
 
-A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, and structured JSON logging. It is **not** a running trading platform.
+A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, and an application-facing structured ingestion boundary (ports only). It is **not** a running trading platform.
 
 ## What is not implemented
 
-- Structured adapters
-- Unstructured adapters
-- Semantic schema mapping
-- Time-series cleaning pipeline
-- Runtime DLQ / DLQ persistence
-- Business agents
+- Source adapters
+- CSV adapter
+- Excel adapter
+- REST/API adapters
+- Schema mapping
+- Fuzzy mapping
+- Semantic/LLM mapping
+- Unit normalization
+- Timezone source inference
+- Time-series cleaning
+- DLQ persistence/runtime
+- Unstructured document adapters
+- Agents
 - LangGraph
-- ML implementations
 - Databases (PostgreSQL / TimescaleDB)
 - Redis
 - Qdrant
 - Docker
+- ML implementations
 - External integrations
 - OpenTelemetry / Sentry / Prometheus
 - Authentication
@@ -50,12 +57,18 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Sanitized validation errors (no raw `input`) and sanitized unexpected 500 handling
 - Correlation ID middleware and `ContextVar` context
 - Structured JSON logging and HTTP request completion logs
+- Generic async structured-ingestion application port (`StructuredIngestionPort`)
+- Immutable structured ingestion result (`StructuredIngestionResult`)
+- Canonical diagnostics/DLQ metadata propagation on the ingestion envelope
+- Application-owned DLQ sink port (`DeadLetterQueuePort`)
+- Partial-success ingestion semantics (success, partial, complete normalization failure, valid empty source)
+- ACL boundary architecture tests (no raw-source types on application ingestion ports)
 - Domain and application architecture dependency tests
 - Initial automated quality/test toolchain: pytest, pytest-asyncio, HTTPX, Ruff, mypy
 
 ## Pending work
 
-Everything from Chunk 4 onward in `ROADMAP.md`. Highest priority: adapter ports and the structured ingestion boundary (start of Phase 1 — Anti-Corruption Layer). Do not install LangGraph, databases, ML stacks, or Docker services until those chunks.
+Everything from Chunk 5 onward in `ROADMAP.md`. Highest priority: semantic schema mapping and field resolution. Do not install LangGraph, databases, ML stacks, or Docker services until those chunks.
 
 ## Known issues
 
@@ -68,6 +81,7 @@ Everything from Chunk 4 onward in `ROADMAP.md`. Highest priority: adapter ports 
 - Clean Architecture: `domain` ← `application` ← `api` / composition root; `infrastructure` and `ml` implement application ports and use domain contracts
 - Mandatory Anti-Corruption Layer
 - Canonical Pydantic contracts (implemented)
+- Application-facing structured ingestion receives canonical models only
 - UTC timestamps; MW vs MWh; Decimal money; explicit currency codes
 - Application/domain exceptions contain no HTTP semantics; HTTP translation is API-only
 - Unexpected exception details are never sent to clients
@@ -87,7 +101,7 @@ None.
 
 ## Current agents
 
-None implemented. Thirteen agents are specified in `AGENTS.md` only. They will consume the implemented canonical contracts.
+None implemented. Thirteen agents are specified in `AGENTS.md` only. They will consume the implemented canonical contracts through application ports; they must not parse raw source schemas.
 
 ## Current ML models
 

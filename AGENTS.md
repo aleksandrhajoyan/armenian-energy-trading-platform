@@ -6,6 +6,8 @@ Compact specification for all 13 agents. Names in this file are canonical. Do no
 
 Agents live in the application layer. They consume and return canonical typed contracts (`DATA_CONTRACTS.md`). They never import concrete infrastructure adapters or concrete ML implementations; they depend on application ports. The composition root injects implementations from `infrastructure` and `ml`.
 
+**Ingestion boundary:** Ingestion agents must consume adapter/application ports that return canonical records. They must never parse CSV, Excel, vendor JSON, or raw API schemas directly.
+
 ## Agent kinds
 
 | Kind | Meaning |

@@ -16,3 +16,8 @@ FORBIDDEN_PREFIXES = (
 def test_application_does_not_import_api_infrastructure_ml_or_http_frameworks() -> None:
     violations = collect_import_violations(APPLICATION_ROOT, FORBIDDEN_PREFIXES)
     assert violations == []
+
+
+def test_application_ports_do_not_import_api_infrastructure_ml_or_http_frameworks() -> None:
+    violations = collect_import_violations(APPLICATION_ROOT / "ports", FORBIDDEN_PREFIXES)
+    assert violations == []

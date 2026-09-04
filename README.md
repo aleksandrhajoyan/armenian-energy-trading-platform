@@ -13,11 +13,11 @@ Multi-agent decision-support system for participation in Armenia’s electricity
 
 Python 3.12, uv, FastAPI, asyncio, Pydantic, LangGraph (planned), PostgreSQL/TimescaleDB, Qdrant, Redis, XGBoost, LightGBM, optional Prophet baseline, n8n/Python scrapers, Docker Compose. Development target: Windows 11 + WSL2 under tight local RAM/VRAM budgets.
 
-Only the Python 3.12 / uv / FastAPI health slice and canonical domain contracts are installed and wired. Do not expect databases, Docker, agents, or ML runtimes yet.
+Only the Python 3.12 / uv / FastAPI health slice, canonical domain contracts, and structured-ingestion application ports are installed and wired. Do not expect CSV/Excel adapters, databases, Docker, agents, or ML runtimes yet.
 
 ## Current status
 
-**Phase 0 / Chunk 3.** The repository has a reproducible Python 3.12 project, typed application settings, a FastAPI application factory, `GET /api/v1/health`, canonical Pydantic domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, and structured JSON logging. There are no agents, no ML models, no adapters, and no Docker stack.
+**Phase 1 / Chunk 4.** The repository has a reproducible Python 3.12 project, typed application settings, a FastAPI application factory, `GET /api/v1/health`, canonical Pydantic domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, and an application-facing structured ingestion boundary (`StructuredIngestionPort`, `StructuredIngestionResult`, `DeadLetterQueuePort`). There are no source adapters, no CSV/Excel/API parsers, no agents, no ML models, and no Docker stack.
 
 See [`CURRENT_STATE.md`](CURRENT_STATE.md) and [`ROADMAP.md`](ROADMAP.md).
 

@@ -64,7 +64,8 @@ ml             ──→ application ports + domain contracts
 This rule is enforced by AST import inspection:
 
 - `tests/architecture/test_domain_dependencies.py` — domain imports none of `api`, `application`, `infrastructure`, `ml`, `shared`, or FastAPI.
-- `tests/architecture/test_application_dependencies.py` — application imports none of `api`, `infrastructure`, `ml`, FastAPI, or Starlette.
+- `tests/architecture/test_application_dependencies.py` — application (including ports) imports none of `api`, `infrastructure`, `ml`, FastAPI, or Starlette.
+- `tests/architecture/test_structured_ingestion_boundary.py` — structured-ingestion application ports expose no raw-source types (CSV/Excel/HTTP/HTML libraries, `DataFrame`, `bytes`, `dict`, `Mapping`, `Any`).
 
 Broader ML/agent import rules remain for later chunks.
 
@@ -100,6 +101,8 @@ Broader ML/agent import rules remain for later chunks.
 │       │   ├── agents/
 │       │   ├── orchestration/
 │       │   ├── ports/
+│       │   │   ├── dlq.py
+│       │   │   └── structured_ingestion.py
 │       │   └── use_cases/
 │       ├── ml/
 │       │   ├── common/
@@ -137,7 +140,7 @@ Broader ML/agent import rules remain for later chunks.
 └── docs/
 ```
 
-Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Empty architectural directories still use `.gitkeep`.
+Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented; empty architectural directories still use `.gitkeep`.
 
 ## Anti-Corruption Layer
 
@@ -145,7 +148,38 @@ Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CP
 
 All external inputs pass through infrastructure adapters. That includes APIs, CSV, Excel, PDFs, HTML, scraped data, renamed columns, Armenian headers, inconsistent units, and malformed timestamps.
 
-Structured adapters normalize external data into canonical internal Pydantic contracts (see `DATA_CONTRACTS.md`). Application and domain code speak only those contracts.
+The application-facing structured ingestion boundary is:
+
+```text
+RAW EXTERNAL WORLD
+        ↓
+Infrastructure structured adapter
+        ↓
+canonical normalization boundary
+        ↓
+StructuredIngestionResult[T]
+        ↓
+Application / agents / ML
+```
+
+Raw payloads do not cross into application. The application never receives CSV rows, Excel rows, pandas DataFrames, arbitrary dictionaries, API JSON, vendor schemas, HTML, raw bytes, or source-specific column names. It receives only canonical domain models, canonical `AdapterDiagnostic` values, and canonical `DLQRecord` metadata (`payload_reference` only).
+
+The application owns `StructuredIngestionPort[TRecord]`. Future infrastructure adapters implement that protocol structurally. There is **no** CSV, Excel, REST, or mapping adapter implementation yet.
+
+Partial success is first-class: a batch may contain canonical records together with diagnostics and DLQ references. Complete normalization failure (empty records plus DLQ references) and a valid empty source (all collections empty) are also valid results; they must not crash the workflow by themselves.
+
+DLQ persistence is abstracted behind application-owned `DeadLetterQueuePort`. No DLQ runtime exists yet.
+
+Dependency direction:
+
+```text
+Application
+  └── StructuredIngestionPort
+          ↑ implemented by
+Infrastructure Adapter
+```
+
+Infrastructure may import application ports. Application must not import infrastructure adapters.
 
 ## Canonical data contracts
 
@@ -173,10 +207,11 @@ External Source
   → Timezone Normalization
   → Time-Series Cleaning
   → Canonical Model
+  → StructuredIngestionResult[T]   (application port)
   → Application / Agent / ML layer
 ```
 
-This pipeline is documented, not implemented. Failures that cannot safely be normalized are sent to a DLQ rather than crashing the workflow.
+The application-facing port and immutable result envelope are implemented. Schema detection, mapping, file/API adapters, unit/timezone cleaning, and adapter runtimes are **not** implemented. Failures that cannot safely be normalized are represented as `DLQRecord` metadata on the result rather than crashing the workflow.
 
 ## Unstructured / RAG conceptual flow
 
@@ -193,11 +228,20 @@ Document bytes, vendor OCR schemas, and raw chunk dictionaries stay inside infra
 
 ## DLQ conceptual behavior
 
-- A record that fails validation, unit conversion, timezone normalization, or time-series cleaning after adapter retries is written as a `DLQRecord`.
-- The workflow continues for remaining records.
+- A record that fails validation, unit conversion, timezone normalization, or time-series cleaning after adapter retries is represented as a `DLQRecord`.
+- The workflow continues for remaining records (partial success).
 - DLQ records retain source identity, adapter name, diagnostics, correlation ID, and a **payload reference** — not the raw vendor payload.
 - Reprocessing is an explicit later operation. Silent drops are forbidden.
-- Transport for the DLQ (outbox table, Redis stream, etc.) is an infrastructure decision; application code depends only on a port. The domain `DLQRecord` contract exists; runtime persistence does not.
+
+Ownership:
+
+| Layer | Owns |
+| --- | --- |
+| Infrastructure adapter | Reading the external payload, schema interpretation, normalization attempts, `AdapterDiagnostic`, storing/referencing failed raw data, constructing `DLQRecord` metadata |
+| Application / orchestration | Receiving `StructuredIngestionResult` and later passing `dlq_records` to `DeadLetterQueuePort` |
+| DLQ infrastructure | Persisting or forwarding DLQ metadata (not implemented) |
+
+Transport for the DLQ (outbox table, Redis stream, etc.) is an infrastructure decision; application code depends only on `DeadLetterQueuePort`. The domain `DLQRecord` contract and the application sink port exist; runtime persistence does not.
 
 ## ML / LLM separation
 
@@ -334,7 +378,7 @@ Unexpected Exception
 
 ## Testing boundaries
 
-See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules.
+See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules and the structured-ingestion ACL boundary.
 
 ## Runtime baseline (implemented)
 
