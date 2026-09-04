@@ -1,14 +1,16 @@
 """Shared Consumption structured-source mapping policy.
 
 CSV and Excel adapters both construct ``ConsumptionRecord`` values. This
-module owns only the default canonical field profile and the MW-safe fuzzy
-header predicate. It is not a generic adapter framework.
+module owns the default canonical field profile, configured power-unit aliases,
+and header/unit consistency plus fuzzy unit-token safety. It is not a generic
+adapter framework.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 
+from energy_trading.infrastructure.adapters.structured.normalization import PowerUnit
 from energy_trading.infrastructure.adapters.structured.schema_mapping import (
     CanonicalFieldCollision,
     CanonicalFieldSpec,
@@ -20,13 +22,28 @@ from energy_trading.infrastructure.adapters.structured.schema_mapping import (
 
 _REQUIRED_CANONICAL_FIELDS = frozenset({"consumer_id", "timestamp", "value_mw"})
 _REQUIRED_CANONICAL_ORDER = ("consumer_id", "timestamp", "value_mw")
-_MW_TOKEN = "mw"
+_ENERGY_LAST_TOKENS = frozenset({"mwh", "kwh", "wh", "w", "hour"})
+_POWER_TOKENS = {
+    PowerUnit.MW: "mw",
+    PowerUnit.KW: "kw",
+}
+_KNOWN_POWER_TOKENS = frozenset(_POWER_TOKENS.values())
 
-DEFAULT_CONSUMPTION_FIELD_SPECS = (
-    CanonicalFieldSpec(canonical_name="consumer_id", aliases=(), required=True),
-    CanonicalFieldSpec(canonical_name="timestamp", aliases=(), required=True),
-    CanonicalFieldSpec(canonical_name="value_mw", aliases=("Consumption_MW",), required=True),
-)
+
+def default_consumption_field_specs(
+    source_power_unit: PowerUnit = PowerUnit.MW,
+) -> tuple[CanonicalFieldSpec, ...]:
+    """Build the default Consumption header profile for an explicit power unit."""
+
+    alias = "Consumption_MW" if source_power_unit is PowerUnit.MW else "Consumption_kW"
+    return (
+        CanonicalFieldSpec(canonical_name="consumer_id", aliases=(), required=True),
+        CanonicalFieldSpec(canonical_name="timestamp", aliases=(), required=True),
+        CanonicalFieldSpec(canonical_name="value_mw", aliases=(alias,), required=True),
+    )
+
+
+DEFAULT_CONSUMPTION_FIELD_SPECS = default_consumption_field_specs(PowerUnit.MW)
 
 
 def validated_consumption_field_specs(
@@ -47,16 +64,23 @@ def validated_consumption_field_specs(
     return specs
 
 
-def apply_consumption_unit_safety(schema: SchemaResolution) -> SchemaResolution:
-    """Reject fuzzy ``value_mw`` mappings that are not standalone MW.
+def apply_consumption_unit_safety(
+    schema: SchemaResolution,
+    *,
+    source_power_unit: PowerUnit = PowerUnit.MW,
+) -> SchemaResolution:
+    """Apply fuzzy unit-token safety and header/config unit consistency.
 
-    Chunk 5 may fuzzy-match energy-like headers to the MW alias. Consumption
-    adapters accept a fuzzy ``value_mw`` mapping only when the normalized
-    source's final token is exactly ``mw``. Exact ``Consumption_MW`` is
-    unchanged. No unit conversion is performed.
+    Fuzzy ``value_mw`` mappings require the normalized source's final token to
+    be the configured power unit. Exact mappings that explicitly claim a
+    conflicting power unit or any energy unit fail closed. No conversion.
     """
 
-    resolutions = tuple(_downgrade_unsafe_fuzzy_mw(item) for item in schema.field_resolutions)
+    expected_token = _POWER_TOKENS[source_power_unit]
+    resolutions = tuple(
+        _apply_header_unit_policy(item, expected_token=expected_token)
+        for item in schema.field_resolutions
+    )
     resolved_sources: dict[str, list[str]] = {}
     for resolution in resolutions:
         if (
@@ -95,15 +119,45 @@ def canonical_column_index(schema: SchemaResolution) -> dict[str, int]:
     return mapping
 
 
-def _downgrade_unsafe_fuzzy_mw(resolution: FieldResolution) -> FieldResolution:
+def _apply_header_unit_policy(
+    resolution: FieldResolution,
+    *,
+    expected_token: str,
+) -> FieldResolution:
     if (
         resolution.status is not FieldResolutionStatus.RESOLVED
         or resolution.canonical_field != "value_mw"
-        or resolution.method is not FieldResolutionMethod.FUZZY
     ):
         return resolution
-    if _normalized_source_is_mw_safe(resolution.normalized_source_field):
+    tokens = resolution.normalized_source_field.split()
+    last = tokens[-1] if tokens else ""
+    if resolution.method is FieldResolutionMethod.FUZZY:
+        if last != expected_token or _is_energy_like(tokens):
+            return _unresolved(resolution)
         return resolution
+    if _header_claims_conflicting_unit(tokens, expected_token=expected_token):
+        return _unresolved(resolution)
+    return resolution
+
+
+def _header_claims_conflicting_unit(tokens: list[str], *, expected_token: str) -> bool:
+    if not tokens:
+        return False
+    if _is_energy_like(tokens):
+        return True
+    last = tokens[-1]
+    return last in _KNOWN_POWER_TOKENS and last != expected_token
+
+
+def _is_energy_like(tokens: list[str]) -> bool:
+    if not tokens:
+        return False
+    if tokens[-1] in _ENERGY_LAST_TOKENS:
+        return True
+    return len(tokens) >= 2 and tokens[-2:] == ["mw", "h"]
+
+
+def _unresolved(resolution: FieldResolution) -> FieldResolution:
     return FieldResolution(
         source_field=resolution.source_field,
         normalized_source_field=resolution.normalized_source_field,
@@ -113,8 +167,3 @@ def _downgrade_unsafe_fuzzy_mw(resolution: FieldResolution) -> FieldResolution:
         confidence=resolution.confidence,
         candidates=resolution.candidates,
     )
-
-
-def _normalized_source_is_mw_safe(normalized_source: str) -> bool:
-    tokens = normalized_source.split()
-    return bool(tokens) and tokens[-1] == _MW_TOKEN

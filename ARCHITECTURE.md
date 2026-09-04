@@ -69,6 +69,7 @@ This rule is enforced by AST import inspection:
 - `tests/architecture/test_schema_mapping_boundary.py` — the infrastructure schema-mapping package imports none of OpenAI/LangChain/LangGraph, pandas/Polars/openpyxl, FastAPI/Starlette, database clients, or application/domain contracts.
 - `tests/architecture/test_csv_adapter_boundary.py` — the Consumption CSV adapter imports none of pandas/Polars/openpyxl, HTTP clients, FastAPI/Starlette, database clients, LangChain/LangGraph/OpenAI, or ML libraries. Application ingestion ports still accept no CSV/path/raw-row types.
 - `tests/architecture/test_excel_adapter_boundary.py` — the Consumption Excel adapter may import openpyxl and the shared Consumption mapping helper, but none of pandas/Polars/xlrd, HTTP clients, FastAPI/Starlette, database clients, LangChain/LangGraph/OpenAI, or ML libraries. Application ingestion ports still accept no Workbook/Worksheet/Cell/path types.
+- `tests/architecture/test_structured_normalization_boundary.py` — the Consumption unit/timezone normalization package imports none of application/API/ML, pandas/openpyxl, HTTP clients, databases, or LLM/graph libraries. Application ports still expose no `PowerUnit`, `ZoneInfo`, or normalization config.
 
 Broader ML/agent import rules remain for later chunks.
 
@@ -116,6 +117,7 @@ Broader ML/agent import rules remain for later chunks.
 │       │   │   ├── structured/
 │       │   │   │   ├── csv/
 │       │   │   │   ├── excel/
+│       │   │   │   ├── normalization/
 │       │   │   │   └── schema_mapping/
 │       │   │   ├── unstructured/
 │       │   │   └── external_services/
@@ -146,7 +148,7 @@ Broader ML/agent import rules remain for later chunks.
 └── docs/
 ```
 
-Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Empty architectural directories still use `.gitkeep`.
+Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Empty architectural directories still use `.gitkeep`.
 
 ## Anti-Corruption Layer
 
@@ -179,6 +181,8 @@ CSV Consumption Source
   → ConsumptionCsvAdapter
   → DeterministicFieldResolver
   → schema safety
+  → explicit unit normalization
+  → explicit timezone normalization
   → ConsumptionRecord validation
   → StructuredIngestionResult[ConsumptionRecord]
   → application
@@ -188,14 +192,18 @@ XLSX Consumption Source
   → worksheet acquisition
   → DeterministicFieldResolver
   → schema safety
+  → explicit unit normalization
+  → explicit timezone normalization
   → ConsumptionRecord validation
   → StructuredIngestionResult[ConsumptionRecord]
   → application
 ```
 
-CSV and Excel acquisition remain infrastructure-only. Paths and worksheet names are constructor-injected and never appear on `ingest()`. Both adapters produce `StructuredIngestionResult[ConsumptionRecord]`. Blocking filesystem and library work stays behind async `asyncio.to_thread`. Excel loading uses openpyxl in `read_only=True` and `data_only=True` mode; formulas are not calculated. Raw workbook objects, cells, headers, and filesystem paths do not cross into application. Partial success is supported. Neither adapter performs unit conversion, source timezone inference, time-series cleaning, or DLQ persistence.
+CSV and Excel acquisition remain infrastructure-only. Paths, worksheet names, `source_power_unit`, and `source_timezone` are constructor-injected and never appear on `ingest()`. Both adapters produce `StructuredIngestionResult[ConsumptionRecord]`. Blocking filesystem and library work stays behind async `asyncio.to_thread`. Excel loading uses openpyxl in `read_only=True` and `data_only=True` mode; formulas are not calculated. Raw workbook objects, cells, headers, and filesystem paths do not cross into application. Partial success is supported. Neither adapter infers units or timezones. Duplicate timestamps, missing intervals, interpolation, and DLQ persistence are not implemented.
 
-`Consumption_MW` may map to canonical `value_mw`. `Consumption_kW` is not treated as MW. Source timestamps must already be timezone-aware; naive values — including Excel typed naive datetimes — fail at the row boundary. Timezone is never inferred. Excel source values are type-narrowed before canonical validation so numeric timestamp cells and boolean MW cells are not silently coerced. CSV timestamp strings that are bare numbers are not treated as Unix timestamps.
+Canonical Consumption output remains MW. `PowerUnit.MW` is the default source unit; `PowerUnit.KW` may convert kW→MW only when explicitly configured. `Consumption_MW` maps to canonical `value_mw` under the MW profile; `Consumption_kW` maps under the kW profile. Energy-like headers (`Consumption_MWh`, `Consumption_kWh`, `Consumption_MW_h`) fail regardless of `PowerUnit`. Header/config mismatches such as `PowerUnit.KW` with `value_mw` fail closed. No MW↔MWh conversion and no interval-length assumption.
+
+Source timezone may be configured with an IANA name (`UTC`, `Europe/Berlin`, `Asia/Yerevan`). No timezone is inferred or defaulted (including no default `Asia/Yerevan`). Aware source timestamps retain their represented instant and are normalized to UTC. Naive timestamps require an explicit source timezone. DST-ambiguous and nonexistent local clocks fail closed. Unix epoch numbers and Excel serial dates are not timestamps.
 
 Deterministic schema field resolution is implemented inside the infrastructure ACL (`DeterministicFieldResolver`). It interprets raw headers only. Raw external field names do not cross into application, domain, `StructuredIngestionPort`, or `DeadLetterQueuePort`. There is no application-layer schema-mapping port.
 
@@ -210,7 +218,7 @@ raw header
   → later adapter validation / normalization
 ```
 
-An optional infrastructure-local semantic/LLM fallback remains deferred. No provider SDK is installed. Unit, timezone, and time-series normalization are not implemented.
+An optional infrastructure-local semantic/LLM fallback remains deferred. No provider SDK is installed. Duplicate-timestamp policy, missing-interval detection, and time-series repair are not implemented.
 
 Partial success is first-class: a batch may contain canonical records together with diagnostics and DLQ references. Complete normalization failure (empty records plus DLQ references) and a valid empty source (all collections empty) are also valid results; they must not crash the workflow by themselves.
 
@@ -236,7 +244,7 @@ Implemented contracts: `ConsumptionRecord`, `WeatherRecord`, `HydroRecord`, `Gen
 Internal canonical semantics (independent of external source representation):
 
 - **Power** is MW. **Energy** is MWh. The two are not automatically equated; DAM interval length remains unverified.
-- **Timestamps** (`UtcDateTime`) must be timezone-aware on input and are normalized to **UTC**. Naive datetimes are rejected. Adapters must resolve missing source timezones; the domain does not guess.
+- **Timestamps** (`UtcDateTime`) must be timezone-aware on input and are normalized to **UTC**. Naive datetimes are rejected. Consumption adapters may attach an explicit IANA source timezone to naive clocks; they never infer a zone. The domain does not guess.
 - **Money and energy prices** use `Decimal` (`MoneyAmount`, `EnergyPrice`) with an explicit ISO-style three-letter `CurrencyCode`. AMD is a valid code, not a hardcoded market assumption. `float` is rejected for monetary amounts.
 - **DLQ:** `DLQRecord` carries `payload_reference` only. Raw external payloads must not enter the canonical envelope.
 
@@ -257,7 +265,7 @@ External Source
   → Application / Agent / ML layer
 ```
 
-The application-facing port and immutable result envelope are implemented. Deterministic schema field resolution is implemented inside infrastructure. Concrete structured adapters are `ConsumptionCsvAdapter` (UTF-8 CSV) and `ConsumptionExcelAdapter` (modern `.xlsx` via openpyxl). They do not construct records for other domains, convert units, infer timezones, calculate Excel formulas, or persist DLQ entries. REST adapters, semantic/LLM mapping, unit/timezone cleaning, and adapter runtimes for other sources are **not** implemented. Failures that cannot safely be normalized are represented as `DLQRecord` metadata on the result rather than crashing the workflow. File acquisition failures are `DependencyUnavailableError`.
+The application-facing port and immutable result envelope are implemented. Deterministic schema field resolution is implemented inside infrastructure. Concrete structured adapters are `ConsumptionCsvAdapter` (UTF-8 CSV) and `ConsumptionExcelAdapter` (modern `.xlsx` via openpyxl). Explicit Consumption MW/kW power normalization and explicit IANA source-timezone normalization are implemented in infrastructure. They do not construct records for other domains, infer units or timezones, calculate Excel formulas, assume DAM intervals, or persist DLQ entries. REST adapters, semantic/LLM mapping, duplicate/gap repair, and adapter runtimes for other sources are **not** implemented. Failures that cannot safely be normalized are represented as `DLQRecord` metadata on the result rather than crashing the workflow. File acquisition failures are `DependencyUnavailableError`.
 
 ## Unstructured / RAG conceptual flow
 

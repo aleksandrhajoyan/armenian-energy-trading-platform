@@ -21,7 +21,9 @@ Split into reviewable chunks; do not implement as one drop.
 - [x] **Chunk 5** — Semantic Schema Mapping and Field Resolution Engine
 - [x] **Chunk 6** — CSV Structured Ingestion Adapter
 - [x] **Chunk 7** — Excel Structured Ingestion Adapter
-- [ ] Time-series normalization (units, timezone, missing hours, duplicates)
+- [x] **Chunk 8** — Deterministic Consumption Unit and Timezone Normalization
+- [ ] **Chunk 9** — Duplicate Timestamp Policy and Interval Validation
+- [ ] **Chunk 10** — Missing-Interval Detection and Gap Reporting
 - [ ] DLQ port and persistence-facing contract
 - [ ] Unstructured-document boundary (extraction/OCR port; no full RAG yet)
 
@@ -103,5 +105,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 7
-- **Next:** Time-series normalization (units, timezone, missing hours, duplicates)
+- **Completed:** Chunk 0 through Chunk 8
+- **Next:** Chunk 9 — Duplicate Timestamp Policy and Interval Validation

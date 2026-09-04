@@ -1,9 +1,9 @@
 """Consumption Excel adapter: structured ``.xlsx`` source reader.
 
-Workbook acquisition, worksheet selection, schema interpretation, and row
-validation stay inside infrastructure. The application receives only
-``StructuredIngestionResult``. This adapter performs no unit conversion, no
-timezone inference, and no Excel formula calculation.
+Workbook acquisition, worksheet selection, schema interpretation, optional
+explicit unit/timezone normalization, and row validation stay inside
+infrastructure. The application receives only ``StructuredIngestionResult``.
+Units and timezones are never inferred. Excel formulas are not calculated.
 """
 
 from __future__ import annotations
@@ -25,15 +25,22 @@ from energy_trading.application.ports.structured_ingestion import StructuredInge
 from energy_trading.domain.models.ingestion import AdapterDiagnostic, DiagnosticSeverity, DLQRecord
 from energy_trading.domain.models.observations import ConsumptionRecord
 from energy_trading.infrastructure.adapters.structured.consumption_mapping import (
-    DEFAULT_CONSUMPTION_FIELD_SPECS,
     apply_consumption_unit_safety,
     canonical_column_index,
+    default_consumption_field_specs,
     validated_consumption_field_specs,
 )
 from energy_trading.infrastructure.adapters.structured.consumption_values import (
     UnrecognizedConsumptionSourceValue,
-    consumption_mw_from_excel,
     consumption_timestamp_from_excel,
+)
+from energy_trading.infrastructure.adapters.structured.normalization import (
+    NormalizationConfigurationError,
+    PowerUnit,
+    SourceValueNormalizationError,
+    normalize_power_to_mw,
+    normalize_timestamp_to_utc,
+    resolve_source_timezone,
 )
 from energy_trading.infrastructure.adapters.structured.schema_mapping import (
     CanonicalFieldSpec,
@@ -91,6 +98,8 @@ class ConsumptionExcelAdapter:
         sheet_name: str | None = None,
         field_specs: tuple[CanonicalFieldSpec, ...] | None = None,
         clock: Callable[[], datetime] | None = None,
+        source_power_unit: PowerUnit = PowerUnit.MW,
+        source_timezone: str | None = None,
     ) -> None:
         self._path = _require_xlsx_path(path)
         cleaned_source = source_name.strip()
@@ -98,7 +107,15 @@ class ConsumptionExcelAdapter:
             msg = "source_name must be a non-empty string"
             raise ValueError(msg)
         self._sheet_name = _optional_sheet_name(sheet_name)
-        specs = DEFAULT_CONSUMPTION_FIELD_SPECS if field_specs is None else field_specs
+        if not isinstance(source_power_unit, PowerUnit):
+            raise NormalizationConfigurationError("source_power_unit must be a PowerUnit")
+        self._source_power_unit = source_power_unit
+        self._source_timezone = resolve_source_timezone(source_timezone)
+        specs = (
+            default_consumption_field_specs(source_power_unit)
+            if field_specs is None
+            else field_specs
+        )
         self._source_name = cleaned_source
         self._clock = clock if clock is not None else _utc_now
         self._resolver = DeterministicFieldResolver(validated_consumption_field_specs(specs))
@@ -156,7 +173,10 @@ class ConsumptionExcelAdapter:
             if not header_seen:
                 header_seen = True
                 header = _header_source_fields(raw_row)
-                schema = apply_consumption_unit_safety(self._resolver.resolve_schema(header))
+                schema = apply_consumption_unit_safety(
+                    self._resolver.resolve_schema(header),
+                    source_power_unit=self._source_power_unit,
+                )
                 schema_diagnostics, fatal_errors = _schema_diagnostics(schema)
                 diagnostics.extend(schema_diagnostics)
                 if fatal_errors:
@@ -196,11 +216,18 @@ class ConsumptionExcelAdapter:
         try:
             payload = {
                 "consumer_id": consumer_id,
-                "timestamp": consumption_timestamp_from_excel(raw_timestamp),
-                "value_mw": consumption_mw_from_excel(raw_mw),
+                "timestamp": normalize_timestamp_to_utc(
+                    consumption_timestamp_from_excel(raw_timestamp),
+                    self._source_timezone,
+                ),
+                "value_mw": normalize_power_to_mw(raw_mw, self._source_power_unit),
             }
             records.append(ConsumptionRecord.model_validate(payload))
-        except (UnrecognizedConsumptionSourceValue, ValidationError):
+        except (
+            UnrecognizedConsumptionSourceValue,
+            SourceValueNormalizationError,
+            ValidationError,
+        ):
             diagnostic = _error("excel_row_validation_failed", _MSG_ROW_VALIDATION)
             diagnostics.append(diagnostic)
             dlq_records.append(self._row_dlq(logical_row, (diagnostic,)))

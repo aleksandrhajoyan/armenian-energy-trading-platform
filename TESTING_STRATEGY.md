@@ -73,11 +73,11 @@ Truncated files, wrong types, empty sheets, HTML when CSV was expected. Expect v
 
 ### Unit-conversion tests
 
-kW→MW, kWh→MWh, °F→°C, knots→m/s. Unknown units fail closed (DLQ), not guessed.
+Chunk 8 covers Consumption MW identity and explicit kW→MW (`1000 kW = 1 MW`, `12500 kW = 12.5 MW`) in `tests/unit/infrastructure/adapters/structured/normalization/`. Boolean measurements are rejected. Energy units (MWh/kWh) are not power and are not converted. Header/config mismatches fail closed. Later domains may add kWh→MWh, °F→°C, knots→m/s; unknown units still fail closed (DLQ), not guessed.
 
 ### Timezone tests
 
-Naive timestamps, wrong offsets, `Asia/Yerevan` DST boundaries (when market TZ is confirmed). Output must be timezone-aware canonical timestamps.
+Chunk 8 covers explicit IANA localization (`zoneinfo` + `tzdata`) with `Europe/Berlin` DST fixtures: aware instants keep UTC; naive values fail without a configured zone; naive values with an explicit zone localize; ambiguous and nonexistent local clocks fail closed. No timezone is inferred, including no default `Asia/Yerevan`. Output remains timezone-aware canonical UTC.
 
 ### Missing-hour tests
 
@@ -126,7 +126,7 @@ Chunk 6 Consumption CSV adapter tests (`tests/unit/infrastructure/adapters/struc
 - tmp_path fixtures only; no live services. Stdlib CSV files, including UTF-8 Armenian identifiers and a test-only Armenian header alias.
 - Exact canonical headers and the MW-safe `Consumption_MW` alias produce `ConsumptionRecord` values in source order with UTC timestamps and no DLQ.
 - `Consumpton_MW` is accepted as fuzzy MW mapping with a warning whose `field_name` is canonical `value_mw`; the raw typo does not appear in outward diagnostics.
-- Default profile rejects unit-ambiguous or energy-like headers (`Consumption_kW`, `Consumption_MWh`, `Consumption_MW_h`, and similar) as canonical MW (schema fail-closed, no unit conversion).
+- Default profile rejects unit-ambiguous or energy-like headers (`Consumption_kW`, `Consumption_MWh`, `Consumption_MW_h`, and similar) as canonical MW (schema fail-closed unless `PowerUnit.KW` is explicit).
 - Naive timestamps, negative/nonnumeric/NaN/Inf MW, and row-width mismatches isolate the bad row (diagnostic + DLQ) and keep siblings.
 - Bare numeric timestamp strings (for example `1710000000`) fail closed and are not treated as Unix timestamps.
 - Partial success, complete row-normalization failure, empty file, and header-only success.
@@ -140,7 +140,7 @@ Chunk 7 Consumption Excel adapter tests (`tests/unit/infrastructure/adapters/str
 - Temporary `.xlsx` workbooks generated in `tmp_path`; no external Excel files and no live services.
 - Exact canonical headers and the MW-safe `Consumption_MW` alias produce `ConsumptionRecord` values in worksheet order with UTC timestamps and no DLQ.
 - `Consumpton_MW` is accepted as fuzzy MW mapping with a warning whose `field_name` is canonical `value_mw`; the raw typo does not appear in outward diagnostics.
-- Default profile rejects unit-ambiguous or energy-like headers (`Consumption_kW`, `Consumption_MWh`, `Consumption_MW_h`, and similar) as canonical MW (schema fail-closed, no unit conversion).
+- Default profile rejects unit-ambiguous or energy-like headers (`Consumption_kW`, `Consumption_MWh`, `Consumption_MW_h`, and similar) as canonical MW (schema fail-closed unless `PowerUnit.KW` is explicit).
 - Timezone-aware ISO timestamp strings normalize to UTC. Excel typed naive datetime cells fail the row without timezone inference; sibling valid rows survive.
 - Numeric timestamp cells (integers/floats such as Unix-like or Excel-serial numbers) and boolean `value_mw` cells fail closed and are not coerced; sibling valid rows survive.
 - Negative/nonnumeric/NaN/Inf MW and missing required cells isolate the bad row (diagnostic + DLQ) and keep siblings.
@@ -151,6 +151,14 @@ Chunk 7 Consumption Excel adapter tests (`tests/unit/infrastructure/adapters/str
 - A unique raw bad cell value must not appear in diagnostics, DLQ metadata (except opaque source/row references), or serialized result fields.
 - Shared Consumption mapping tests (`tests/unit/infrastructure/adapters/structured/test_consumption_mapping.py`) prove CSV and Excel reuse the same MW-safety policy; existing CSV adapter tests remain the CSV regression suite.
 - Architecture test (`tests/architecture/test_excel_adapter_boundary.py`): Excel adapter may import openpyxl and the shared mapping helper, but must not import pandas/Polars/xlrd, HTTP clients, FastAPI, databases, LangChain/LangGraph/OpenAI, or ML libraries. Application ports still have no Workbook/Worksheet/Cell/path surface.
+
+Chunk 8 Consumption unit/timezone normalization tests:
+
+- Primitive tests (`tests/unit/infrastructure/adapters/structured/normalization/`): MW identity; `1000 kW → 1 MW` and `12500 kW → 12.5 MW`; numeric strings; boolean rejection; deterministic repeated conversion; no energy-unit enum. Aware datetime/ISO strings keep the same UTC instant; naive values fail without a zone; naive datetime/text with explicit IANA localize correctly; bare numeric and date-only timestamps fail; invalid IANA names fail at configuration; Europe/Berlin ambiguous (`2026-10-25 02:30`) and nonexistent (`2026-03-29 02:30`) local clocks fail closed.
+- CSV adapter additions: default constructor remains MW + no timezone (Chunk 6 regression). Explicit `PowerUnit.KW` converts `Consumption_kW` `12500 → 12.5 MW`. Default adapter still rejects `Consumption_kW`. `PowerUnit.KW` with an explicit MW header fails. Fuzzy `Consumpton_kW` with `PowerUnit.KW` is accepted with a warning and converted. Naive timestamps succeed only with explicit `source_timezone`. Aware `+04:00` is not overwritten by a configured fallback zone. DST-ambiguous/nonexistent rows fail in isolation; later valid rows survive. Unique raw timestamps/values/headers/zone names must not appear in diagnostics or DLQ metadata.
+- Excel adapter additions: explicit kW numeric conversion; default kW rejection; MW/kW header-config mismatch; typed naive datetime + explicit IANA succeeds; typed naive datetime without timezone still fails; aware timestamp strings remain authoritative; numeric Excel timestamps still rejected; boolean MW/kW cells still rejected; ambiguous and nonexistent local datetimes fail; partial success and raw-source privacy are preserved. Existing Chunk 7 cases remain the Excel regression suite.
+- Shared mapping tests cover KW-profile exact/fuzzy aliases and reject conflicting MW or energy-like headers.
+- Architecture test (`tests/architecture/test_structured_normalization_boundary.py`): the normalization package must not import application/API/ML, pandas/openpyxl, HTTP clients, databases, or LLM/graph libraries. Application ports still expose no `PowerUnit`, `ZoneInfo`, timezone string, or normalization config.
 
 Still planned: fail if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 

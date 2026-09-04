@@ -5,8 +5,10 @@ import pytest
 from energy_trading.infrastructure.adapters.structured.consumption_mapping import (
     DEFAULT_CONSUMPTION_FIELD_SPECS,
     apply_consumption_unit_safety,
+    default_consumption_field_specs,
     validated_consumption_field_specs,
 )
+from energy_trading.infrastructure.adapters.structured.normalization import PowerUnit
 from energy_trading.infrastructure.adapters.structured.schema_mapping import (
     CanonicalFieldSpec,
     DeterministicFieldResolver,
@@ -79,4 +81,33 @@ def test_unsafe_unit_headers_are_downgraded_and_value_mw_is_missing() -> None:
         value_header = schema.field_resolutions[2]
         assert value_header.status is FieldResolutionStatus.UNRESOLVED
         assert value_header.canonical_field is None
+        assert "value_mw" in schema.missing_required_fields
+
+
+def test_kw_profile_accepts_consumption_kw_and_fuzzy_kw() -> None:
+    specs = default_consumption_field_specs(PowerUnit.KW)
+    resolver = DeterministicFieldResolver(specs)
+    exact = apply_consumption_unit_safety(
+        resolver.resolve_schema(("consumer_id", "timestamp", "Consumption_kW")),
+        source_power_unit=PowerUnit.KW,
+    )
+    assert exact.field_resolutions[2].status is FieldResolutionStatus.RESOLVED
+    assert exact.field_resolutions[2].method is FieldResolutionMethod.EXACT
+    fuzzy = apply_consumption_unit_safety(
+        resolver.resolve_schema(("consumer_id", "timestamp", "Consumpton_kW")),
+        source_power_unit=PowerUnit.KW,
+    )
+    assert fuzzy.field_resolutions[2].status is FieldResolutionStatus.RESOLVED
+    assert fuzzy.field_resolutions[2].method is FieldResolutionMethod.FUZZY
+
+
+def test_kw_profile_rejects_explicit_mw_and_energy_headers() -> None:
+    specs = default_consumption_field_specs(PowerUnit.KW)
+    resolver = DeterministicFieldResolver(specs)
+    for header in ("value_mw", "Consumption_MW", "Consumption_MWh", "Consumption_kWh"):
+        schema = apply_consumption_unit_safety(
+            resolver.resolve_schema(("consumer_id", "timestamp", header)),
+            source_power_unit=PowerUnit.KW,
+        )
+        assert schema.field_resolutions[2].status is FieldResolutionStatus.UNRESOLVED
         assert "value_mw" in schema.missing_required_fields

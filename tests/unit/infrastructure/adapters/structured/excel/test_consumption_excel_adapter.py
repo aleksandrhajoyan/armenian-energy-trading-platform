@@ -10,6 +10,10 @@ from energy_trading.application.errors import DependencyUnavailableError
 from energy_trading.application.ports import StructuredIngestionPort, StructuredIngestionResult
 from energy_trading.domain.models import ConsumptionRecord, DiagnosticSeverity
 from energy_trading.infrastructure.adapters.structured.excel import ConsumptionExcelAdapter
+from energy_trading.infrastructure.adapters.structured.normalization import (
+    NormalizationConfigurationError,
+    PowerUnit,
+)
 from energy_trading.infrastructure.adapters.structured.schema_mapping import CanonicalFieldSpec
 
 _FIXED_TIME = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
@@ -63,6 +67,8 @@ def _adapter(
     *,
     sheet_name: str | None = None,
     field_specs: tuple[CanonicalFieldSpec, ...] | None = None,
+    source_power_unit: PowerUnit = PowerUnit.MW,
+    source_timezone: str | None = None,
 ) -> ConsumptionExcelAdapter:
     return ConsumptionExcelAdapter(
         path=path,
@@ -70,6 +76,8 @@ def _adapter(
         sheet_name=sheet_name,
         field_specs=field_specs,
         clock=lambda: _FIXED_TIME,
+        source_power_unit=source_power_unit,
+        source_timezone=source_timezone,
     )
 
 
@@ -595,3 +603,132 @@ def test_constructor_rejects_empty_sheet_name(tmp_path: Path) -> None:
 def test_constructor_rejects_non_xlsx_suffix(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="xlsx"):
         ConsumptionExcelAdapter(path=tmp_path / "file.xls", source_name=_SOURCE)
+
+
+def test_constructor_rejects_unknown_timezone(tmp_path: Path) -> None:
+    with pytest.raises(NormalizationConfigurationError, match="IANA timezone"):
+        ConsumptionExcelAdapter(
+            path=tmp_path / "x.xlsx",
+            source_name=_SOURCE,
+            source_timezone="Not/AZone",
+        )
+
+
+async def test_explicit_kw_numeric_cell_converts_to_canonical_mw(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            ["consumer_id", "timestamp", "Consumption_kW"],
+            ["customer-1", _VALID_TS, 12500],
+        ],
+    )
+    result = await _adapter(path, source_power_unit=PowerUnit.KW).ingest()
+    assert len(result.records) == 1
+    assert result.records[0].value_mw == 12.5
+    assert result.records[0].timestamp == _VALID_TS_UTC
+
+
+async def test_kw_header_still_fails_under_default_mw_profile(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            ["consumer_id", "timestamp", "Consumption_kW"],
+            ["customer-1", _VALID_TS, 12500],
+        ],
+    )
+    result = await _adapter(path).ingest()
+    assert result.records == ()
+    assert any(item.code == "excel_missing_required_field" for item in result.diagnostics)
+    assert "Consumption_kW" not in _outward_text(result)
+
+
+async def test_kw_config_rejects_explicit_mw_header(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["customer-1", _VALID_TS, 12.5],
+        ],
+    )
+    result = await _adapter(path, source_power_unit=PowerUnit.KW).ingest()
+    assert result.records == ()
+    assert any(item.field_name == "value_mw" for item in result.diagnostics)
+
+
+async def test_typed_naive_datetime_with_explicit_timezone_succeeds(tmp_path: Path) -> None:
+    naive = datetime(2026, 1, 15, 12, 0, 0)
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["customer-1", naive, 12.5],
+        ],
+    )
+    result = await _adapter(path, source_timezone="Europe/Berlin").ingest()
+    assert len(result.records) == 1
+    assert result.records[0].timestamp == datetime(2026, 1, 15, 11, 0, tzinfo=UTC)
+    assert result.dlq_records == ()
+
+
+async def test_aware_timestamp_string_is_not_overwritten_by_configured_zone(
+    tmp_path: Path,
+) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["customer-1", _VALID_TS, 12.5],
+        ],
+    )
+    result = await _adapter(path, source_timezone="Europe/Berlin").ingest()
+    assert result.records[0].timestamp == _VALID_TS_UTC
+
+
+async def test_numeric_excel_timestamp_still_rejected_with_timezone(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["customer-1", 1710000000, 12.5],
+        ],
+    )
+    result = await _adapter(path, source_timezone="UTC").ingest()
+    assert result.records == ()
+    assert result.diagnostics[0].code == "excel_row_validation_failed"
+    assert "1710000000" not in _outward_text(result)
+
+
+async def test_boolean_measurement_still_rejected_for_kw(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            ["consumer_id", "timestamp", "Consumption_kW"],
+            ["good-1", _VALID_TS, 1000],
+            ["bool-row", _VALID_TS, True],
+            ["good-2", _VALID_TS, 2000],
+        ],
+    )
+    result = await _adapter(path, source_power_unit=PowerUnit.KW).ingest()
+    assert [record.consumer_id for record in result.records] == ["good-1", "good-2"]
+    assert [record.value_mw for record in result.records] == [1.0, 2.0]
+    assert "True" not in _outward_text(result)
+
+
+async def test_dst_ambiguous_and_nonexistent_excel_rows_are_isolated(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        [
+            _EXACT_HEADERS,
+            ["good-1", _VALID_TS, 1.5],
+            ["ambiguous", datetime(2026, 10, 25, 2, 30, 0), 2.0],
+            ["missing", datetime(2026, 3, 29, 2, 30, 0), 3.0],
+            ["good-2", _VALID_TS, 4.0],
+        ],
+    )
+    result = await _adapter(path, source_timezone="Europe/Berlin").ingest()
+    assert [record.consumer_id for record in result.records] == ["good-1", "good-2"]
+    assert len(result.dlq_records) == 2
+    outward = _outward_text(result)
+    assert "Berlin" not in outward
+    assert "2026-10-25" not in outward
+    assert "ambiguous" not in outward

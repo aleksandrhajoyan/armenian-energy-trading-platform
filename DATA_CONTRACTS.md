@@ -52,6 +52,7 @@ Money and prices do **not** assume non-negativity. Electricity market rules are 
 - **Fields:** `consumer_id` (`EntityId`); `timestamp` (`UtcDateTime`); `value_mw` (`NonNegativeMW`).
 - **Units:** MW.
 - **Invariants:** non-negative finite MW; UTC timestamp; no source column names.
+- **Adapter path:** Consumption CSV/XLSX adapters may convert an explicitly configured source power unit (`MW` or `kW`) to canonical MW and may interpret naive timestamps with an explicit IANA timezone. Units and timezones are never inferred. Domain types are unchanged.
 
 ## WeatherRecord
 

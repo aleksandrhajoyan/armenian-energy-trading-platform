@@ -9,6 +9,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "pydantic",
     "pydantic-settings",
+    "tzdata>=2026.3",
     "uvicorn",
 ]
 

@@ -5,12 +5,12 @@ Living snapshot. Update at the end of every chunk. Do not list features that do 
 ## Phase and chunk
 
 - **Current phase:** Phase 1 — Anti-Corruption Layer
-- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter
-- **Next recommended chunk:** Time-series normalization (units, timezone, missing hours, duplicates)
+- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization
+- **Next recommended chunk:** Chunk 9 — Duplicate Timestamp Policy and Interval Validation
 
 ## What this repository is
 
-A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, and a concrete Consumption Excel `.xlsx` adapter. It is **not** a running trading platform.
+A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, and explicit Consumption MW/kW plus IANA timezone normalization. It is **not** a running trading platform.
 
 ## What is not implemented
 
@@ -18,9 +18,11 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Other domain-specific structured adapters
 - Legacy `.xls`
 - Semantic/LLM mapping
-- Unit conversion
+- Unit normalization for domains/units beyond Consumption MW/kW
 - Source timezone inference
-- Time-series cleaning
+- Duplicate timestamp handling
+- Missing-interval detection
+- Time-series repair/interpolation
 - DLQ persistence/runtime
 - Unstructured document adapters
 - Agents
@@ -62,24 +64,28 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Deterministic schema field resolution inside the infrastructure ACL (`DeterministicFieldResolver`)
 - Unicode field-name normalization, exact alias matching, and stdlib fuzzy matching with confidence/ambiguity
 - Schema-level missing-required-field and destination-collision reporting
-- Shared Consumption field-profile and MW-safe fuzzy mapping policy
+- Shared Consumption field-profile and unit-safe fuzzy mapping policy (MW and kW profiles)
 - Concrete `ConsumptionCsvAdapter` implementing `StructuredIngestionPort[ConsumptionRecord]`
 - Stdlib CSV acquisition (`csv.reader`, UTF-8 including BOM) behind `asyncio.to_thread`
 - Concrete `ConsumptionExcelAdapter` implementing `StructuredIngestionPort[ConsumptionRecord]`
 - openpyxl `.xlsx` acquisition in read-only/data-only mode behind `asyncio.to_thread`
 - Integration of Chunk 5 schema resolution with Consumption CSV and Excel headers
-- Canonical `ConsumptionRecord` construction from MW-safe CSV and Excel rows
+- Explicit Consumption MW/kW power normalization (`PowerUnit`) with deterministic kW→MW conversion
+- Explicit IANA source-timezone normalization (`zoneinfo` + `tzdata`); aware timestamps keep their instant
+- DST-ambiguous and nonexistent local clocks fail closed (no fold policy)
+- Canonical `ConsumptionRecord` construction from CSV and Excel rows (canonical output remains MW + UTC)
 - Partial success plus canonical DLQ metadata (not persisted)
 - ACL boundary architecture tests (no raw-source types on application ingestion ports)
 - Schema-mapping architecture tests (no provider SDKs, file readers, or application/domain leakage)
 - CSV adapter architecture tests (no pandas/Excel/HTTP/DB/LLM/ML imports)
 - Excel adapter architecture tests (openpyxl allowed; no pandas/xlrd/HTTP/DB/LLM/ML imports)
+- Structured normalization architecture tests (normalization package isolated from application/API/ML/file readers)
 - Domain and application architecture dependency tests
 - Initial automated quality/test toolchain: pytest, pytest-asyncio, HTTPX, Ruff, mypy
 
 ## Pending work
 
-Everything after Chunk 7 in `ROADMAP.md`. Highest priority: time-series normalization (units, timezone, missing hours, duplicates). Do not install LangGraph, databases, ML stacks, or Docker services until those chunks.
+Everything after Chunk 8 in `ROADMAP.md`. Highest priority: Chunk 9 — Duplicate Timestamp Policy and Interval Validation. Do not install LangGraph, databases, ML stacks, or Docker services until those chunks.
 
 ## Known issues
 
@@ -94,7 +100,7 @@ Everything after Chunk 7 in `ROADMAP.md`. Highest priority: time-series normaliz
 - Canonical Pydantic contracts (implemented)
 - Application-facing structured ingestion receives canonical models only
 - Raw external field names stay inside infrastructure schema mapping; they do not cross Chunk 4 application ports
-- CSV and Excel values ingested as `value_mw` must already be MW; timestamps must already be timezone-aware
+- Consumption CSV/Excel may convert explicitly configured kW to MW and localize naive timestamps with an explicit IANA zone; units and timezones are never inferred; canonical output remains MW + UTC
 - UTC timestamps; MW vs MWh; Decimal money; explicit currency codes
 - Application/domain exceptions contain no HTTP semantics; HTTP translation is API-only
 - Unexpected exception details are never sent to clients
