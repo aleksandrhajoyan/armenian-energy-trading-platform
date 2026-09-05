@@ -157,6 +157,40 @@ Valid batch outcomes include complete success, partial success, complete normali
 
 ---
 
+## Application extraction envelope (not a domain entity)
+
+`ExtractedDocumentChunk` and `DocumentExtractionResult` are **application orchestration contracts** defined in `energy_trading.application.ports`. They are frozen dataclasses, not canonical business/domain entities and not a substitute for `RegulatoryConstraint`.
+
+`ExtractedDocumentChunk` fields:
+
+- `document_id` (non-empty opaque identifier; surrounding whitespace stripped)
+- `chunk_id` (non-empty opaque identifier; surrounding whitespace stripped)
+- `ordinal` (integer `>= 0`; not required to equal page number or be contiguous)
+- `text` (non-empty after trimming)
+- optional `page_number` (`>= 1` when present)
+
+`DocumentExtractionResult` fields:
+
+- `source_name` (non-empty; surrounding whitespace stripped)
+- `document_id` (non-empty; surrounding whitespace stripped)
+- `chunks` (`tuple[ExtractedDocumentChunk, ...]`)
+- `diagnostics` (`tuple[AdapterDiagnostic, ...]`)
+- `dlq_records` (`tuple[DLQRecord, ...]`)
+
+Invariants:
+
+- collection fields are immutable tuples
+- every chunk's `document_id` equals the result `document_id`
+- `chunk_id` values are unique within one result
+- no raw document bytes, filesystem paths, URLs, OCR-provider schemas, embeddings, bounding boxes, or arbitrary metadata dictionaries
+- failed raw data stays outside the application and is referenced solely through `DLQRecord.payload_reference`
+
+Extracted text is **not** an authoritative regulatory constraint. Future retrieval/interpretation may later produce `RegulatoryConstraint` values, including optional `source_document_id` provenance.
+
+Valid outcomes include complete success, partial extraction, complete extraction/normalization failure, and a document that yields no normalized text.
+
+---
+
 ## Intentionally deferred contracts
 
 Additional contracts (tariff tables, official bid-message envelopes, imbalance components, user/identity) will be added when a chunk has verified requirements. Do not pre-create parallel “shadow” schemas in application code.

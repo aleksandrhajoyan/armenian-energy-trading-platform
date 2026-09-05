@@ -25,7 +25,7 @@ Split into reviewable chunks; do not implement as one drop.
 - [x] **Chunk 9** — Duplicate Timestamp Policy and Interval Validation
 - [x] **Chunk 10** — Missing-Interval Detection and Gap Reporting
 - [x] **Chunk 11** — DLQ Persistence Boundary
-- [ ] Unstructured-document boundary (extraction/OCR port; no full RAG yet)
+- [x] **Chunk 12** — Unstructured Document Extraction Boundary
 
 ## Phase 2 — Infrastructure
 
@@ -105,5 +105,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 11
-- **Next:** Unstructured-document boundary (extraction/OCR port; no full RAG yet)
+- **Completed:** Chunk 0 through Chunk 12
+- **Next:** PostgreSQL / TimescaleDB foundation

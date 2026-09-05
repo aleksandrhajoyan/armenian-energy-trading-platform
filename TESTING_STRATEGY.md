@@ -50,7 +50,7 @@ Infrastructure integration tests against PostgreSQL, Redis, or Qdrant are **not*
 
 | Directory | Intent |
 | --- | --- |
-| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, infrastructure adapters, filesystem DLQ persistence |
+| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, document-extraction ports, infrastructure adapters, filesystem DLQ persistence |
 | `tests/integration/` | Real adapters against local files/containers when those exist |
 | `tests/architecture/` | Import-graph / layering rules |
 | `tests/fixtures/` | CSV/Excel/PDF snippets, malformed series, canonical JSON |
@@ -180,6 +180,12 @@ Chunk 11 filesystem DLQ persistence tests:
 - Unit tests (`tests/unit/infrastructure/persistence/test_dlq.py`): `tmp_path` only; no database or broker. Enqueue creates one canonical JSON file; the persistence directory is created when absent; stored JSON round-trips to `DLQRecord`; persisted keys are canonical DLQ/diagnostic fields only; diagnostics and optional `correlation_id` survive; identical retry is idempotent and does not add a second file; same `record_id` with different metadata raises `ConflictError` without overwrite; an opaque/filename-unsafe `record_id` is stored under a SHA-256 filename inside the configured root; create/write/corrupt-file failures become sanitized `DependencyUnavailableError` with no root path, OS text, raw JSON, or secret sentinel; async `enqueue()` offloads blocking work through `asyncio.to_thread`.
 - Architecture test (`tests/architecture/test_dlq_persistence_boundary.py`): application `DeadLetterQueuePort` still accepts one canonical `DLQRecord` and exposes no `Path`/raw-payload/database/HTTP/`Any` surface; `FilesystemDeadLetterQueue` may depend on application errors and domain contracts but must not import FastAPI, pandas/openpyxl, HTTP clients, databases, brokers, LangChain/LangGraph/OpenAI, ML libraries, or Consumption CSV/Excel adapters.
 - These tests do not cover PostgreSQL DLQ storage, replay, listing, deletion, or payload-reference resolution.
+
+Chunk 12 unstructured document extraction boundary tests:
+
+- Unit tests (`tests/unit/application/ports/test_document_extraction.py`): valid frozen `ExtractedDocumentChunk`; identifier/text whitespace normalization; empty `document_id`/`chunk_id`/text rejected; negative ordinal rejected; `page_number` 0/negative rejected and `None` allowed; valid frozen `DocumentExtractionResult`; collection fields must be tuples; wrong chunk/diagnostic/DLQ types rejected; result/chunk `document_id` mismatch rejected; duplicate `chunk_id` rejected; empty chunks, partial success, and complete extraction failure remain representable; a test-only fake structurally satisfies async `DocumentExtractionPort.extract()` with no raw-document argument.
+- Architecture test (`tests/architecture/test_document_extraction_boundary.py`): application extraction module imports none of infrastructure/API/ML, pathlib, pandas/openpyxl, PDF/OCR libraries, HTTP clients, databases, Redis, Qdrant, LangChain/LangGraph/OpenAI, or ML libraries. `extract()` accepts only `self`. DTOs have only normalized provenance fields and no embedding/vector/path/URL/raw-payload/metadata bag.
+- Real PDF/OCR fixture and integration tests remain deferred until a concrete infrastructure adapter exists.
 
 Still planned: fail if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 

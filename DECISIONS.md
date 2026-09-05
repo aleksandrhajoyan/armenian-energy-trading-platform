@@ -272,3 +272,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Future application/orchestration owns iteration over `StructuredIngestionResult.dlq_records`. This chunk does not add that use case.
   - This filesystem adapter does not supersede ADR-004. PostgreSQL/TimescaleDB remains the planned system of record for canonical DLQ metadata.
 - **Consequences:** Local/dev callers can persist canonical DLQ metadata without a database. At-least-once retries of the same record are safe. Conflicting same-ID writes fail closed. Replay, listing, payload-reference resolution, and production durability remain later chunks. Ingestion CSV/Excel adapters continue to return DLQ metadata without persisting it.
+
+---
+
+## ADR-022 — Unstructured document extraction application boundary
+
+- **Status:** Accepted
+- **Context:** Phase 1 must stop PDF/document bytes, OCR-provider schemas, and parser objects before application orchestration, embedding, or regulatory interpretation can see them. Introducing a concrete PDF/OCR adapter, embeddings, Qdrant, or `RegulatoryConstraint` derivation in this slice would collapse later stages into one chunk.
+- **Decision:**
+  - The application owns `DocumentExtractionPort`, the immutable `ExtractedDocumentChunk` DTO, and the immutable `DocumentExtractionResult` envelope. Infrastructure implementations will satisfy the protocol structurally later; there is no infrastructure base class in this chunk.
+  - `async extract() -> DocumentExtractionResult` accepts no raw document input. File paths, URLs, tokens, OCR credentials, and parser selection belong to future concrete adapter constructors.
+  - Normalized application output is extracted text plus minimal generic provenance (`document_id`, `chunk_id`, `ordinal`, optional `page_number`). No embeddings, vectors, token IDs, OCR confidence, bounding boxes, paths, URLs, or arbitrary metadata dictionaries.
+  - The result envelope reuses canonical `AdapterDiagnostic` and `DLQRecord`. Raw failed bytes remain behind opaque `payload_reference`. Chunk 11's filesystem DLQ adapter is unchanged and is not wired here.
+  - Extracted text is not a `RegulatoryConstraint`. Regulatory interpretation, effective dates, numeric limits, currency, and Armenian DAM rules are out of scope.
+  - Embedding/indexing, vector-store ports, Qdrant, RAG/retrieval, LLM extraction, and concrete PDF/OCR/HTML/DOCX adapters are deferred. No parser/OCR/embedding dependency is introduced.
+- **Consequences:** Application call sites can be written against a fake extractor before any document parser exists. Future adapters must finish acquisition and normalization before crossing the port. Regulatory Intelligence remains a later interpretation stage, not a PDF-to-constraint shortcut.

@@ -5,6 +5,9 @@ These types must never be copied into production infrastructure.
 
 from energy_trading.application.ports import (
     DeadLetterQueuePort,
+    DocumentExtractionPort,
+    DocumentExtractionResult,
+    ExtractedDocumentChunk,
     StructuredIngestionPort,
     StructuredIngestionResult,
 )
@@ -62,3 +65,36 @@ def as_consumption_port(
 
 def as_dlq_port(queue: InMemoryDeadLetterQueue) -> DeadLetterQueuePort:
     return queue
+
+
+class FakeDocumentExtractor:
+    """In-memory document extractor returning normalized chunks only."""
+
+    def __init__(
+        self,
+        *,
+        source_name: str = "fake-document",
+        document_id: str = "doc-1",
+        chunks: tuple[ExtractedDocumentChunk, ...] = (),
+        diagnostics: tuple[AdapterDiagnostic, ...] = (),
+        dlq_records: tuple[DLQRecord, ...] = (),
+    ) -> None:
+        self._source_name = source_name
+        self._result = DocumentExtractionResult(
+            source_name=source_name,
+            document_id=document_id,
+            chunks=chunks,
+            diagnostics=diagnostics,
+            dlq_records=dlq_records,
+        )
+
+    @property
+    def source_name(self) -> str:
+        return self._source_name
+
+    async def extract(self) -> DocumentExtractionResult:
+        return self._result
+
+
+def as_document_extraction_port(adapter: FakeDocumentExtractor) -> DocumentExtractionPort:
+    return adapter

@@ -73,6 +73,7 @@ This rule is enforced by AST import inspection:
 - `tests/architecture/test_time_series_validation_boundary.py` — the Consumption time-series validation package imports none of application/API/ML, pandas/openpyxl, HTTP clients, databases, or LLM/graph libraries. Application ports still expose no `IntervalGrid`, duplicate policy, source-position configuration, or `ConsumptionGap`.
 - `tests/architecture/test_time_series_gap_boundary.py` — gap reports stay infrastructure-local; application ports expose no gap ranges, missing-timestamp collections, or coverage windows.
 - `tests/architecture/test_dlq_persistence_boundary.py` — application `DeadLetterQueuePort` stays free of filesystem/raw-payload/database types; `FilesystemDeadLetterQueue` may depend on application errors and domain contracts but not on FastAPI, pandas/openpyxl, HTTP clients, databases, brokers, LLM/graph libraries, ML libraries, or Consumption CSV/Excel adapters.
+- `tests/architecture/test_document_extraction_boundary.py` — application `DocumentExtractionPort` and extraction DTOs expose no Path/bytes/URL/dict/OCR/PDF/Qdrant/LLM surface; `extract()` accepts only `self`.
 
 Broader ML/agent import rules remain for later chunks.
 
@@ -109,6 +110,7 @@ Broader ML/agent import rules remain for later chunks.
 │       │   ├── orchestration/
 │       │   ├── ports/
 │       │   │   ├── dlq.py
+│       │   │   ├── document_extraction.py
 │       │   │   └── structured_ingestion.py
 │       │   └── use_cases/
 │       ├── ml/
@@ -153,7 +155,7 @@ Broader ML/agent import rules remain for later chunks.
 └── docs/
 ```
 
-Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Consumption duplicate-timestamp policy, optional interval-grid alignment, and internal compact gap reporting live under `structured/time_series/`. Interim filesystem-backed DLQ metadata persistence lives under `infrastructure/persistence/`. Empty architectural directories still use `.gitkeep`.
+Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. An application-owned unstructured document extraction boundary (`DocumentExtractionPort`, `DocumentExtractionResult`, `ExtractedDocumentChunk`) is implemented; there is no concrete PDF/OCR adapter. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Consumption duplicate-timestamp policy, optional interval-grid alignment, and internal compact gap reporting live under `structured/time_series/`. Interim filesystem-backed DLQ metadata persistence lives under `infrastructure/persistence/`. Empty architectural directories still use `.gitkeep`.
 
 ## Anti-Corruption Layer
 
@@ -286,14 +288,15 @@ The application-facing port and immutable result envelope are implemented. Deter
 
 ```
 PDF / Document
-  → Extraction / OCR Adapter
-  → structured metadata / chunks
-  → embedding / indexing
-  → Qdrant
-  → Regulatory Intelligence Agent retrieval
+  → future infrastructure extraction/OCR adapter
+  → DocumentExtractionPort / DocumentExtractionResult
+  → future embedding/indexing
+  → future Qdrant
+  → future regulatory retrieval/interpretation
+  → RegulatoryConstraint
 ```
 
-Document bytes, vendor OCR schemas, and raw chunk dictionaries stay inside infrastructure. The Regulatory Intelligence Agent receives canonical `RegulatoryConstraint` (and related retrieval DTOs defined later), never raw PDFs.
+Chunk 12 implements the application-owned extraction boundary only. `DocumentExtractionPort.extract()` accepts no document bytes, path, URL, or provider payload. The application may receive immutable `ExtractedDocumentChunk` values, canonical `AdapterDiagnostic` values, and canonical `DLQRecord` metadata (`payload_reference` only). Document bytes, vendor OCR schemas, bounding boxes, parser objects, and raw chunk dictionaries stay inside future infrastructure adapters. Extracted text is **not** a `RegulatoryConstraint`. There is no concrete PDF/OCR adapter, embedding port, vector store, Qdrant client, RAG/retrieval path, or Regulatory Intelligence Agent in this chunk.
 
 ## DLQ conceptual behavior
 
@@ -447,7 +450,7 @@ Unexpected Exception
 
 ## Testing boundaries
 
-See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, the Consumption Excel adapter provider boundary, the Consumption unit/timezone normalization boundary, the Consumption time-series validation and gap-reporting boundary, and the filesystem DLQ persistence boundary.
+See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, the Consumption Excel adapter provider boundary, the Consumption unit/timezone normalization boundary, the Consumption time-series validation and gap-reporting boundary, the filesystem DLQ persistence boundary, and the unstructured document extraction boundary.
 
 ## Runtime baseline (implemented)
 
