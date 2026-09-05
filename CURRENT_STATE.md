@@ -5,12 +5,12 @@ Living snapshot. Update at the end of every chunk. Do not list features that do 
 ## Phase and chunk
 
 - **Current phase:** Phase 2 — Infrastructure
-- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization; Chunk 9 — Duplicate Timestamp Policy and Interval Validation; Chunk 10 — Missing-Interval Detection and Gap Reporting; Chunk 11 — DLQ Persistence Boundary; Chunk 12 — Unstructured Document Extraction Boundary; Chunk 13 — Async PostgreSQL/TimescaleDB Persistence Foundation; Chunk 14 — Consumption PostgreSQL Persistence Slice; Chunk 15 — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration
-- **Next recommended chunk:** Chunk 16 — Redis Ephemeral State/Cache Boundary
+- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization; Chunk 9 — Duplicate Timestamp Policy and Interval Validation; Chunk 10 — Missing-Interval Detection and Gap Reporting; Chunk 11 — DLQ Persistence Boundary; Chunk 12 — Unstructured Document Extraction Boundary; Chunk 13 — Async PostgreSQL/TimescaleDB Persistence Foundation; Chunk 14 — Consumption PostgreSQL Persistence Slice; Chunk 15 — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration; Chunk 16 — Application Cache Port Boundary
+- **Next recommended chunk:** Next Phase 2 slice to be selected after Chunk 16 publication; concrete Redis infrastructure remains pending.
 
 ## What this repository is
 
-A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, explicit Consumption MW/kW plus IANA timezone normalization, fail-closed Consumption duplicate detection, optional interval-grid alignment, per-consumer internal gap reporting, an unwired filesystem-backed DLQ metadata persistence adapter, an application-owned unstructured document extraction boundary with no concrete PDF/OCR adapter, an unwired async PostgreSQL/TimescaleDB persistence foundation, an unwired Consumption PostgreSQL repository, and an on-demand Compose TimescaleDB profile with live migration/repository tests. It is **not** a running trading platform.
+A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, explicit Consumption MW/kW plus IANA timezone normalization, fail-closed Consumption duplicate detection, optional interval-grid alignment, per-consumer internal gap reporting, an unwired filesystem-backed DLQ metadata persistence adapter, an application-owned unstructured document extraction boundary with no concrete PDF/OCR adapter, an unwired async PostgreSQL/TimescaleDB persistence foundation, an unwired Consumption PostgreSQL repository, an on-demand Compose TimescaleDB profile with live migration/repository tests, and an application-owned vendor-neutral cache port with no concrete Redis implementation. It is **not** a running trading platform.
 
 ## What is not implemented
 
@@ -40,7 +40,7 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Repositories other than Consumption
 - API database wiring / readiness checks
 - PostgreSQL DLQ
-- Redis
+- Redis package, client, settings, Compose service, or running cache
 - Qdrant
 - FastAPI Docker image / remaining Compose services
 - ML implementations
@@ -119,12 +119,14 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - PostgreSQL persistence architecture tests (domain/application/API unwired; settings have no engine objects)
 - Consumption repository architecture tests (port has no SQLAlchemy/session surface; repository is infrastructure-only)
 - Compose TimescaleDB profile architecture tests
+- Application-owned generic cache port (`CachePort[TValue]`: async get/set/delete, mandatory positive TTL)
+- Cache-port architecture tests (no Redis types, dependency, Compose service, or API wiring)
 - Domain and application architecture dependency tests
 - Initial automated quality/test toolchain: pytest, pytest-asyncio, HTTPX, Ruff, mypy
 
 ## Pending work
 
-Everything after Chunk 15 in `ROADMAP.md`. Highest priority: Redis ephemeral state/cache boundary. Do not install LangGraph, Qdrant, ML stacks, or unrelated Docker services until those chunks.
+Everything after Chunk 16 in `ROADMAP.md`. Highest priority remains pending concrete Redis infrastructure after Architect selection. Do not install LangGraph, Qdrant, ML stacks, or unrelated Docker services until those chunks.
 
 ## Known issues
 
@@ -147,6 +149,7 @@ Everything after Chunk 15 in `ROADMAP.md`. Highest priority: Redis ephemeral sta
 - Unstructured document extraction is an application port returning normalized text chunks; it is not a `RegulatoryConstraint` and has no concrete PDF/OCR adapter
 - PostgreSQL/TimescaleDB persistence is an infrastructure factory plus the Consumption Core table/repository; Compose `postgres` profile is optional and on-demand; no global engine, no FastAPI wiring, no ingestion→repository wiring
 - Consumption persistence identity is `(consumer_id, timestamp)`; exact retries are idempotent; differing values conflict; adapters still do not query PostgreSQL
+- Cache is an application-owned `CachePort[TValue]` only; values are ephemeral and TTL-bound; no concrete Redis implementation, package, settings, service, or API/orchestration wiring
 - UTC timestamps; MW vs MWh; Decimal money; explicit currency codes
 - Application/domain exceptions contain no HTTP semantics; HTTP translation is API-only
 - Unexpected exception details are never sent to clients
@@ -157,7 +160,7 @@ Everything after Chunk 15 in `ROADMAP.md`. Highest priority: Redis ephemeral sta
 
 ## Current services
 
-TimescaleDB is available on demand under the Compose `postgres` profile (`timescale/timescaledb:2.29.2-pg17`, loopback-only). It is not assumed to be running continuously. Redis and Qdrant are not present.
+TimescaleDB is available on demand under the Compose `postgres` profile (`timescale/timescaledb:2.29.2-pg17`, loopback-only). It is not assumed to be running continuously. There is no running cache. Redis and Qdrant are not present.
 
 ## Current APIs
 

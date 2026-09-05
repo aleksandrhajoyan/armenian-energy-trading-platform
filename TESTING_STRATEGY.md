@@ -44,13 +44,13 @@ Chunk 4 structured-ingestion boundary tests:
 
 `tests/architecture/test_domain_dependencies.py` uses the standard library `ast` module to fail if `energy_trading.domain` imports `energy_trading.api`, `application`, `infrastructure`, `ml`, `shared`, FastAPI, SQLAlchemy, psycopg, or Alembic. No extra architecture-testing dependency is used.
 
-Infrastructure integration tests against a running PostgreSQL process are **not** run by default. They require the Compose `postgres` profile and `ENERGY_RUN_POSTGRES_INTEGRATION=1`. Chunk 13 added offline PostgreSQL foundation tests that require no database service. Chunk 14 added offline Consumption table, migration, and repository tests that also require no database service. Redis and Qdrant still have no live tests.
+Infrastructure integration tests against a running PostgreSQL process are **not** run by default. They require the Compose `postgres` profile and `ENERGY_RUN_POSTGRES_INTEGRATION=1`. Chunk 13 added offline PostgreSQL foundation tests that require no database service. Chunk 14 added offline Consumption table, migration, and repository tests that also require no database service. Redis live integration testing remains deferred until a concrete Redis implementation/service exists. Qdrant still has no live tests.
 
 ## Layout
 
 | Directory | Intent |
 | --- | --- |
-| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, document-extraction ports, infrastructure adapters, filesystem DLQ persistence, PostgreSQL engine/Alembic foundation |
+| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, document-extraction ports, cache port, infrastructure adapters, filesystem DLQ persistence, PostgreSQL engine/Alembic foundation |
 | `tests/integration/` | Opt-in live PostgreSQL/TimescaleDB tests (`postgres_integration`); other containers later |
 | `tests/architecture/` | Import-graph / layering rules |
 | `tests/fixtures/` | CSV/Excel/PDF snippets, malformed series, canonical JSON |
@@ -103,7 +103,7 @@ When a graph exists: contract → parallel ingestion join → forecast → risk 
 
 ### Infrastructure integration tests
 
-Opt-in (marker) tests for PostgreSQL/TimescaleDB, Redis, Qdrant against Compose **when** those services exist. Not run by default. Real migration execution against TimescaleDB remains deferred until a runnable service/Compose profile exists. Still no live third-party market APIs.
+Opt-in (marker) tests for PostgreSQL/TimescaleDB, Redis, Qdrant against Compose **when** those services exist. Not run by default. Redis live integration testing remains deferred until a concrete Redis implementation/service exists. Still no live third-party market APIs.
 
 ### API tests
 
@@ -165,7 +165,7 @@ Chunk 9 Consumption duplicate/interval validation tests:
 - Primitive tests (`tests/unit/infrastructure/adapters/structured/time_series/`): `IntervalGrid` accepts positive 1-hour and 15-minute intervals; rejects zero/negative intervals and naive anchors; normalizes aware non-UTC anchors to UTC; remains frozen and equality-stable. Different timestamps for one consumer and the same timestamp for different consumers are valid. No grid means no cadence restriction. Exact and conflicting duplicates fail every group member. Canonically equivalent offsets collide. Nonadjacent and 3+ member groups are detected. Valid output keeps source order. Hourly on-grid timestamps succeed; 00:30 fails; pre-anchor timestamps use integer-microsecond modulo; `00:00` + `02:00` is not a missing-gap failure; out-of-order aligned timestamps stay unsorted; a duplicate that is also off-grid is classified as a duplicate only.
 - CSV adapter additions: default ingest detects duplicates without an interval grid; conflicting MW values fail closed; different consumers at one instant survive; offset-equivalent aware strings collide; nonadjacent duplicates are removed; an explicit 1-hour UTC grid accepts aligned rows; 00:30 is isolated; a 2-hour gap is allowed; source order of `02:00, 00:00, 01:00` is preserved; kW and explicit timezone paths still work with structural validation; unique consumer/timestamp/value sentinels are absent from diagnostics and DLQ metadata.
 - Excel adapter additions: duplicate canonical and typed-naive (explicit timezone) rows fail closed; conflicting duplicates fail; different consumers remain valid; offset-equivalent aware strings collide; explicit hourly grid accepts aligned typed rows; off-grid typed and aware timestamps are isolated; a 2-hour gap is allowed; out-of-order aligned rows keep source order; kW conversion and explicit timezone localization still work; naive timestamps without a configured zone still fail before interval classification; privacy sentinels stay out of outward metadata. Existing Chunk 7/8 cases remain the Excel regression suite.
-- Architecture test (`tests/architecture/test_time_series_validation_boundary.py`): the time-series package must not import application/API/ML, pandas/openpyxl, HTTP clients, databases, or LLM/graph libraries. Application ports still expose no `IntervalGrid`, `timedelta` cadence config, duplicate policy, source positions, or `ConsumptionGap`.
+- Architecture test (`tests/architecture/test_time_series_validation_boundary.py`): the time-series package must not import application/API/ML, pandas/openpyxl, HTTP clients, databases, or LLM/graph libraries. Application ports still expose no `IntervalGrid`, interval-grid `timedelta` cadence config, duplicate policy, source positions, or `ConsumptionGap`. `CachePort` may annotate TTL as `timedelta`; that is not cadence configuration.
 
 Chunk 10 Consumption missing-interval / gap reporting tests:
 
@@ -210,6 +210,12 @@ Chunk 15 PostgreSQL/TimescaleDB service profile and live persistence tests:
 - Live migration tests: PostgreSQL server major version 17; TimescaleDB extension `2.29.2`; Alembic current `0002_consumption`; TimescaleDB extension and `energy_trading` schema exist; `consumption_observations` is a hypertable partitioned by `timestamp`; composite PK `(consumer_id, timestamp)`; non-negative/finite MW CHECK; controlled downgrade to `0001_bootstrap` then restore to head without dropping schema or extension.
 - Live repository tests: real `save_many`; UTC instant round-trip from a non-UTC aware input; exact retry remains one row; differing same-identity value is `ConflictError` and preserves the original; mixed new+conflict batch rolls back the new row; concurrent exact retries both succeed with one physical row; concurrent conflicting writers yield one success, one `ConflictError`, one physical row; direct SQL negative MW is rejected by the database constraint.
 - **Default pytest remains independent of services.** The integration suite requires an explicitly started local `postgres` profile. No live third-party APIs.
+
+Chunk 16 application cache port boundary tests:
+
+- Unit tests (`tests/unit/application/ports/test_cache.py`): a test-only in-memory fake structurally satisfies async generic `CachePort[ConsumptionRecord]`; it does not inherit an infrastructure base class and is not a production cache. Coverage includes cache miss (`None`), typed canonical round-trip, overwrite of an existing key, replacement establishing a new TTL, deterministic expiry without wall-clock sleep, delete of an existing entry, idempotent delete of a missing key, blank/whitespace-only keys as `InvalidRequestError`, and zero/negative TTL as `InvalidRequestError`.
+- Architecture test (`tests/architecture/test_cache_boundary.py`): application `CachePort` imports none of infrastructure/API/ML, FastAPI/Starlette, Redis/`redis.asyncio`, SQLAlchemy/psycopg/Alembic, Qdrant, pandas/openpyxl, HTTP clients, LangChain/LangGraph/OpenAI, or ML libraries. Public annotations expose no Redis client/pool types, `bytes`, `dict`, `Mapping`, or `Any`. `pyproject.toml`/`uv.lock` declare no Redis package; `compose.yaml` has no Redis service; API/`create_app()` does not import or construct `CachePort` or a concrete cache; no `RedisSettings` class and no infrastructure cache `.py` implementation.
+- Redis live integration tests remain deferred until a concrete Redis implementation/service exists.
 
 Still planned: fail if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 

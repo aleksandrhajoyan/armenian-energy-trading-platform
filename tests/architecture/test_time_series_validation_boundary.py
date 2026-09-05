@@ -47,7 +47,6 @@ FORBIDDEN_PORT_TYPES = frozenset(
         "ConsumptionSeriesIssue",
         "ConsumptionSeriesIssueCode",
         "ConsumptionGap",
-        "timedelta",
         "PowerUnit",
         "ZoneInfo",
         "Path",
@@ -62,19 +61,22 @@ FORBIDDEN_PORT_TYPES = frozenset(
     }
 )
 
+FORBIDDEN_INGESTION_PORT_TYPES = FORBIDDEN_PORT_TYPES | {"timedelta"}
+
 FORBIDDEN_PORT_IMPORTS = frozenset(
     {
         "IntervalGrid",
         "IntervalGridPolicy",
         "ConsumptionRecordCandidate",
         "ConsumptionGap",
-        "timedelta",
         "anchor",
         "source_position",
         "missing_count",
         "first_missing_timestamp",
     }
 )
+
+FORBIDDEN_INGESTION_PORT_IMPORTS = FORBIDDEN_PORT_IMPORTS | {"timedelta"}
 
 
 def test_time_series_package_does_not_import_outer_layers_or_file_readers() -> None:
@@ -84,10 +86,10 @@ def test_time_series_package_does_not_import_outer_layers_or_file_readers() -> N
 
 def test_structured_ingestion_port_has_no_time_series_config_surface() -> None:
     names = annotation_type_names(INGESTION_PORT)
-    violations = sorted(name for name in names if name in FORBIDDEN_PORT_TYPES)
+    violations = sorted(name for name in names if name in FORBIDDEN_INGESTION_PORT_TYPES)
     assert violations == []
     imported = imported_names(INGESTION_PORT)
-    leaked = sorted(name for name in imported if name in FORBIDDEN_PORT_IMPORTS)
+    leaked = sorted(name for name in imported if name in FORBIDDEN_INGESTION_PORT_IMPORTS)
     assert leaked == []
     assert async_function_arg_names(INGESTION_PORT, "ingest") == ("self",)
 

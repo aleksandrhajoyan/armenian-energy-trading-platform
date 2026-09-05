@@ -339,3 +339,22 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Live tests live under `tests/integration/persistence/postgres/`, use marker `postgres_integration`, and require `ENERGY_RUN_POSTGRES_INTEGRATION=1`. They cover Alembic upgrade/downgrade/upgrade, PostgreSQL 17 and TimescaleDB 2.29.2 runtime versions, hypertable registration, repository insert, exact idempotent retry, conflict preservation, mixed-batch rollback, concurrent exact retry, concurrent conflicting writers, CHECK defense for negative MW, and timezone-aware instant round-trip. Default `uv run pytest` stays service-independent. testcontainers and the Docker SDK are not used.
   - The database is not intended to remain running under the WSL RAM budget. Redis and Qdrant remain deferred.
 - **Consequences:** Developers can prove Consumption persistence against a compatible TimescaleDB without starting unrelated services. Other canonical repositories, API readiness, and remaining Compose profiles remain later chunks. This ADR does not supersede ADR-004, ADR-023, or ADR-024.
+
+---
+
+## ADR-026 — Application-owned cache boundary precedes Redis implementation
+
+- **Status:** Accepted
+- **Context:** ADR-006 selected Redis as the local/dev technology for ephemeral cache/state infrastructure. Chunk 16 needed a reviewable application contract before any Redis package, client, settings class, Compose service, or `create_app()` wiring. A broad ephemeral-state port, CAS/versioning, and distributed locks would mix distinct semantics into one abstraction.
+- **Decision:**
+  - Application owns `CachePort[TValue]`, a generic `typing.Protocol`. Infrastructure may later implement it structurally. Implementations are not required to inherit from an application or infrastructure base class.
+  - The public async operations are `get(key) -> TValue | None`, `set(key, value, *, ttl: timedelta) -> None`, and `delete(key) -> None`.
+  - `key` is an opaque application identifier. After surrounding whitespace is ignored it must be non-empty. Redis key syntax, prefixes, hashes, database numbers, cluster slots, and hashing algorithms are not part of the contract.
+  - `TValue` is a static generic. The application layer does not serialize. Bytes, JSON dictionaries, mappings, `Any`, and Redis response types are forbidden on the port.
+  - Every `set` requires a `timedelta` TTL strictly greater than zero. There is no non-expiring cache API. Cache loss or expiry is acceptable. PostgreSQL/TimescaleDB remains the system of record (ADR-004).
+  - A cache miss or expired entry returns `None`; that is not an exception. `set` may replace cached data for the same key and reset TTL; that overwrite is not compare-and-set for authoritative orchestration state. `delete` of a missing/expired key is a successful no-op.
+  - Invalid caller input (blank key or non-positive TTL) is `InvalidRequestError` for conforming implementations. Expected backend unavailability is `DependencyUnavailableError`. No Redis-specific application errors are added.
+  - This port is ordinary cache behavior only. Generic workflow-state/CAS and distributed-lock/lease contracts are deliberately omitted and will be defined separately if Phase 3 requirements demonstrate a need.
+  - Chunk 16 introduces no Redis Python dependency, Redis settings, Redis DSN, Redis Compose service, serializer, health check, use case, agent, or API composition wiring. ADR-006 remains Accepted and is not superseded: Redis is still the planned local/dev implementation technology for this port.
+  - The cache is not approved for secret storage. Credentials, authorization material, raw vendor payloads, and document bytes are not part of the port.
+- **Consequences:** Application call sites and tests can use a structural fake before any Redis adapter exists. A later Redis infrastructure chunk can implement this port without changing application signatures. Orchestration checkpoints and locks cannot silently reuse cache overwrite semantics.
