@@ -7,6 +7,7 @@ A connection is opened only when a migration command executes this file.
 from __future__ import annotations
 
 import asyncio
+import sys
 from logging.config import fileConfig
 
 from alembic import context
@@ -66,6 +67,9 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
+    # psycopg async cannot use Windows ProactorEventLoop.
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(run_async_migrations())
 
 

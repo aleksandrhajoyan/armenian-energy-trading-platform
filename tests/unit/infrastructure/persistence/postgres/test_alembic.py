@@ -191,3 +191,9 @@ def test_alembic_env_does_not_import_api_agents_or_domain() -> None:
     imported = _imported_module_names(ALEMBIC_ENV)
     leaked = sorted(module for module in imported if is_forbidden(module, FORBIDDEN_ENV_IMPORTS))
     assert leaked == []
+
+
+def test_alembic_env_uses_windows_selector_event_loop() -> None:
+    text = ALEMBIC_ENV.read_text(encoding="utf-8")
+    assert "WindowsSelectorEventLoopPolicy" in text
+    assert "set_event_loop_policy" in text

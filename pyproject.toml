@@ -39,6 +39,9 @@ package = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "postgres_integration: requires the opt-in local PostgreSQL/TimescaleDB Compose service",
+]
 
 [tool.ruff]
 line-length = 100

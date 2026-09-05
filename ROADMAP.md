@@ -33,8 +33,8 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 - [x] **Chunk 13** — Async PostgreSQL/TimescaleDB Persistence Foundation
 - [x] **Chunk 14** — Consumption PostgreSQL Persistence Slice
-- [ ] **Chunk 15** — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration
-- [ ] Redis
+- [x] **Chunk 15** — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration
+- [ ] **Chunk 16** — Redis Ephemeral State/Cache Boundary
 - [ ] Qdrant
 - [ ] Docker Compose with profiles (remaining services)
 
@@ -106,5 +106,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 14
-- **Next:** Chunk 15 — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration
+- **Completed:** Chunk 0 through Chunk 15
+- **Next:** Chunk 16 — Redis Ephemeral State/Cache Boundary

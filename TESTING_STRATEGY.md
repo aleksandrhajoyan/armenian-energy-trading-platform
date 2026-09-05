@@ -44,14 +44,14 @@ Chunk 4 structured-ingestion boundary tests:
 
 `tests/architecture/test_domain_dependencies.py` uses the standard library `ast` module to fail if `energy_trading.domain` imports `energy_trading.api`, `application`, `infrastructure`, `ml`, `shared`, FastAPI, SQLAlchemy, psycopg, or Alembic. No extra architecture-testing dependency is used.
 
-Infrastructure integration tests against a running PostgreSQL, Redis, or Qdrant process are **not** run by default. Chunk 13 added offline PostgreSQL foundation tests that require no database service. Chunk 14 added offline Consumption table, migration, and repository tests that also require no database service.
+Infrastructure integration tests against a running PostgreSQL process are **not** run by default. They require the Compose `postgres` profile and `ENERGY_RUN_POSTGRES_INTEGRATION=1`. Chunk 13 added offline PostgreSQL foundation tests that require no database service. Chunk 14 added offline Consumption table, migration, and repository tests that also require no database service. Redis and Qdrant still have no live tests.
 
 ## Layout
 
 | Directory | Intent |
 | --- | --- |
 | `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, document-extraction ports, infrastructure adapters, filesystem DLQ persistence, PostgreSQL engine/Alembic foundation |
-| `tests/integration/` | Real adapters against local files/containers when those exist |
+| `tests/integration/` | Opt-in live PostgreSQL/TimescaleDB tests (`postgres_integration`); other containers later |
 | `tests/architecture/` | Import-graph / layering rules |
 | `tests/fixtures/` | CSV/Excel/PDF snippets, malformed series, canonical JSON |
 
@@ -193,7 +193,6 @@ Chunk 13 async PostgreSQL/TimescaleDB persistence foundation tests:
 - Engine/session factory tests (`tests/unit/infrastructure/persistence/postgres/test_engine.py`): `postgresql+psycopg` URL; host/port/database/user semantics; password retained internally and hidden in safe URL rendering; `AsyncEngine` returned without connecting; `pool_pre_ping` enabled; async session factory with `expire_on_commit=False`; no module-global engine. Engines are disposed in tests.
 - Alembic offline/static tests (`tests/unit/infrastructure/persistence/postgres/test_alembic.py`): Alembic config loads; bootstrap revision `0001_bootstrap` remains the root and still creates no canonical business tables; TimescaleDB extension and `energy_trading` schema intent; bootstrap downgrade does not drop the TimescaleDB extension; no hardcoded credentials. Head is the later Consumption revision (see Chunk 14).
 - Architecture tests (`tests/architecture/test_postgres_persistence_boundary.py`): domain/application/API do not import SQLAlchemy/psycopg/Alembic or postgres factories; `DatabaseSettings` does not import infrastructure/runtime DB libraries; postgres package does not import FastAPI/agents/ML/ingestion adapters/Redis/Qdrant; `create_app()` does not instantiate an engine.
-- Real PostgreSQL/TimescaleDB migration integration tests remain deferred until a runnable service/Compose profile exists.
 
 Chunk 14 Consumption PostgreSQL persistence tests:
 
@@ -202,7 +201,15 @@ Chunk 14 Consumption PostgreSQL persistence tests:
 - Repository tests (`tests/unit/infrastructure/persistence/postgres/test_consumption_repository.py`): session-factory doubles only; no live PostgreSQL. Empty input opens no session; one/many records use one transaction; in-call exact duplicates coalesce; in-call differing identity conflicts before DB work; compiled insert uses `ON CONFLICT DO NOTHING` without `DO UPDATE`; exact persisted retry succeeds; differing stored MW is `ConflictError` with rollback; mixed new+conflict rolls back; persisted rows rebuild as `ConsumptionRecord`; corrupt storage fails closed; DBAPI and pool-timeout failures become sanitized `DependencyUnavailableError`; sentinel exception text is not exposed; repository does not create an engine and does not per-row commit.
 - Alembic static tests (`tests/unit/infrastructure/persistence/postgres/test_alembic.py`): head is `0002_consumption`; down-revision is `0001_bootstrap`; Consumption hypertable on `timestamp` with compatible `create_hypertable` and no chunk interval; downgrade drops only the Consumption table without `CASCADE`/`DROP EXTENSION`/`DROP SCHEMA`; no credentials.
 - Architecture tests (`tests/architecture/test_consumption_repository_boundary.py`): application port has no SQLAlchemy/session/raw-source surface; repository may use SQLAlchemy plus application errors and canonical Consumption; API remains unwired; filesystem DLQ is not PostgreSQL-backed; no generic `Repository`/`UnitOfWork`; no other canonical observation tables.
-- **Repository logic is not yet validated against a live PostgreSQL/TimescaleDB process.** That integration belongs to Chunk 15.
+
+Chunk 15 PostgreSQL/TimescaleDB service profile and live persistence tests:
+
+- Compose static tests (`tests/architecture/test_postgres_compose_profile.py`): `compose.yaml` exists; image is exactly `timescale/timescaledb:2.29.2-pg17`; no `latest`; service `timescaledb` is gated on profile `postgres`; port is loopback-bound; named volume `timescale-data` with no bind-mounted data directory; healthcheck uses `pg_isready` without a password; password interpolation required; no `POSTGRES_HOST_AUTH_METHOD=trust`; no FastAPI/Redis/Qdrant/n8n services; exactly one Compose service.
+- Marker: `postgres_integration`. Opt-in: `ENERGY_RUN_POSTGRES_INTEGRATION=1`. Live modules skip cleanly when the flag is absent. Default `uv run pytest` does not require Docker.
+- Live suite path: `tests/integration/persistence/postgres/`. No testcontainers, Docker SDK, or new Python dependencies. On Windows, Alembic and live tests use `WindowsSelectorEventLoopPolicy` because psycopg async cannot use ProactorEventLoop.
+- Live migration tests: PostgreSQL server major version 17; TimescaleDB extension `2.29.2`; Alembic current `0002_consumption`; TimescaleDB extension and `energy_trading` schema exist; `consumption_observations` is a hypertable partitioned by `timestamp`; composite PK `(consumer_id, timestamp)`; non-negative/finite MW CHECK; controlled downgrade to `0001_bootstrap` then restore to head without dropping schema or extension.
+- Live repository tests: real `save_many`; UTC instant round-trip from a non-UTC aware input; exact retry remains one row; differing same-identity value is `ConflictError` and preserves the original; mixed new+conflict batch rolls back the new row; concurrent exact retries both succeed with one physical row; concurrent conflicting writers yield one success, one `ConflictError`, one physical row; direct SQL negative MW is rejected by the database constraint.
+- **Default pytest remains independent of services.** The integration suite requires an explicitly started local `postgres` profile. No live third-party APIs.
 
 Still planned: fail if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 

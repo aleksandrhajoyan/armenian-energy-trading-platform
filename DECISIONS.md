@@ -319,6 +319,23 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Canonical `NonNegativeMW` is a finite Python `float`, so PostgreSQL `DOUBLE PRECISION` is used. A CHECK constraint rejects negative MW and non-finite IEEE values. The domain type is not changed to accommodate storage.
   - One `save_many()` call is one transaction. Identical canonical retries succeed as no-ops. The same identity with a different canonical value is `ConflictError`. There is no last-write-wins path.
   - Inserts use PostgreSQL `ON CONFLICT (consumer_id, timestamp) DO NOTHING`, never `DO UPDATE`. After the conflict-safe insert, the repository reads persisted rows and reconstructs `ConsumptionRecord` as the semantic authority. Exact match succeeds; a differing stored value raises `ConflictError` and rolls back the call; unreadable/corrupt storage is a sanitized `DependencyUnavailableError`.
-  - Timescale conversion uses `create_hypertable(..., 'timestamp', if_not_exists => TRUE)` without an explicit chunk interval, hash/space partitioning, compression, or continuous aggregates. Docker/server version is not pinned yet; the later service-profile chunk must pin a compatible TimescaleDB version.
-  - Adapter cross-batch duplicate detection is still not implemented. CSV/Excel adapters are not wired to this port. `create_app()` is unchanged. Filesystem DLQ remains the only DLQ adapter. Live repository/migration tests against a real process are deferred to Chunk 15.
-- **Consequences:** Callers can persist canonical Consumption observations with deterministic identity and conflict semantics before a database service exists in Compose. Historical-range reads, other aggregates, and orchestration wiring remain later chunks.
+  - Timescale conversion uses `create_hypertable(..., 'timestamp', if_not_exists => TRUE)` without an explicit chunk interval, hash/space partitioning, compression, or continuous aggregates. Chunk 15 pins a compatible runtime (`timescale/timescaledb:2.29.2-pg17`) and exercises this migration live.
+  - Adapter cross-batch duplicate detection is still not implemented. CSV/Excel adapters are not wired to this port. `create_app()` is unchanged. Filesystem DLQ remains the only DLQ adapter.
+- **Consequences:** Callers persist canonical Consumption observations with deterministic identity and conflict semantics. Chunk 15 runs those semantics against a pinned local TimescaleDB. Historical-range reads, other aggregates, and orchestration wiring remain later chunks.
+
+---
+
+## ADR-025 — Pinned local TimescaleDB service profile and live persistence validation
+
+- **Status:** Accepted
+- **Context:** Chunks 13–14 delivered SQLAlchemy factories, Alembic 0001/0002, and `PostgresConsumptionRepository` without a running database. Live migration execution, hypertable proof, and real transaction/concurrency semantics require a pinned local TimescaleDB. Redis, Qdrant, and an API container would expand this slice past infrastructure validation. WSL2 RAM is limited, so the database must not be an always-on dependency.
+- **Decision:**
+  - Local TimescaleDB uses the exact image `timescale/timescaledb:2.29.2-pg17` (PostgreSQL 17, TimescaleDB 2.29.2). The pin is a release tag, not `latest`, `latest-pg17`, a HA image, or a digest.
+  - Compose defines one service, `timescaledb`, gated on profile `postgres`. It is started with `docker compose --profile postgres up -d timescaledb` and is not an implicit always-on dependency.
+  - The published port is loopback-only (`127.0.0.1` plus `ENERGY_DB_PORT`). Password authentication remains required. `POSTGRES_HOST_AUTH_METHOD=trust` is not used. Credentials come from existing `ENERGY_DB_*` interpolation; Compose does not hardcode a password.
+  - PostgreSQL data uses the Compose named volume `timescale-data`. It is not bind-mounted into the Git tree.
+  - Health uses `pg_isready` against the configured user and database, without a password in the healthcheck.
+  - Host `uv run alembic` applies migrations. On Windows, `alembic/env.py` selects `WindowsSelectorEventLoopPolicy` because psycopg async cannot use ProactorEventLoop. `create_app()` is unchanged.
+  - Live tests live under `tests/integration/persistence/postgres/`, use marker `postgres_integration`, and require `ENERGY_RUN_POSTGRES_INTEGRATION=1`. They cover Alembic upgrade/downgrade/upgrade, PostgreSQL 17 and TimescaleDB 2.29.2 runtime versions, hypertable registration, repository insert, exact idempotent retry, conflict preservation, mixed-batch rollback, concurrent exact retry, concurrent conflicting writers, CHECK defense for negative MW, and timezone-aware instant round-trip. Default `uv run pytest` stays service-independent. testcontainers and the Docker SDK are not used.
+  - The database is not intended to remain running under the WSL RAM budget. Redis and Qdrant remain deferred.
+- **Consequences:** Developers can prove Consumption persistence against a compatible TimescaleDB without starting unrelated services. Other canonical repositories, API readiness, and remaining Compose profiles remain later chunks. This ADR does not supersede ADR-004, ADR-023, or ADR-024.
