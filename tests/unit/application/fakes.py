@@ -3,7 +3,11 @@
 These types must never be copied into production infrastructure.
 """
 
+from datetime import datetime
+
+from energy_trading.application.errors import ConflictError
 from energy_trading.application.ports import (
+    ConsumptionRepositoryPort,
     DeadLetterQueuePort,
     DocumentExtractionPort,
     DocumentExtractionResult,
@@ -98,3 +102,31 @@ class FakeDocumentExtractor:
 
 def as_document_extraction_port(adapter: FakeDocumentExtractor) -> DocumentExtractionPort:
     return adapter
+
+
+class FakeConsumptionRepository:
+    """In-memory Consumption writer. No PostgreSQL or SQLAlchemy."""
+
+    def __init__(self) -> None:
+        self._stored: dict[tuple[str, datetime], ConsumptionRecord] = {}
+        self.raise_conflict = False
+
+    async def save_many(self, records: tuple[ConsumptionRecord, ...]) -> None:
+        if self.raise_conflict:
+            raise ConflictError("A conflicting consumption observation already exists")
+        for record in records:
+            identity = (record.consumer_id, record.timestamp)
+            existing = self._stored.get(identity)
+            if existing is not None and existing != record:
+                raise ConflictError("A conflicting consumption observation already exists")
+            self._stored[identity] = record
+
+    @property
+    def records(self) -> tuple[ConsumptionRecord, ...]:
+        return tuple(self._stored.values())
+
+
+def as_consumption_repository_port(
+    repository: FakeConsumptionRepository,
+) -> ConsumptionRepositoryPort:
+    return repository

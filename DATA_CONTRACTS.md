@@ -6,7 +6,7 @@ External column names, Armenian headers, vendor units, naive timestamps, and fil
 
 Python types live under `energy_trading.domain.models` and `energy_trading.domain.value_objects`.
 
-Canonical domain contracts remain independent of SQLAlchemy. No ORM model is a canonical domain model. Chunk 13 added PostgreSQL/TimescaleDB engine factories and a schema/extension bootstrap only; database tables for the contracts below are not implemented.
+Canonical domain contracts remain independent of SQLAlchemy. No ORM model is a canonical domain model. Chunk 14 maps `ConsumptionRecord` to infrastructure-owned table `energy_trading.consumption_observations`. That SQL table is not a new canonical contract. Other domain contracts still have no database tables.
 
 ## Cross-cutting canonical semantics
 
@@ -55,6 +55,7 @@ Money and prices do **not** assume non-negativity. Electricity market rules are 
 - **Units:** MW.
 - **Invariants:** non-negative finite MW; UTC timestamp; no source column names.
 - **Adapter path:** Consumption CSV/XLSX adapters may convert an explicitly configured source power unit (`MW` or `kW`) to canonical MW and may interpret naive timestamps with an explicit IANA timezone. Units and timezones are never inferred. Domain types are unchanged.
+- **Persistence:** Canonical fields are unchanged. Infrastructure stores `(consumer_id, timestamp, value_mw)` under identity `(consumer_id, timestamp)`. An exact retry of the same canonical observation may be ignored idempotently. A different `value_mw` at an already persisted identity is a conflict. Adapters still do not query PostgreSQL for duplicates; in-batch duplicate detection remains the Chunk 9 ingest rule. The SQL table is not a new canonical contract and is not an ORM model.
 
 ## WeatherRecord
 

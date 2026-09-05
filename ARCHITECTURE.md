@@ -75,6 +75,7 @@ This rule is enforced by AST import inspection:
 - `tests/architecture/test_dlq_persistence_boundary.py` — application `DeadLetterQueuePort` stays free of filesystem/raw-payload/database types; `FilesystemDeadLetterQueue` may depend on application errors and domain contracts but not on FastAPI, pandas/openpyxl, HTTP clients, databases, brokers, LLM/graph libraries, ML libraries, or Consumption CSV/Excel adapters.
 - `tests/architecture/test_document_extraction_boundary.py` — application `DocumentExtractionPort` and extraction DTOs expose no Path/bytes/URL/dict/OCR/PDF/Qdrant/LLM surface; `extract()` accepts only `self`.
 - `tests/architecture/test_postgres_persistence_boundary.py` — domain/application/API do not import SQLAlchemy, psycopg, Alembic, or the PostgreSQL factory package; `DatabaseSettings` stays free of runtime engine objects; PostgreSQL infrastructure imports none of FastAPI, agents, ML, ingestion adapters, Redis, or Qdrant.
+- `tests/architecture/test_consumption_repository_boundary.py` — `ConsumptionRepositoryPort` exposes no SQLAlchemy/session/raw-source types; `PostgresConsumptionRepository` may import application errors and canonical Consumption contracts but not FastAPI, adapters, Redis, Qdrant, or agents.
 
 Broader ML/agent import rules remain for later chunks.
 
@@ -115,6 +116,7 @@ Broader ML/agent import rules remain for later chunks.
 │       │   ├── agents/
 │       │   ├── orchestration/
 │       │   ├── ports/
+│       │   │   ├── consumption_repository.py
 │       │   │   ├── dlq.py
 │       │   │   ├── document_extraction.py
 │       │   │   └── structured_ingestion.py
@@ -136,7 +138,9 @@ Broader ML/agent import rules remain for later chunks.
 │       │   ├── persistence/
 │       │   │   ├── dlq.py
 │       │   │   └── postgres/
-│       │   │       └── engine.py
+│       │   │       ├── engine.py
+│       │   │       ├── tables.py
+│       │   │       └── consumption_repository.py
 │       │   ├── cache/
 │       │   ├── vector_store/
 │       │   └── messaging/
@@ -164,7 +168,7 @@ Broader ML/agent import rules remain for later chunks.
 └── docs/
 ```
 
-Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. An application-owned unstructured document extraction boundary (`DocumentExtractionPort`, `DocumentExtractionResult`, `ExtractedDocumentChunk`) is implemented; there is no concrete PDF/OCR adapter. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Consumption duplicate-timestamp policy, optional interval-grid alignment, and internal compact gap reporting live under `structured/time_series/`. Interim filesystem-backed DLQ metadata persistence lives under `infrastructure/persistence/`. Async PostgreSQL/TimescaleDB engine and session factories live under `infrastructure/persistence/postgres/`. Typed `DatabaseSettings` live under `shared/config/database.py` and are loaded separately from process-health `AppSettings`. Alembic owns a bootstrap migration that enables TimescaleDB and creates the `energy_trading` schema; there are no canonical business tables and no repository implementations. Empty architectural directories still use `.gitkeep`.
+Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. An application-owned unstructured document extraction boundary (`DocumentExtractionPort`, `DocumentExtractionResult`, `ExtractedDocumentChunk`) is implemented; there is no concrete PDF/OCR adapter. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Consumption duplicate-timestamp policy, optional interval-grid alignment, and internal compact gap reporting live under `structured/time_series/`. Interim filesystem-backed DLQ metadata persistence lives under `infrastructure/persistence/`. Async PostgreSQL/TimescaleDB engine and session factories live under `infrastructure/persistence/postgres/`. Typed `DatabaseSettings` live under `shared/config/database.py` and are loaded separately from process-health `AppSettings`. Alembic owns a bootstrap migration plus Consumption `energy_trading.consumption_observations` (Timescale hypertable on `timestamp`). Application-owned `ConsumptionRepositoryPort` is implemented by unwired `PostgresConsumptionRepository`. No other canonical tables or repositories exist. Empty architectural directories still use `.gitkeep`.
 
 ## Anti-Corruption Layer
 
@@ -398,7 +402,7 @@ Phase 2 agents have no inherent sequential dependency on each other. The orchest
 | Qdrant | Regulatory/document retrieval embeddings and payloads | Authoritative time-series or financial books |
 | Redis | Ephemeral workflow state, cache, short-lived locks | System of record |
 
-PostgreSQL/TimescaleDB remains the system-of-record direction (ADR-004). Chunk 13 added typed `DatabaseSettings`, SQLAlchemy async engine/session factories, psycopg 3, Alembic, and a bootstrap migration for the TimescaleDB extension plus the `energy_trading` schema. No database process is assumed, no engine is created on import or in `create_app()`, and no canonical tables or repositories exist yet. Redis and Qdrant remain unimplemented. Canonical DLQ metadata can be written to a local filesystem directory by `FilesystemDeadLetterQueue` when an application caller invokes `DeadLetterQueuePort`; that adapter is not composed into the API or ingestion runtime yet.
+PostgreSQL/TimescaleDB remains the system-of-record direction (ADR-004). Chunk 13 added typed `DatabaseSettings`, SQLAlchemy async engine/session factories, psycopg 3, Alembic, and a bootstrap migration for the TimescaleDB extension plus the `energy_trading` schema. Chunk 14 added the first canonical persistence slice: application-owned `ConsumptionRepositoryPort`, SQLAlchemy Core table `energy_trading.consumption_observations`, Alembic revision `0002_consumption`, a Timescale hypertable partitioned by `timestamp`, and unwired `PostgresConsumptionRepository`. Persistence identity is `(consumer_id, timestamp)`. Exact retries are idempotent; a different canonical value at an existing identity is `ConflictError`. No database process is assumed, no engine is created on import or in `create_app()`, and ingestion adapters do not call the repository. Redis and Qdrant remain unimplemented. Canonical DLQ metadata can be written to a local filesystem directory by `FilesystemDeadLetterQueue` when an application caller invokes `DeadLetterQueuePort`; that adapter is not composed into the API or ingestion runtime yet.
 
 ## API boundary
 
@@ -459,7 +463,7 @@ Unexpected Exception
 
 ## Testing boundaries
 
-See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, the Consumption Excel adapter provider boundary, the Consumption unit/timezone normalization boundary, the Consumption time-series validation and gap-reporting boundary, the filesystem DLQ persistence boundary, the unstructured document extraction boundary, and the PostgreSQL persistence foundation boundary. Default tests do not require a running PostgreSQL/TimescaleDB process.
+See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, the Consumption Excel adapter provider boundary, the Consumption unit/timezone normalization boundary, the Consumption time-series validation and gap-reporting boundary, the filesystem DLQ persistence boundary, the unstructured document extraction boundary, the PostgreSQL persistence foundation boundary, and the Consumption repository boundary. Default tests do not require a running PostgreSQL/TimescaleDB process.
 
 ## Runtime baseline (implemented)
 

@@ -32,10 +32,11 @@ Split into reviewable chunks; do not implement as one drop.
 Split into reviewable chunks. Start services only when a chunk needs them (RAM budget).
 
 - [x] **Chunk 13** — Async PostgreSQL/TimescaleDB Persistence Foundation
-- [ ] **Chunk 14** — First Canonical PostgreSQL Repository Slice
+- [x] **Chunk 14** — Consumption PostgreSQL Persistence Slice
+- [ ] **Chunk 15** — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration
 - [ ] Redis
 - [ ] Qdrant
-- [ ] Docker Compose with profiles
+- [ ] Docker Compose with profiles (remaining services)
 
 ## Phase 3 — Application orchestration foundation
 
@@ -105,5 +106,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 13
-- **Next:** Chunk 14 — First Canonical PostgreSQL Repository Slice
+- **Completed:** Chunk 0 through Chunk 14
+- **Next:** Chunk 15 — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration

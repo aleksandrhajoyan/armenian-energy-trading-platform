@@ -57,7 +57,8 @@ FORBIDDEN_POSTGRES_IMPLEMENTATION = (
     "redis",
     "qdrant_client",
     "energy_trading.api",
-    "energy_trading.application",
+    "energy_trading.application.agents",
+    "energy_trading.application.orchestration",
     "energy_trading.ml",
     "energy_trading.infrastructure.adapters",
 )

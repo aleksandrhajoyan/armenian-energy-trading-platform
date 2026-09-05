@@ -305,3 +305,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Application repository ports, concrete repositories, Unit of Work, and PostgreSQL-backed DLQ are deferred. Chunk 11's `FilesystemDeadLetterQueue` remains the implemented DLQ adapter.
   - Docker Compose remains deferred (ADR-009). Default tests require no PostgreSQL/TimescaleDB process. Live migration execution belongs to a later Compose/integration slice.
 - **Consequences:** Later repository chunks can add tables and ports against a known driver, migration tool, and settings contract. Operators still should not start TimescaleDB until a chunk needs a running service. Alembic `upgrade` against an arbitrary developer database is not part of default validation.
+
+---
+
+## ADR-024 — Canonical Consumption PostgreSQL persistence identity
+
+- **Status:** Accepted
+- **Context:** Chunk 13 established SQLAlchemy async factories, psycopg 3, and an Alembic bootstrap. The first canonical aggregate that must be persisted is `ConsumptionRecord`. A generic repository, other domain tables, FastAPI wiring, and a running TimescaleDB service would expand this slice past a reviewable write path. Consumption adapters already reject duplicates inside one `ingest()` batch; they do not query PostgreSQL.
+- **Decision:**
+  - The first concrete canonical database aggregate is Consumption. Application owns `ConsumptionRepositoryPort`. The initial contract is intentionally write-focused: `async save_many(records: tuple[ConsumptionRecord, ...]) -> None`.
+  - Infrastructure maps the contract with SQLAlchemy Core, not ORM declarative models and not a domain shadow schema. Table `energy_trading.consumption_observations` stores only canonical fields: `consumer_id`, `timestamp`, `value_mw`.
+  - Persistence identity is `(consumer_id, timestamp)`. The composite primary key includes the Timescale partition key `timestamp`.
+  - Canonical `NonNegativeMW` is a finite Python `float`, so PostgreSQL `DOUBLE PRECISION` is used. A CHECK constraint rejects negative MW and non-finite IEEE values. The domain type is not changed to accommodate storage.
+  - One `save_many()` call is one transaction. Identical canonical retries succeed as no-ops. The same identity with a different canonical value is `ConflictError`. There is no last-write-wins path.
+  - Inserts use PostgreSQL `ON CONFLICT (consumer_id, timestamp) DO NOTHING`, never `DO UPDATE`. After the conflict-safe insert, the repository reads persisted rows and reconstructs `ConsumptionRecord` as the semantic authority. Exact match succeeds; a differing stored value raises `ConflictError` and rolls back the call; unreadable/corrupt storage is a sanitized `DependencyUnavailableError`.
+  - Timescale conversion uses `create_hypertable(..., 'timestamp', if_not_exists => TRUE)` without an explicit chunk interval, hash/space partitioning, compression, or continuous aggregates. Docker/server version is not pinned yet; the later service-profile chunk must pin a compatible TimescaleDB version.
+  - Adapter cross-batch duplicate detection is still not implemented. CSV/Excel adapters are not wired to this port. `create_app()` is unchanged. Filesystem DLQ remains the only DLQ adapter. Live repository/migration tests against a real process are deferred to Chunk 15.
+- **Consequences:** Callers can persist canonical Consumption observations with deterministic identity and conflict semantics before a database service exists in Compose. Historical-range reads, other aggregates, and orchestration wiring remain later chunks.
