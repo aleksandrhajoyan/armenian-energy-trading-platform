@@ -9,7 +9,9 @@ from tests.architecture.import_inspection import (
     annotation_type_names,
     async_function_arg_names,
     collect_import_violations,
+    imported_modules,
     imported_names,
+    is_forbidden,
 )
 
 PORTS_ROOT = SRC_ROOT / "energy_trading" / "application" / "ports"
@@ -125,7 +127,14 @@ def test_application_dlq_port_accepts_only_canonical_record() -> None:
 
 
 def test_filesystem_dlq_does_not_import_forbidden_providers_or_adapters() -> None:
-    assert collect_import_violations(PERSISTENCE_ROOT, FORBIDDEN_IMPLEMENTATION_PREFIXES) == []
+    # PostgreSQL factories live under persistence/postgres and are allowed to
+    # import SQLAlchemy; this rule applies only to the filesystem DLQ adapter.
+    violations: list[str] = []
+    for path in (PERSISTENCE_ROOT / "__init__.py", PERSISTENCE_DLQ):
+        for module in sorted(imported_modules(path)):
+            if is_forbidden(module, FORBIDDEN_IMPLEMENTATION_PREFIXES):
+                violations.append(f"{path.relative_to(SRC_ROOT)} imports {module}")
+    assert violations == []
     names = imported_names(PERSISTENCE_DLQ)
     leaked = sorted(name for name in names if name in FORBIDDEN_ADAPTER_NAMES)
     assert leaked == []

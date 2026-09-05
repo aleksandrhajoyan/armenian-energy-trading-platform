@@ -30,11 +30,11 @@ The system is a decision-support and workflow platform. It is not a substitute f
 | Domain | `src/energy_trading/domain` | Canonical models, value objects, domain services. No I/O, no frameworks. |
 | Application | `src/energy_trading/application` | Use cases, agents, LangGraph orchestration, ports (interfaces). |
 | ML | `src/energy_trading/ml` | Feature pipelines and forecast models. Outer implementation layer: implements application forecasting ports; uses canonical domain contracts. |
-| Infrastructure | `src/energy_trading/infrastructure` | Adapters, persistence, cache, vector store, messaging, scrapers, file readers. |
+| Infrastructure | `src/energy_trading/infrastructure` | Adapters, persistence, cache, vector store, messaging, scrapers, file readers. SQLAlchemy async, psycopg 3, and Alembic are infrastructure-only. |
 | API | `src/energy_trading/api` | HTTP transport and composition root. Invokes use cases; wires implementations into ports. No business logic. |
 | Shared | `src/energy_trading/shared` | Configuration and observability that must not become a dumping ground for domain rules. |
 
-Agents belong to the application layer. LangGraph orchestration belongs to the application layer. Concrete database clients, API clients, scrapers, Redis, Qdrant, filesystem readers, Excel readers, and PDF readers belong to infrastructure. Concrete ML libraries and model classes belong to `ml`, not to agents.
+Agents belong to the application layer. LangGraph orchestration belongs to the application layer. Concrete database clients, API clients, scrapers, Redis, Qdrant, filesystem readers, Excel readers, and PDF readers belong to infrastructure. SQLAlchemy, psycopg, and Alembic are infrastructure concerns and must not be imported by domain or application. Concrete ML libraries and model classes belong to `ml`, not to agents.
 
 ## Dependency rule
 
@@ -74,6 +74,7 @@ This rule is enforced by AST import inspection:
 - `tests/architecture/test_time_series_gap_boundary.py` — gap reports stay infrastructure-local; application ports expose no gap ranges, missing-timestamp collections, or coverage windows.
 - `tests/architecture/test_dlq_persistence_boundary.py` — application `DeadLetterQueuePort` stays free of filesystem/raw-payload/database types; `FilesystemDeadLetterQueue` may depend on application errors and domain contracts but not on FastAPI, pandas/openpyxl, HTTP clients, databases, brokers, LLM/graph libraries, ML libraries, or Consumption CSV/Excel adapters.
 - `tests/architecture/test_document_extraction_boundary.py` — application `DocumentExtractionPort` and extraction DTOs expose no Path/bytes/URL/dict/OCR/PDF/Qdrant/LLM surface; `extract()` accepts only `self`.
+- `tests/architecture/test_postgres_persistence_boundary.py` — domain/application/API do not import SQLAlchemy, psycopg, Alembic, or the PostgreSQL factory package; `DatabaseSettings` stays free of runtime engine objects; PostgreSQL infrastructure imports none of FastAPI, agents, ML, ingestion adapters, Redis, or Qdrant.
 
 Broader ML/agent import rules remain for later chunks.
 
@@ -85,6 +86,11 @@ Broader ML/agent import rules remain for later chunks.
 ├── .env.example
 ├── .gitignore
 ├── .python-version
+├── alembic.ini
+├── alembic/
+│   ├── env.py
+│   ├── script.py.mako
+│   └── versions/
 ├── pyproject.toml
 ├── uv.lock
 ├── README.md
@@ -128,7 +134,9 @@ Broader ML/agent import rules remain for later chunks.
 │       │   │   ├── unstructured/
 │       │   │   └── external_services/
 │       │   ├── persistence/
-│       │   │   └── dlq.py
+│       │   │   ├── dlq.py
+│       │   │   └── postgres/
+│       │   │       └── engine.py
 │       │   ├── cache/
 │       │   ├── vector_store/
 │       │   └── messaging/
@@ -142,7 +150,8 @@ Broader ML/agent import rules remain for later chunks.
 │       │   └── dependencies/
 │       └── shared/
 │           ├── config/
-│           │   └── settings.py
+│           │   ├── settings.py
+│           │   └── database.py
 │           └── observability/
 │               ├── correlation.py
 │               └── logging.py
@@ -155,7 +164,7 @@ Broader ML/agent import rules remain for later chunks.
 └── docs/
 ```
 
-Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. An application-owned unstructured document extraction boundary (`DocumentExtractionPort`, `DocumentExtractionResult`, `ExtractedDocumentChunk`) is implemented; there is no concrete PDF/OCR adapter. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Consumption duplicate-timestamp policy, optional interval-grid alignment, and internal compact gap reporting live under `structured/time_series/`. Interim filesystem-backed DLQ metadata persistence lives under `infrastructure/persistence/`. Empty architectural directories still use `.gitkeep`.
+Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. An application-owned unstructured document extraction boundary (`DocumentExtractionPort`, `DocumentExtractionResult`, `ExtractedDocumentChunk`) is implemented; there is no concrete PDF/OCR adapter. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Consumption duplicate-timestamp policy, optional interval-grid alignment, and internal compact gap reporting live under `structured/time_series/`. Interim filesystem-backed DLQ metadata persistence lives under `infrastructure/persistence/`. Async PostgreSQL/TimescaleDB engine and session factories live under `infrastructure/persistence/postgres/`. Typed `DatabaseSettings` live under `shared/config/database.py` and are loaded separately from process-health `AppSettings`. Alembic owns a bootstrap migration that enables TimescaleDB and creates the `energy_trading` schema; there are no canonical business tables and no repository implementations. Empty architectural directories still use `.gitkeep`.
 
 ## Anti-Corruption Layer
 
@@ -239,7 +248,7 @@ An optional infrastructure-local semantic/LLM fallback remains deferred. No prov
 
 Partial success is first-class: a batch may contain canonical records together with diagnostics and DLQ references. Complete normalization failure (empty records plus DLQ references) and a valid empty source (all collections empty) are also valid results; they must not crash the workflow by themselves.
 
-DLQ persistence is abstracted behind application-owned `DeadLetterQueuePort`. The port still accepts one canonical `DLQRecord` per `enqueue()`; filesystem paths and raw payloads are not part of that signature. An interim local filesystem implementation (`FilesystemDeadLetterQueue`) lives in infrastructure and persists canonical `DLQRecord` metadata only. `payload_reference` is stored as an opaque string and is never dereferenced. Storage filenames are derived from a SHA-256 digest of `record_id`, not from the raw identifier. Identical retries are idempotent; the same `record_id` with different canonical metadata fails closed as `ConflictError`. The adapter is not wired into ingestion adapters, `create_app()`, or any orchestration runtime. PostgreSQL/TimescaleDB remains the planned system of record (ADR-004); this filesystem adapter does not replace that decision. DLQ replay is not implemented.
+DLQ persistence is abstracted behind application-owned `DeadLetterQueuePort`. The port still accepts one canonical `DLQRecord` per `enqueue()`; filesystem paths and raw payloads are not part of that signature. An interim local filesystem implementation (`FilesystemDeadLetterQueue`) lives in infrastructure and persists canonical `DLQRecord` metadata only. `payload_reference` is stored as an opaque string and is never dereferenced. Storage filenames are derived from a SHA-256 digest of `record_id`, not from the raw identifier. Identical retries are idempotent; the same `record_id` with different canonical metadata fails closed as `ConflictError`. The adapter is not wired into ingestion adapters, `create_app()`, or any orchestration runtime. PostgreSQL/TimescaleDB remains the planned system of record (ADR-004); Chunk 13 added engine/session factories and a schema/extension bootstrap only. This filesystem adapter does not replace that decision, and there is no PostgreSQL DLQ implementation yet. DLQ replay is not implemented.
 
 Dependency direction:
 
@@ -313,7 +322,7 @@ Ownership:
 | Application / orchestration | Receiving `StructuredIngestionResult` and later passing `dlq_records` to `DeadLetterQueuePort` |
 | DLQ infrastructure | Persisting canonical DLQ metadata. Current implementation: `FilesystemDeadLetterQueue` writes one canonical JSON file per `record_id`. Not yet invoked by ingestion adapters or API composition. |
 
-Transport for the DLQ is an infrastructure decision; application code depends only on `DeadLetterQueuePort`. The domain `DLQRecord` contract and the application sink port exist. The current sink implementation stores canonical metadata on the local filesystem (`payload_reference` remains an opaque string and is never dereferenced). PostgreSQL/TimescaleDB remains the planned system of record and is not implemented. Replay, listing, and deletion are not implemented.
+Transport for the DLQ is an infrastructure decision; application code depends only on `DeadLetterQueuePort`. The domain `DLQRecord` contract and the application sink port exist. The current sink implementation stores canonical metadata on the local filesystem (`payload_reference` remains an opaque string and is never dereferenced). PostgreSQL/TimescaleDB remains the planned system of record (ADR-004, ADR-023). A persistence foundation exists (async engine factories and a TimescaleDB/schema bootstrap migration), but there is no DLQ table and no PostgreSQL DLQ adapter. Replay, listing, and deletion are not implemented.
 
 ## ML / LLM separation
 
@@ -389,7 +398,7 @@ Phase 2 agents have no inherent sequential dependency on each other. The orchest
 | Qdrant | Regulatory/document retrieval embeddings and payloads | Authoritative time-series or financial books |
 | Redis | Ephemeral workflow state, cache, short-lived locks | System of record |
 
-No PostgreSQL, Redis, or Qdrant service is running in this chunk. Canonical DLQ metadata can be written to a local filesystem directory by `FilesystemDeadLetterQueue` when an application caller invokes `DeadLetterQueuePort`; that adapter is not composed into the API or ingestion runtime yet.
+PostgreSQL/TimescaleDB remains the system-of-record direction (ADR-004). Chunk 13 added typed `DatabaseSettings`, SQLAlchemy async engine/session factories, psycopg 3, Alembic, and a bootstrap migration for the TimescaleDB extension plus the `energy_trading` schema. No database process is assumed, no engine is created on import or in `create_app()`, and no canonical tables or repositories exist yet. Redis and Qdrant remain unimplemented. Canonical DLQ metadata can be written to a local filesystem directory by `FilesystemDeadLetterQueue` when an application caller invokes `DeadLetterQueuePort`; that adapter is not composed into the API or ingestion runtime yet.
 
 ## API boundary
 
@@ -399,7 +408,7 @@ Implemented now: process/application health at `GET /api/v1/health`, standard er
 
 ## Configuration and secrets
 
-- Configuration through environment variables and a typed `AppSettings` layer (`pydantic-settings`). Only application-level fields exist today (name, environment, API prefix, log level). Database, Redis, Qdrant, ML, and LLM settings are reserved until those systems exist.
+- Configuration through environment variables and typed settings (`pydantic-settings`). `AppSettings` remains process-health configuration (name, environment, API prefix, log level) and does not require database credentials. `DatabaseSettings` is a separate object loaded only when PostgreSQL runtime or Alembic needs it. Redis, Qdrant, ML, and LLM settings remain reserved.
 - No hardcoded business configuration in domain or agents.
 - Secrets never in source control. `.env.example` is the committed template; `.env` is local-only.
 
@@ -450,7 +459,7 @@ Unexpected Exception
 
 ## Testing boundaries
 
-See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, the Consumption Excel adapter provider boundary, the Consumption unit/timezone normalization boundary, the Consumption time-series validation and gap-reporting boundary, the filesystem DLQ persistence boundary, and the unstructured document extraction boundary.
+See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, the Consumption Excel adapter provider boundary, the Consumption unit/timezone normalization boundary, the Consumption time-series validation and gap-reporting boundary, the filesystem DLQ persistence boundary, the unstructured document extraction boundary, and the PostgreSQL persistence foundation boundary. Default tests do not require a running PostgreSQL/TimescaleDB process.
 
 ## Runtime baseline (implemented)
 

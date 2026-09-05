@@ -51,6 +51,7 @@ def test_extra_environment_variables_do_not_crash_startup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("POSTGRES_PASSWORD", "not-a-real-secret")
+    monkeypatch.setenv("ENERGY_DB_PASSWORD", "not-a-real-secret")
     monkeypatch.setenv("REDIS_HOST", "localhost")
     monkeypatch.setenv("QDRANT_API_KEY", "placeholder")
 

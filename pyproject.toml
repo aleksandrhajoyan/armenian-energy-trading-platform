@@ -5,10 +5,13 @@ description = "Decision-support platform for participation in Armenia's electric
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "alembic>=1,<2",
     "fastapi",
     "openpyxl>=3.1.5",
+    "psycopg[binary]>=3,<4",
     "pydantic",
     "pydantic-settings",
+    "sqlalchemy[asyncio]>=2,<3",
     "tzdata>=2026.3",
     "uvicorn",
 ]

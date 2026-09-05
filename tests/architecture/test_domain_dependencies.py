@@ -11,6 +11,11 @@ FORBIDDEN_PREFIXES = (
     "energy_trading.ml",
     "energy_trading.shared",
     "fastapi",
+    "sqlalchemy",
+    "psycopg",
+    "psycopg2",
+    "asyncpg",
+    "alembic",
 )
 
 

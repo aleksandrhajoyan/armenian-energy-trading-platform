@@ -5,12 +5,12 @@ Living snapshot. Update at the end of every chunk. Do not list features that do 
 ## Phase and chunk
 
 - **Current phase:** Phase 2 — Infrastructure
-- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization; Chunk 9 — Duplicate Timestamp Policy and Interval Validation; Chunk 10 — Missing-Interval Detection and Gap Reporting; Chunk 11 — DLQ Persistence Boundary; Chunk 12 — Unstructured Document Extraction Boundary
-- **Next recommended chunk:** PostgreSQL / TimescaleDB foundation
+- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization; Chunk 9 — Duplicate Timestamp Policy and Interval Validation; Chunk 10 — Missing-Interval Detection and Gap Reporting; Chunk 11 — DLQ Persistence Boundary; Chunk 12 — Unstructured Document Extraction Boundary; Chunk 13 — Async PostgreSQL/TimescaleDB Persistence Foundation
+- **Next recommended chunk:** Chunk 14 — First Canonical PostgreSQL Repository Slice
 
 ## What this repository is
 
-A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, explicit Consumption MW/kW plus IANA timezone normalization, fail-closed Consumption duplicate detection, optional interval-grid alignment, per-consumer internal gap reporting, an unwired filesystem-backed DLQ metadata persistence adapter, and an application-owned unstructured document extraction boundary with no concrete PDF/OCR adapter. It is **not** a running trading platform.
+A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, explicit Consumption MW/kW plus IANA timezone normalization, fail-closed Consumption duplicate detection, optional interval-grid alignment, per-consumer internal gap reporting, an unwired filesystem-backed DLQ metadata persistence adapter, an application-owned unstructured document extraction boundary with no concrete PDF/OCR adapter, and an unwired async PostgreSQL/TimescaleDB persistence foundation (typed settings, engine/session factories, Alembic bootstrap). It is **not** a running trading platform.
 
 ## What is not implemented
 
@@ -34,10 +34,15 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - RAG / retrieval
 - Agents
 - LangGraph
-- Databases (PostgreSQL / TimescaleDB)
+- Running PostgreSQL / TimescaleDB service
+- Executed migration on a real database
+- Canonical database tables
+- Application repository ports
+- Concrete PostgreSQL repositories
+- API database wiring / readiness checks
 - Redis
 - Qdrant
-- Docker
+- Docker / Docker Compose
 - ML implementations
 - External integrations
 - OpenTelemetry / Sentry / Prometheus
@@ -50,6 +55,7 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Python 3.12 project baseline (`.python-version`, `requires-python = ">=3.12,<3.13"`)
 - uv dependency management with committed `uv.lock`
 - Typed application settings (`AppSettings`)
+- Typed PostgreSQL settings (`DatabaseSettings`) loaded separately from process health
 - FastAPI application factory (`create_app`)
 - `GET /api/v1/health` (process/application health only)
 - Canonical Pydantic domain contracts (`energy_trading.domain.models`)
@@ -90,6 +96,10 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Filesystem-backed `FilesystemDeadLetterQueue` implementing `DeadLetterQueuePort` (canonical metadata JSON only; single-record idempotent enqueue by `record_id`)
 - Application-owned unstructured document extraction port (`DocumentExtractionPort`)
 - Immutable `ExtractedDocumentChunk` and `DocumentExtractionResult` application DTOs (normalized text only; no embeddings, paths, or raw bytes)
+- SQLAlchemy 2 async engine/session factories (`create_postgres_engine`, `create_session_factory`) using psycopg 3
+- Structured PostgreSQL URL construction (`postgresql+psycopg`) without logging credentials
+- Alembic migration foundation (`alembic.ini`, `alembic/env.py`)
+- Initial bootstrap migration: TimescaleDB extension + `energy_trading` schema only
 - ACL boundary architecture tests (no raw-source types on application ingestion ports)
 - Schema-mapping architecture tests (no provider SDKs, file readers, or application/domain leakage)
 - CSV adapter architecture tests (no pandas/Excel/HTTP/DB/LLM/ML imports)
@@ -98,12 +108,13 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Time-series validation architecture tests (no application/API/ML/file-reader leakage; ports have no interval-grid or gap-report surface)
 - DLQ persistence architecture tests (application port has no filesystem/raw-payload surface; filesystem adapter has no CSV/Excel/HTTP/DB/LLM/ML imports)
 - Document extraction architecture tests (application port has no Path/bytes/URL/OCR/PDF/Qdrant surface; `extract()` accepts only `self`)
+- PostgreSQL persistence architecture tests (domain/application/API unwired; settings have no engine objects)
 - Domain and application architecture dependency tests
 - Initial automated quality/test toolchain: pytest, pytest-asyncio, HTTPX, Ruff, mypy
 
 ## Pending work
 
-Everything after Chunk 12 in `ROADMAP.md`. Highest priority: PostgreSQL / TimescaleDB foundation. Do not install LangGraph, databases, ML stacks, or Docker services until those chunks.
+Everything after Chunk 13 in `ROADMAP.md`. Highest priority: first canonical PostgreSQL schema + repository port/implementation for one narrow aggregate. Do not install LangGraph, Redis, Qdrant, ML stacks, or Docker services until those chunks.
 
 ## Known issues
 
@@ -123,6 +134,7 @@ Everything after Chunk 12 in `ROADMAP.md`. Highest priority: PostgreSQL / Timesc
 - Missing intervals are reported only inside an observed per-consumer span; they do not fabricate DLQ records or synthetic observations
 - Filesystem DLQ persistence stores canonical `DLQRecord` metadata only, is not wired to adapters or `create_app()`, and does not replace PostgreSQL as the planned system of record
 - Unstructured document extraction is an application port returning normalized text chunks; it is not a `RegulatoryConstraint` and has no concrete PDF/OCR adapter
+- PostgreSQL/TimescaleDB persistence is an infrastructure factory + Alembic bootstrap only; no global engine, no FastAPI wiring, no canonical tables yet
 - UTC timestamps; MW vs MWh; Decimal money; explicit currency codes
 - Application/domain exceptions contain no HTTP semantics; HTTP translation is API-only
 - Unexpected exception details are never sent to clients

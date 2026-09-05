@@ -16,7 +16,7 @@ All commands are run through uv so a separately activated virtualenv is not requ
 | Ruff | Lint (pycodestyle, pyflakes, import order, bugbear, pyupgrade) and format | `uv run ruff check .` / `uv run ruff format --check .` |
 | mypy | Strict typing of `src` | `uv run mypy src` |
 
-Settings tests must not depend on a developer’s local `.env`. Construct `AppSettings` / `load_settings(env_file=None)` and call `clear_settings_cache()` between cases. Health and API tests inject settings through `create_app(settings=...)`.
+Settings tests must not depend on a developer’s local `.env`. Construct `AppSettings` / `load_settings(env_file=None)` and `DatabaseSettings` / `load_database_settings(env_file=None)` and call `clear_settings_cache()` between cases. Health and API tests inject settings through `create_app(settings=...)`. Database settings tests also clear `ENERGY_DB_*` environment variables.
 
 Domain contract tests live in `tests/unit/domain/` and do not use FastAPI. They cover UTC timestamp normalization, frozen/extra-forbid behavior, MW/MWh constraints, Decimal money (including float rejection), generation/regulatory/bid/settlement/DLQ invariants, and JSON serialization.
 
@@ -42,15 +42,15 @@ Chunk 4 structured-ingestion boundary tests:
 - Test-only in-memory `DeadLetterQueuePort` fake accepts canonical `DLQRecord` without Redis or other infrastructure.
 - ACL/port architecture tests (`tests/architecture/test_structured_ingestion_boundary.py`): AST inspection of the ingestion-port modules for forbidden raw-source imports and annotations (`pandas`, `openpyxl`, `csv`, `requests`, `httpx`, `aiohttp`, BeautifulSoup, `bytes`, `bytearray`, `dict`, `Mapping`, `Any`, `DataFrame`). Application ports must not import `energy_trading.infrastructure`, `energy_trading.api`, `energy_trading.ml`, FastAPI, or Starlette.
 
-`tests/architecture/test_domain_dependencies.py` uses the standard library `ast` module to fail if `energy_trading.domain` imports `energy_trading.api`, `application`, `infrastructure`, `ml`, `shared`, or FastAPI. No extra architecture-testing dependency is used.
+`tests/architecture/test_domain_dependencies.py` uses the standard library `ast` module to fail if `energy_trading.domain` imports `energy_trading.api`, `application`, `infrastructure`, `ml`, `shared`, FastAPI, SQLAlchemy, psycopg, or Alembic. No extra architecture-testing dependency is used.
 
-Infrastructure integration tests against PostgreSQL, Redis, or Qdrant are **not** run (those services are not implemented).
+Infrastructure integration tests against a running PostgreSQL, Redis, or Qdrant process are **not** run by default. Chunk 13 added offline PostgreSQL foundation tests that require no database service.
 
 ## Layout
 
 | Directory | Intent |
 | --- | --- |
-| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, document-extraction ports, infrastructure adapters, filesystem DLQ persistence |
+| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, document-extraction ports, infrastructure adapters, filesystem DLQ persistence, PostgreSQL engine/Alembic foundation |
 | `tests/integration/` | Real adapters against local files/containers when those exist |
 | `tests/architecture/` | Import-graph / layering rules |
 | `tests/fixtures/` | CSV/Excel/PDF snippets, malformed series, canonical JSON |
@@ -103,7 +103,7 @@ When a graph exists: contract → parallel ingestion join → forecast → risk 
 
 ### Infrastructure integration tests
 
-Opt-in (marker) tests for PostgreSQL/TimescaleDB, Redis, Qdrant against Compose **when** those services exist. Not run by default in Chunk 0–1. Still no live third-party market APIs.
+Opt-in (marker) tests for PostgreSQL/TimescaleDB, Redis, Qdrant against Compose **when** those services exist. Not run by default. Real migration execution against TimescaleDB remains deferred until a runnable service/Compose profile exists. Still no live third-party market APIs.
 
 ### API tests
 
@@ -115,9 +115,9 @@ Walk-forward or holdout on **versioned local datasets**. Metrics recorded in `EX
 
 ### Architecture / dependency tests
 
-Implemented for domain: fail if `src/energy_trading/domain/` imports `energy_trading.api`, `energy_trading.application`, `energy_trading.infrastructure`, `energy_trading.ml`, `energy_trading.shared`, or FastAPI.
+Implemented for domain: fail if `src/energy_trading/domain/` imports `energy_trading.api`, `energy_trading.application`, `energy_trading.infrastructure`, `energy_trading.ml`, `energy_trading.shared`, FastAPI, SQLAlchemy, psycopg, or Alembic.
 
-Implemented for application (Chunk 3): fail if `src/energy_trading/application/` imports `energy_trading.api`, `energy_trading.infrastructure`, `energy_trading.ml`, FastAPI, or Starlette.
+Implemented for application (Chunk 3, extended in Chunk 13): fail if `src/energy_trading/application/` imports `energy_trading.api`, `energy_trading.infrastructure`, `energy_trading.ml`, FastAPI, Starlette, SQLAlchemy, psycopg, or Alembic.
 
 Implemented for the structured ingestion ACL boundary (Chunk 4): fail if application ingestion ports import raw-source libraries or annotate `ingest`/`enqueue` with `bytes`, `dict`, `Mapping`, `Any`, `DataFrame`, or similar escape hatches. Application ports may import canonical domain contracts. Infrastructure may later import application ports.
 
@@ -186,6 +186,14 @@ Chunk 12 unstructured document extraction boundary tests:
 - Unit tests (`tests/unit/application/ports/test_document_extraction.py`): valid frozen `ExtractedDocumentChunk`; identifier/text whitespace normalization; empty `document_id`/`chunk_id`/text rejected; negative ordinal rejected; `page_number` 0/negative rejected and `None` allowed; valid frozen `DocumentExtractionResult`; collection fields must be tuples; wrong chunk/diagnostic/DLQ types rejected; result/chunk `document_id` mismatch rejected; duplicate `chunk_id` rejected; empty chunks, partial success, and complete extraction failure remain representable; a test-only fake structurally satisfies async `DocumentExtractionPort.extract()` with no raw-document argument.
 - Architecture test (`tests/architecture/test_document_extraction_boundary.py`): application extraction module imports none of infrastructure/API/ML, pathlib, pandas/openpyxl, PDF/OCR libraries, HTTP clients, databases, Redis, Qdrant, LangChain/LangGraph/OpenAI, or ML libraries. `extract()` accepts only `self`. DTOs have only normalized provenance fields and no embedding/vector/path/URL/raw-payload/metadata bag.
 - Real PDF/OCR fixture and integration tests remain deferred until a concrete infrastructure adapter exists.
+
+Chunk 13 async PostgreSQL/TimescaleDB persistence foundation tests:
+
+- Database settings tests (`tests/unit/test_database_settings.py`): valid `DatabaseSettings`; default and explicit ports; invalid ports rejected; empty host/database/username rejected; positive pool size; zero/negative pool size rejected; non-negative max overflow; negative overflow rejected; positive timeout; zero/negative timeout rejected; sentinel password masked in `repr`/`str`; local `.env` does not contaminate explicit construction (`env_file=None` plus cleared `ENERGY_DB_*` vars). No database process.
+- Engine/session factory tests (`tests/unit/infrastructure/persistence/postgres/test_engine.py`): `postgresql+psycopg` URL; host/port/database/user semantics; password retained internally and hidden in safe URL rendering; `AsyncEngine` returned without connecting; `pool_pre_ping` enabled; async session factory with `expire_on_commit=False`; no module-global engine. Engines are disposed in tests.
+- Alembic offline/static tests (`tests/unit/infrastructure/persistence/postgres/test_alembic.py`): Alembic config loads; exactly one bootstrap revision; TimescaleDB extension and `energy_trading` schema intent; no canonical business tables; downgrade does not drop the TimescaleDB extension; no hardcoded credentials; `alembic heads` equivalent ScriptDirectory APIs succeed without a database connection.
+- Architecture tests (`tests/architecture/test_postgres_persistence_boundary.py`): domain/application/API do not import SQLAlchemy/psycopg/Alembic or postgres factories; `DatabaseSettings` does not import infrastructure/runtime DB libraries; postgres package does not import FastAPI/agents/ML/ingestion adapters/Redis/Qdrant; `create_app()` does not instantiate an engine.
+- Real PostgreSQL/TimescaleDB migration integration tests remain deferred until a runnable service/Compose profile exists.
 
 Still planned: fail if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 

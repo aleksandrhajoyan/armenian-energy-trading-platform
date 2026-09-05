@@ -270,7 +270,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Blocking filesystem I/O is offloaded from the async `enqueue()` boundary with `asyncio.to_thread`. Expected filesystem availability/integrity failures become sanitized `DependencyUnavailableError`. Messages must not include paths, OS error text, or persisted contents.
   - Each `enqueue()` is independent. No cross-record batch atomicity, distributed locking, SQLite, PostgreSQL, Redis, broker, Docker, API endpoint, or FastAPI composition wiring is introduced.
   - Future application/orchestration owns iteration over `StructuredIngestionResult.dlq_records`. This chunk does not add that use case.
-  - This filesystem adapter does not supersede ADR-004. PostgreSQL/TimescaleDB remains the planned system of record for canonical DLQ metadata.
+  - This filesystem adapter does not supersede ADR-004. PostgreSQL/TimescaleDB remains the planned system of record for canonical DLQ metadata. ADR-023 later added the first PostgreSQL infrastructure foundation without a DLQ table or PostgreSQL DLQ adapter.
 - **Consequences:** Local/dev callers can persist canonical DLQ metadata without a database. At-least-once retries of the same record are safe. Conflicting same-ID writes fail closed. Replay, listing, payload-reference resolution, and production durability remain later chunks. Ingestion CSV/Excel adapters continue to return DLQ metadata without persisting it.
 
 ---
@@ -287,3 +287,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Extracted text is not a `RegulatoryConstraint`. Regulatory interpretation, effective dates, numeric limits, currency, and Armenian DAM rules are out of scope.
   - Embedding/indexing, vector-store ports, Qdrant, RAG/retrieval, LLM extraction, and concrete PDF/OCR/HTML/DOCX adapters are deferred. No parser/OCR/embedding dependency is introduced.
 - **Consequences:** Application call sites can be written against a fake extractor before any document parser exists. Future adapters must finish acquisition and normalization before crossing the port. Regulatory Intelligence remains a later interpretation stage, not a PDF-to-constraint shortcut.
+
+---
+
+## ADR-023 — Async PostgreSQL/TimescaleDB persistence foundation
+
+- **Status:** Accepted
+- **Context:** ADR-004 selected PostgreSQL/TimescaleDB as the system of record for relational and time-series canonical data. Chunk 13 needed a production-style but lightweight persistence foundation before any canonical repository, business table, or FastAPI database wiring exists. A running database service, Docker Compose, Redis, and Qdrant remain out of scope. Process health (`create_app()`, `GET /api/v1/health`) must keep working without database environment variables.
+- **Decision:**
+  - ADR-004 is not superseded. This ADR implements its first infrastructure foundation.
+  - Runtime persistence uses SQLAlchemy 2's async API (`AsyncEngine`, `AsyncSession`, `async_sessionmaker`) with the psycopg 3 driver (`postgresql+psycopg`). The `sqlalchemy[asyncio]` extra supplies greenlet. Alembic owns migrations. asyncpg, psycopg2, SQLModel, and other ORMs are not used.
+  - `DatabaseSettings` is a separate typed settings object (`ENERGY_DB_*`) with `SecretStr` password handling. It is not required by `AppSettings` or `create_app()`. Host, database, username, and password have no implicit defaults; pool/port/timeout values have safe non-secret defaults.
+  - Infrastructure exposes factories only: `build_postgres_url`, `create_postgres_engine`, `create_session_factory`. There is no global engine, no connection on import or construction, and no FastAPI lifespan/session injection yet.
+  - SQLAlchemy URL objects are built with `URL.create(...)`. Callers must not log password-bearing DSN strings.
+  - The first Alembic revision bootstraps `CREATE EXTENSION IF NOT EXISTS timescaledb` and `CREATE SCHEMA IF NOT EXISTS energy_trading`. It creates no canonical business tables, DLQ tables, or ORM models (`target_metadata = None`).
+  - Downgrade drops the dedicated `energy_trading` schema without `CASCADE` if the schema is empty enough for PostgreSQL to allow it. The TimescaleDB extension is never dropped automatically; it may be shared by other schemas or workloads.
+  - Application repository ports, concrete repositories, Unit of Work, and PostgreSQL-backed DLQ are deferred. Chunk 11's `FilesystemDeadLetterQueue` remains the implemented DLQ adapter.
+  - Docker Compose remains deferred (ADR-009). Default tests require no PostgreSQL/TimescaleDB process. Live migration execution belongs to a later Compose/integration slice.
+- **Consequences:** Later repository chunks can add tables and ports against a known driver, migration tool, and settings contract. Operators still should not start TimescaleDB until a chunk needs a running service. Alembic `upgrade` against an arbitrary developer database is not part of default validation.
