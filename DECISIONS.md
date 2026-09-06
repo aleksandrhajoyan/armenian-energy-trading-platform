@@ -546,3 +546,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - No registry, factory, shared workflow snapshot, retry, or fallback policy is added.
   - Existing `ApplicationError` types remain the expected-failure vocabulary. No `AgentError` hierarchy is introduced.
 - **Consequences:** Orchestration and tests can type against `AgentPort` with structural fakes before any agent exists. Each later agent can introduce a precise request/result pair without changing this seam. Graph runtime, snapshots, and retries stay later chunks.
+
+---
+
+## ADR-037 — Orchestration workflow state is application-owned, minimal, immutable, and framework-neutral
+
+- **Status:** Accepted
+- **Context:** Phase 3 requires an application-owned workflow snapshot before a graph runtime (planned LangGraph, ADR-007) is installed. Letting LangGraph, Redis, PostgreSQL, or an untyped payload dictionary define that snapshot would couple identity, delivery context, and diagnostics to one framework and invite a speculative global state object. ADR-036 deferred the snapshot; Chunk 27 implements it without execution semantics.
+- **Decision:**
+  - Application owns `WorkflowPhase`, `WorkflowStatus`, and frozen `WorkflowState`. These are orchestration DTOs, not domain entities and not LangGraph state.
+  - `WorkflowPhase` has exactly the five already-documented business phases: `contract`, `ingestion`, `forecasting`, `risk_and_bid`, `settlement`. Clearing, initialization, completion, degradation, retry, agent names, and graph node names are not phases.
+  - `WorkflowStatus` is coarse lifecycle vocabulary only: `pending`, `running`, `succeeded`, `failed`. Cancelled, paused, retrying, degraded, partial, waiting, and skipped are omitted until later lifecycle requirements exist.
+  - `WorkflowState` carries explicit `workflow_id`, `portfolio_id`, `delivery_date`, `correlation_id`, `phase`, `status`, and accumulated canonical `AdapterDiagnostic` values. Identifiers are opaque non-empty strings after surrounding whitespace is stripped; UUID syntax and FastAPI `X-Correlation-ID` rules are not duplicated. `delivery_date` is an actual `datetime.date`, not a `datetime` and not a timezone-bearing instant. No DAM interval is inferred.
+  - There is no generic payload bag (`dict`, `Mapping`, `Any`, `TState`, metadata/artifacts/context). Phase-specific canonical output slots (`weather_records`, forecasts, bids, settlements, and similar) are not pre-created.
+  - Construction validates field types and identifier non-emptiness only. There is no state machine: phase and status are not cross-validated, and there are no `advance`/`transition`/`mark_*` helpers.
+  - No Redis/PostgreSQL persistence, CAS, locks, retries, fallback, routing, or graph compilation is implied. LangGraph remains deferred and must consume this contract rather than redefine it. ADR-007 and ADR-036 remain Accepted and are not superseded.
+- **Consequences:** Tests and later graph nodes can hold a typed snapshot before any runtime exists. A different orchestration framework can reuse the same contract. Transition policy, persistence, and concrete agents remain later chunks.
