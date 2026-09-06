@@ -20,6 +20,7 @@ from energy_trading.application.ports.document_vector_search import (
     DocumentVectorSearchPort,
     DocumentVectorSearchQuery,
 )
+from energy_trading.application.ports.hydro_records import HydroRecordSourcePort
 from energy_trading.application.ports.structured_ingestion import (
     StructuredIngestionPort,
     StructuredIngestionResult,
@@ -39,6 +40,7 @@ __all__ = [
     "DocumentVectorSearchPort",
     "DocumentVectorSearchQuery",
     "ExtractedDocumentChunk",
+    "HydroRecordSourcePort",
     "StructuredIngestionPort",
     "StructuredIngestionResult",
     "WeatherRecordSourcePort",

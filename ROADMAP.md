@@ -61,6 +61,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 - [ ] Weather & Renewable Forecast Agent
   - [x] **Chunk 30** — Weather & Renewable Forecast Agent Application Boundary and First Concrete Agent
 - [ ] Hydro Resources Agent
+  - [x] **Chunk 31** — Hydro Resources Agent Application Boundary and First Concrete Hydro Agent
 - [ ] Generation Availability Agent
 - [ ] News Intelligence Agent
 - [ ] Market Monitoring Agent
@@ -118,5 +119,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 30
-- **Next:** Weather & Renewable Forecast Agent — next implementation slice, exact scope TBD after Architect review. Do not mark the parent Weather agent capability complete. Do not move to Hydro yet.
+- **Completed:** Chunk 0 through Chunk 31
+- **Next:** next Phase 4 implementation slice TBD after architect review. Do not mark the parent Weather or Hydro agent capabilities complete. Do not pre-authorize another agent.

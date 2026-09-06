@@ -213,7 +213,11 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
     production_agent_modules = sorted(
         path.name for path in AGENTS_ROOT.glob("*.py") if path.name != "__init__.py"
     )
-    assert production_agent_modules == ["base.py", "weather_and_renewable_forecast.py"]
+    assert production_agent_modules == [
+        "base.py",
+        "hydro_resources.py",
+        "weather_and_renewable_forecast.py",
+    ]
     orchestration_classes: list[str] = []
     for path in sorted(ORCHESTRATION_ROOT.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

@@ -613,3 +613,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - No weather provider, persistence, graph wiring, retry/fallback execution, ML, or LLM numerical calculation is added. No new dependency is added.
   - Canonical identity remains the existing `AgentName.WEATHER_AND_RENEWABLE_FORECAST` display value `Weather & Renewable Forecast Agent`.
 - **Consequences:** The first concrete agent pattern is proven without vendor coupling. A future infrastructure weather adapter can satisfy `WeatherRecordSourcePort`. Graph, persistence, and provider work remain separately reviewable. Hydro and other agents must not be auto-generated from this pattern until individually reviewed.
+
+---
+
+## ADR-041 — First concrete Hydro agent consumes canonical records through an application-owned source port
+
+- **Status:** Accepted
+- **Context:** Chunk 30 established the first concrete Weather agent pattern: a thin application agent structurally satisfying `AgentPort`, consuming already-canonical records through an application-owned source port. Phase 4 now needs Hydro without leaking raw telemetry into application. Hydrological calculation, provider selection, persistence, graph invocation, retry/fallback execution, and Generation Availability coupling are separate concerns and must not ride along with this first Hydro slice. Two similar agents are not sufficient justification for a generic ingestion-agent framework.
+- **Decision:**
+  - The second concrete agent is Hydro Resources Agent. It structurally satisfies `AgentPort[HydroResourcesRequest, HydroResourcesResult]` and does not inherit a base class.
+  - Agent-specific request/result remain frozen application DTOs. The request carries only opaque `resource_id` plus explicit `horizon_start` / `horizon_end`. The result contains a canonical `HydroRecord` tuple.
+  - `HydroRecordSourcePort` is application-owned. `fetch` is keyword-only and returns only already-canonical `HydroRecord` values. External adapters remain infrastructure.
+  - Empty results are valid. The port and agent do not sort, interpolate, resample, infer cadence, fabricate missing records, or assume an Armenian DAM interval.
+  - The agent does not calculate reservoir level, river flow, available generation, head, turbine efficiency, discharge policy, or water-to-power conversion. Optional canonical `available_generation_mw` is passed through unchanged if already present.
+  - No hydro provider, persistence, graph wiring, retry/fallback execution, ML, LLM, or Generation Availability coupling is added. No new dependency is added.
+  - Weather and Hydro are not generalized into a shared ingestion-agent base class, registry, or factory.
+  - Canonical identity remains the existing `AgentName.HYDRO_RESOURCES` display value `Hydro Resources Agent`.
+- **Consequences:** The second concrete deterministic ingestion-agent pattern is proven without vendor coupling. A future infrastructure hydro adapter can satisfy `HydroRecordSourcePort`. Canonical Hydro can later feed other workflows through explicit reviewed boundaries. Generation Availability interaction remains later. Other agents remain separately reviewed.
