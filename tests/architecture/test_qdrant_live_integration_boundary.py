@@ -30,7 +30,7 @@ LIVE_TEST = (
 LIVE_CONFTEST = LIVE_TEST.parent / "conftest.py"
 
 PINNED_IMAGE = "qdrant/qdrant:v1.19.1"
-APPROVED_SERVICES = ["timescaledb", "redis", "qdrant"]
+APPROVED_SERVICES = ["timescaledb", "redis", "qdrant", "n8n"]
 FORBIDDEN_INNER_QDRANT = (
     "qdrant_client",
     "energy_trading.infrastructure.vector_store.qdrant",
@@ -130,9 +130,10 @@ def test_qdrant_service_is_qdrant_profile_gated() -> None:
     assert "- qdrant" in qdrant_block
     assert "- postgres" not in qdrant_block
     assert "- redis" not in qdrant_block
+    assert "- n8n" not in qdrant_block
 
 
-def test_approved_compose_services_are_timescaledb_redis_and_qdrant() -> None:
+def test_approved_compose_services_are_timescaledb_redis_qdrant_and_n8n() -> None:
     names = _top_level_service_names(_compose_text())
     assert names == APPROVED_SERVICES
 
@@ -190,6 +191,9 @@ def test_qdrant_is_independently_profile_gated() -> None:
     assert "- qdrant" not in redis_block
     assert "- postgres" not in qdrant_block
     assert "- redis" not in qdrant_block
+    assert "- n8n" not in timescaledb_block
+    assert "- n8n" not in redis_block
+    assert "- n8n" not in qdrant_block
 
 
 def test_compose_has_no_api_or_admin_services() -> None:
@@ -197,7 +201,6 @@ def test_compose_has_no_api_or_admin_services() -> None:
     forbidden = (
         "fastapi",
         "uvicorn",
-        "n8n",
         "pgadmin",
         "grafana",
         "prometheus",

@@ -5,12 +5,12 @@ Living snapshot. Update at the end of every chunk. Do not list features that do 
 ## Phase and chunk
 
 - **Current phase:** Phase 2 — Infrastructure
-- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization; Chunk 9 — Duplicate Timestamp Policy and Interval Validation; Chunk 10 — Missing-Interval Detection and Gap Reporting; Chunk 11 — DLQ Persistence Boundary; Chunk 12 — Unstructured Document Extraction Boundary; Chunk 13 — Async PostgreSQL/TimescaleDB Persistence Foundation; Chunk 14 — Consumption PostgreSQL Persistence Slice; Chunk 15 — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration; Chunk 16 — Application Cache Port Boundary; Chunk 17 — Async Redis Cache Infrastructure (Offline); Chunk 18 — Redis Service Profile and Live Cache Integration; Chunk 19 — Application Document Embedding Port Boundary; Chunk 20 — Application Document Vector Indexing Boundary; Chunk 21 — Application Document Vector Retrieval Boundary; Chunk 22 — Async Qdrant Client Foundation (Offline); Chunk 23 — Qdrant Document Vector Index/Search Adapter (Offline); Chunk 24 — Qdrant Service Profile and Live Vector Integration
-- **Next recommended chunk:** Docker Compose remaining services, when justified. Production collection provisioning, production distance selection, and query-text embedding remain deferred. Do not jump to agents or LangGraph merely because local Qdrant exists.
+- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization; Chunk 9 — Duplicate Timestamp Policy and Interval Validation; Chunk 10 — Missing-Interval Detection and Gap Reporting; Chunk 11 — DLQ Persistence Boundary; Chunk 12 — Unstructured Document Extraction Boundary; Chunk 13 — Async PostgreSQL/TimescaleDB Persistence Foundation; Chunk 14 — Consumption PostgreSQL Persistence Slice; Chunk 15 — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration; Chunk 16 — Application Cache Port Boundary; Chunk 17 — Async Redis Cache Infrastructure (Offline); Chunk 18 — Redis Service Profile and Live Cache Integration; Chunk 19 — Application Document Embedding Port Boundary; Chunk 20 — Application Document Vector Indexing Boundary; Chunk 21 — Application Document Vector Retrieval Boundary; Chunk 22 — Async Qdrant Client Foundation (Offline); Chunk 23 — Qdrant Document Vector Index/Search Adapter (Offline); Chunk 24 — Qdrant Service Profile and Live Vector Integration; Chunk 25 — n8n Local Service Foundation and Live Readiness
+- **Next recommended chunk:** Architect reassessment of the next functional Phase 2 slice; do not automatically begin agent/LangGraph orchestration.
 
 ## What this repository is
 
-A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, explicit Consumption MW/kW plus IANA timezone normalization, fail-closed Consumption duplicate detection, optional interval-grid alignment, per-consumer internal gap reporting, an unwired filesystem-backed DLQ metadata persistence adapter, an application-owned unstructured document extraction boundary with no concrete PDF/OCR adapter, an application-owned document embedding port with no concrete embedding implementation, an application-owned document vector indexing port structurally implemented by `QdrantDocumentVectorIndex`, an application-owned document vector retrieval port structurally implemented by `QdrantDocumentVectorSearch`, an unwired Qdrant HTTP client foundation (`QdrantSettings`, `qdrant-client==1.19.0`, lazy `create_qdrant_client()`), concrete Qdrant document adapters (deterministic UUID point identity, closed payload, SHA-256 entry fingerprint, insert-only verified writes), an on-demand Compose Qdrant profile with opt-in live index/search tests, an unwired async PostgreSQL/TimescaleDB persistence foundation, an unwired Consumption PostgreSQL repository, an on-demand Compose TimescaleDB profile with live migration/repository tests, an application-owned vendor-neutral cache port, an unwired Redis cache adapter (`RedisSettings`, redis-py async factory, infrastructure codec, `RedisCache`), and an on-demand Compose Redis profile with opt-in live cache tests. It is **not** a running trading platform.
+A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, explicit Consumption MW/kW plus IANA timezone normalization, fail-closed Consumption duplicate detection, optional interval-grid alignment, per-consumer internal gap reporting, an unwired filesystem-backed DLQ metadata persistence adapter, an application-owned unstructured document extraction boundary with no concrete PDF/OCR adapter, an application-owned document embedding port with no concrete embedding implementation, an application-owned document vector indexing port structurally implemented by `QdrantDocumentVectorIndex`, an application-owned document vector retrieval port structurally implemented by `QdrantDocumentVectorSearch`, an unwired Qdrant HTTP client foundation (`QdrantSettings`, `qdrant-client==1.19.0`, lazy `create_qdrant_client()`), concrete Qdrant document adapters (deterministic UUID point identity, closed payload, SHA-256 entry fingerprint, insert-only verified writes), an on-demand Compose Qdrant profile with opt-in live index/search tests, an unwired async PostgreSQL/TimescaleDB persistence foundation, an unwired Consumption PostgreSQL repository, an on-demand Compose TimescaleDB profile with live migration/repository tests, an application-owned vendor-neutral cache port, an unwired Redis cache adapter (`RedisSettings`, redis-py async factory, infrastructure codec, `RedisCache`), an on-demand Compose Redis profile with opt-in live cache tests, and an on-demand Compose n8n profile with opt-in live readiness tests. It is **not** a running trading platform.
 
 ## What is not implemented
 
@@ -56,12 +56,20 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Orchestration state / CAS / locks
 - Redis readiness endpoint
 - Running Qdrant service as an always-on process
-- FastAPI Docker image / remaining Compose services
+- Running n8n service as an always-on process
+- Actual n8n workflows
+- External acquisition credentials
+- Weather ingestion
+- Hydro ingestion
+- Generation ingestion
+- News ingestion
+- Market-monitoring ingestion
+- Application callback/API boundary for n8n
+- FastAPI Docker image
 - ML implementations
 - External integrations
 - OpenTelemetry / Sentry / Prometheus
 - Authentication
-- n8n
 
 ## Implemented artifacts
 
@@ -134,6 +142,9 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Qdrant client-foundation architecture tests (inner layers Qdrant-free; API unwired)
 - Qdrant document-vector adapter architecture tests (ports implemented in infrastructure; no collection management, inference, or API wiring)
 - Compose Qdrant profile and live-integration architecture tests
+- On-demand Compose `n8n` profile (`n8n` service, image `n8nio/n8n:2.37.10`, loopback HTTP 5678, required encryption key, diagnostics/version/templates/personalization disabled, named volume `n8n-data`)
+- Live n8n `/healthz` and `/healthz/readiness` tests (opt-in)
+- Compose n8n profile architecture tests
 - SQLAlchemy 2 async engine/session factories (`create_postgres_engine`, `create_session_factory`) using psycopg 3
 - Structured PostgreSQL URL construction (`postgresql+psycopg`) without logging credentials
 - Alembic migration foundation (`alembic.ini`, `alembic/env.py`)
@@ -176,7 +187,7 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 
 ## Pending work
 
-Everything after Chunk 24 in `ROADMAP.md`. Next is **Docker Compose remaining services, when justified**. Do not install LangGraph, embedding SDKs, ML stacks, or unrelated Docker services until those chunks. Do not claim the local Qdrant profile is production-ready.
+Everything after Chunk 25 in `ROADMAP.md`. Next is **Architect reassessment of the next functional Phase 2 slice; do not automatically begin agent/LangGraph orchestration**. Do not install LangGraph, embedding SDKs, or ML stacks until those chunks. Do not claim the local Qdrant or n8n profiles are production-ready. Do not claim n8n ingestion exists merely because the container exists.
 
 ## Known issues
 
@@ -186,6 +197,7 @@ Everything after Chunk 24 in `ROADMAP.md`. Next is **Docker Compose remaining se
 - TimescaleDB is pinned to `timescale/timescaledb:2.29.2-pg17` for local development; it is on-demand, not always running.
 - Redis is pinned to `redis:8.2.9-alpine` for local development; it is on-demand, not always running.
 - Qdrant is pinned to `qdrant/qdrant:v1.19.1` for local development; it is on-demand, not always running. Local HTTP plus API key is not the production security model.
+- n8n is pinned to `n8nio/n8n:2.37.10` for local development; it is on-demand, not always running. Local HTTP plus a deployment encryption key is not the production security model.
 
 ## Architectural constraints (in force)
 
@@ -206,6 +218,7 @@ Everything after Chunk 24 in `ROADMAP.md`. Next is **Docker Compose remaining se
 - PostgreSQL/TimescaleDB persistence is an infrastructure factory plus the Consumption Core table/repository; Compose `postgres` profile is optional and on-demand; no global engine, no FastAPI wiring, no ingestion→repository wiring
 - Consumption persistence identity is `(consumer_id, timestamp)`; exact retries are idempotent; differing values conflict; adapters still do not query PostgreSQL
 - Cache is an application-owned `CachePort[TValue]`; infrastructure `RedisCache` is TTL-bound and ephemeral; Compose `redis` profile is optional and on-demand; no API/orchestration wiring, no locks
+- n8n is optional outer acquisition/scheduling infrastructure; Compose `n8n` profile is on-demand and loopback-only; n8n internal metadata is not the platform energy-data system of record; n8n must not bypass the ACL; no workflows or application/API/LangGraph wiring exist
 - UTC timestamps; MW vs MWh; Decimal money; explicit currency codes
 - Application/domain exceptions contain no HTTP semantics; HTTP translation is API-only
 - Unexpected exception details are never sent to clients
@@ -216,7 +229,7 @@ Everything after Chunk 24 in `ROADMAP.md`. Next is **Docker Compose remaining se
 
 ## Current services
 
-TimescaleDB is available on demand under the Compose `postgres` profile (`timescale/timescaledb:2.29.2-pg17`, loopback-only). Redis is available on demand under the Compose `redis` profile (`redis:8.2.9-alpine`, loopback-only, password required, non-persistent). Qdrant is available on demand under the Compose `qdrant` profile (`qdrant/qdrant:v1.19.1`, loopback-only REST 6333, API key required, telemetry disabled, named `qdrant-data`). None is assumed to be running continuously. The local Qdrant profile is not production-ready.
+TimescaleDB is available on demand under the Compose `postgres` profile (`timescale/timescaledb:2.29.2-pg17`, loopback-only). Redis is available on demand under the Compose `redis` profile (`redis:8.2.9-alpine`, loopback-only, password required, non-persistent). Qdrant is available on demand under the Compose `qdrant` profile (`qdrant/qdrant:v1.19.1`, loopback-only REST 6333, API key required, telemetry disabled, named `qdrant-data`). n8n is available on demand under the Compose `n8n` profile (`n8nio/n8n:2.37.10`, loopback-only HTTP 5678, encryption key required, telemetry/template/version/personalization disabled, named `n8n-data`). None is assumed to be running continuously. The local Qdrant and n8n profiles are not production-ready. The n8n container does not implement ingestion.
 
 ## Current APIs
 

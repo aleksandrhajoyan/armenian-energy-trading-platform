@@ -43,7 +43,9 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 - [x] **Chunk 22** — Async Qdrant Client Foundation (Offline)
 - [x] Chunk 23 — Qdrant Document Vector Index/Search Adapter (Offline)
 - [x] Chunk 24 — Qdrant Service Profile and Live Vector Integration
-- [ ] Docker Compose remaining services, when justified
+- [x] **Chunk 25** — n8n Local Service Foundation and Live Readiness
+
+The currently justified local service foundations are complete: TimescaleDB/PostgreSQL, Redis, Qdrant, and n8n. Do not mark any ingestion workflow or agent complete.
 
 ## Phase 3 — Application orchestration foundation
 
@@ -113,5 +115,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 24
-- **Next:** Docker Compose remaining services, when justified. Production collection provisioning, production distance selection, embedding implementation, RAG, and regulatory agents remain deferred.
+- **Completed:** Chunk 0 through Chunk 25
+- **Next:** Architect reassessment of the next functional Phase 2 slice; do not automatically begin agent/LangGraph orchestration. Production collection provisioning, production distance selection, embedding implementation, RAG, n8n workflows, and regulatory agents remain deferred.

@@ -72,6 +72,7 @@ def test_timescaledb_service_is_postgres_profile_gated() -> None:
     assert "- postgres" in timescaledb_block
     assert "- redis" not in timescaledb_block
     assert "- qdrant" not in timescaledb_block
+    assert "- n8n" not in timescaledb_block
 
 
 def test_database_port_is_loopback_bound() -> None:
@@ -114,7 +115,6 @@ def test_compose_has_no_app_or_admin_services() -> None:
     forbidden = (
         "fastapi",
         "uvicorn",
-        "n8n",
         "pgadmin",
         "grafana",
         "prometheus",

@@ -506,3 +506,23 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Application ports/contracts remain unchanged. `create_app()` remains unwired. Qdrant inference remains disabled. Query-text embedding, RAG, and agents remain deferred.
   - Default `uv run pytest` stays service-independent. testcontainers and the Docker SDK are not used.
 - **Consequences:** Developers can prove the published document index/search adapters against a compatible local Qdrant without starting TimescaleDB, Redis, or the API. Production distance selection, collection bootstrap, embedding models, and API composition remain later chunks.
+
+---
+
+## ADR-035 — n8n is an opt-in outer acquisition service and cannot bypass the ingestion ACL
+
+- **Status:** Accepted
+- **Context:** The architecture needs a local n8n service for future external acquisition / ETL workflow execution. Adding workflows, source credentials, FastAPI callbacks, Redis-backed n8n queues, or sharing the platform Timescale database would collapse later acquisition work into this foundation slice. n8n must not become a shortcut around the Anti-Corruption Layer, and it must not replace Chief Orchestrator / LangGraph application orchestration.
+- **Decision:**
+  - n8n stable image is pinned to `n8nio/n8n:2.37.10` for this checkpoint. The pin is a patch tag, not `latest`, `stable`, `2`, `2.37`, `nightly`, or `beta`. No custom n8n Dockerfile and no Python n8n SDK.
+  - Compose defines one service, `n8n`, gated on profile `n8n`. Start with `docker compose --profile n8n up -d n8n`. Default `docker compose up` does not start n8n. TimescaleDB, Redis, and Qdrant remain independently profile-gated with no `depends_on` relationship to n8n.
+  - Host exposure is loopback-only HTTP (`127.0.0.1` plus overridable `N8N_HOST_PORT`, default 5678). The container n8n port remains exactly 5678 (`N8N_PORT=5678`). Custom host ports such as `N8N_HOST_PORT=5680` must publish `127.0.0.1:5680 -> 5678`.
+  - A deployment `N8N_ENCRYPTION_KEY` is required through Compose required-variable interpolation. There is no default key. The key protects n8n's own stored credentials/configuration. It is not an application API secret and is not consumed by Python settings (`N8nSettings` / `load_n8n_settings` are not created).
+  - Persistence uses the Compose named volume `n8n-data` mounted at `/home/node/.n8n`. There is no Windows host bind mount. n8n may use its own local SQLite/metadata inside that volume; that store is n8n internal orchestration metadata only and is not the platform energy-data system of record. PostgreSQL/TimescaleDB remains the system of record (ADR-004). n8n is not configured to share the application Timescale database.
+  - n8n is outer infrastructure for future source acquisition/scheduling. Raw external data must still pass application-approved ACL/adapters before becoming canonical domain truth. n8n workflows may not directly establish canonical domain truth, write vendor payloads into application DTOs, Timescale canonical tables, or Qdrant application-facing payloads.
+  - No workflow/API handoff is selected yet. No workflows, credentials, owner bootstrap, webhooks, or FastAPI callbacks are added.
+  - Local diagnostics, version notifications, templates, and personalization are disabled (`N8N_DIAGNOSTICS_ENABLED`, `N8N_VERSION_NOTIFICATIONS_ENABLED`, `N8N_TEMPLATES_ENABLED`, `N8N_PERSONALIZATION_ENABLED` all false). Ask-AI, n8n Cloud, and external template libraries are not enabled.
+  - No LangGraph or agent ownership is assigned to n8n. n8n does not replace Chief Orchestrator/LangGraph application orchestration (ADR-007).
+  - Live tests live under `tests/integration/infrastructure/orchestration/n8n/`, use marker `n8n_integration`, and require `ENERGY_RUN_N8N_INTEGRATION=1`. They prove service readiness only (`GET /healthz` and `GET /healthz/readiness` return HTTP 200) against `127.0.0.1` with a bounded ~60-second readiness poll. Default pytest stays service-independent. testcontainers and the Docker SDK are not used.
+  - This local HTTP profile is development/test infrastructure, not the production n8n security architecture. Production deployment/security remains separate future work.
+- **Consequences:** Developers can start a pinned local n8n and prove readiness without TimescaleDB, Redis, Qdrant, or the API. Future acquisition workflows must still terminate at an infrastructure/application ACL boundary. Operators must not treat n8n SQLite as canonical energy data.

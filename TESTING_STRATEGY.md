@@ -44,14 +44,14 @@ Chunk 4 structured-ingestion boundary tests:
 
 `tests/architecture/test_domain_dependencies.py` uses the standard library `ast` module to fail if `energy_trading.domain` imports `energy_trading.api`, `application`, `infrastructure`, `ml`, `shared`, FastAPI, SQLAlchemy, psycopg, or Alembic. No extra architecture-testing dependency is used.
 
-Infrastructure integration tests against a running PostgreSQL process are **not** run by default. They require the Compose `postgres` profile and `ENERGY_RUN_POSTGRES_INTEGRATION=1`. Chunk 13 added offline PostgreSQL foundation tests that require no database service. Chunk 14 added offline Consumption table, migration, and repository tests that also require no database service. Chunk 17 added offline Redis settings, client-factory, codec, and `RedisCache` tests that require no Redis process. Chunk 18 added opt-in live Redis tests (`redis_integration`, `ENERGY_RUN_REDIS_INTEGRATION=1`) that require the Compose `redis` profile. Chunk 24 added opt-in live Qdrant tests (`qdrant_integration`, `ENERGY_RUN_QDRANT_INTEGRATION=1`) that require the Compose `qdrant` profile.
+Infrastructure integration tests against a running PostgreSQL process are **not** run by default. They require the Compose `postgres` profile and `ENERGY_RUN_POSTGRES_INTEGRATION=1`. Chunk 13 added offline PostgreSQL foundation tests that require no database service. Chunk 14 added offline Consumption table, migration, and repository tests that also require no database service. Chunk 17 added offline Redis settings, client-factory, codec, and `RedisCache` tests that require no Redis process. Chunk 18 added opt-in live Redis tests (`redis_integration`, `ENERGY_RUN_REDIS_INTEGRATION=1`) that require the Compose `redis` profile. Chunk 24 added opt-in live Qdrant tests (`qdrant_integration`, `ENERGY_RUN_QDRANT_INTEGRATION=1`) that require the Compose `qdrant` profile. Chunk 25 added opt-in live n8n tests (`n8n_integration`, `ENERGY_RUN_N8N_INTEGRATION=1`) that require the Compose `n8n` profile.
 
 ## Layout
 
 | Directory | Intent |
 | --- | --- |
 | `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, document-extraction ports, document-embedding ports, document-vector-index ports, cache port, Redis settings/client/cache adapter, infrastructure adapters, filesystem DLQ persistence, PostgreSQL engine/Alembic foundation |
-| `tests/integration/` | Opt-in live PostgreSQL/TimescaleDB tests (`postgres_integration`), opt-in live Redis cache tests (`redis_integration`), and opt-in live Qdrant vector tests (`qdrant_integration`) |
+| `tests/integration/` | Opt-in live PostgreSQL/TimescaleDB tests (`postgres_integration`), opt-in live Redis cache tests (`redis_integration`), opt-in live Qdrant vector tests (`qdrant_integration`), and opt-in live n8n readiness tests (`n8n_integration`) |
 | `tests/architecture/` | Import-graph / layering rules |
 | `tests/fixtures/` | CSV/Excel/PDF snippets, malformed series, canonical JSON |
 
@@ -103,7 +103,7 @@ When a graph exists: contract → parallel ingestion join → forecast → risk 
 
 ### Infrastructure integration tests
 
-Opt-in (marker) tests for PostgreSQL/TimescaleDB, Redis, and Qdrant against Compose **when** those services exist. Not run by default. Redis live tests require the Compose `redis` profile and `ENERGY_RUN_REDIS_INTEGRATION=1`. Qdrant live tests require the Compose `qdrant` profile and `ENERGY_RUN_QDRANT_INTEGRATION=1`. Still no live third-party market APIs.
+Opt-in (marker) tests for PostgreSQL/TimescaleDB, Redis, Qdrant, and n8n against Compose **when** those services exist. Not run by default. Redis live tests require the Compose `redis` profile and `ENERGY_RUN_REDIS_INTEGRATION=1`. Qdrant live tests require the Compose `qdrant` profile and `ENERGY_RUN_QDRANT_INTEGRATION=1`. n8n live tests require the Compose `n8n` profile and `ENERGY_RUN_N8N_INTEGRATION=1`. Still no live third-party market APIs.
 
 ### API tests
 
@@ -204,7 +204,7 @@ Chunk 14 Consumption PostgreSQL persistence tests:
 
 Chunk 15 PostgreSQL/TimescaleDB service profile and live persistence tests:
 
-- Compose static tests (`tests/architecture/test_postgres_compose_profile.py`): `compose.yaml` exists; image is exactly `timescale/timescaledb:2.29.2-pg17`; no `latest`; service `timescaledb` is gated on profile `postgres`; port is loopback-bound; named volume `timescale-data` with no bind-mounted data directory; healthcheck uses `pg_isready` without a password; password interpolation required; no `POSTGRES_HOST_AUTH_METHOD=trust`; no FastAPI/Qdrant/n8n/admin services. Redis is a separate independently gated Compose service, not asserted absent.
+- Compose static tests (`tests/architecture/test_postgres_compose_profile.py`): `compose.yaml` exists; image is exactly `timescale/timescaledb:2.29.2-pg17`; no `latest`; service `timescaledb` is gated on profile `postgres`; port is loopback-bound; named volume `timescale-data` with no bind-mounted data directory; healthcheck uses `pg_isready` without a password; password interpolation required; no `POSTGRES_HOST_AUTH_METHOD=trust`; no FastAPI/admin services. Redis, Qdrant, and n8n are separate independently gated Compose services, not asserted absent.
 - Marker: `postgres_integration`. Opt-in: `ENERGY_RUN_POSTGRES_INTEGRATION=1`. Live modules skip cleanly when the flag is absent. Default `uv run pytest` does not require Docker.
 - Live suite path: `tests/integration/persistence/postgres/`. No testcontainers, Docker SDK, or new Python dependencies. On Windows, Alembic and live tests use `WindowsSelectorEventLoopPolicy` because psycopg async cannot use ProactorEventLoop.
 - Live migration tests: PostgreSQL server major version 17; TimescaleDB extension `2.29.2`; Alembic current `0002_consumption`; TimescaleDB extension and `energy_trading` schema exist; `consumption_observations` is a hypertable partitioned by `timestamp`; composite PK `(consumer_id, timestamp)`; non-negative/finite MW CHECK; controlled downgrade to `0001_bootstrap` then restore to head without dropping schema or extension.
@@ -227,7 +227,7 @@ Chunk 17 async Redis cache infrastructure (offline) tests:
 
 Chunk 18 Redis service profile and live cache tests:
 
-- Compose static tests (`tests/architecture/test_redis_compose_profile.py`): image is exactly `redis:8.2.9-alpine`; service `redis` is gated on profile `redis`; loopback bind; published host port uses `REDIS_PORT`; `REDIS_PASSWORD` interpolation required; healthcheck uses `redis-cli`, `PONG`, and `REDISCLI_AUTH`; `save ""` and `appendonly no`; no Redis volume/bind mount; no `depends_on`; approved services are exactly `timescaledb` and `redis`; no FastAPI/Qdrant/n8n/admin/Sentinel/Cluster.
+- Compose static tests (`tests/architecture/test_redis_compose_profile.py`): image is exactly `redis:8.2.9-alpine`; service `redis` is gated on profile `redis`; loopback bind; published host port uses `REDIS_PORT`; `REDIS_PASSWORD` interpolation required; healthcheck uses `redis-cli`, `PONG`, and `REDISCLI_AUTH`; `save ""` and `appendonly no`; no Redis volume/bind mount; no `depends_on`; approved services are `timescaledb`, `redis`, `qdrant`, and `n8n`; no FastAPI/admin/Sentinel/Cluster.
 - Marker: `redis_integration`. Opt-in: `ENERGY_RUN_REDIS_INTEGRATION=1`. Live modules skip cleanly when the flag is absent. If the flag is set and Redis is unreachable or unauthenticated, the suite fails rather than skips. Default `uv run pytest` does not require Docker.
 - Live suite path: `tests/integration/cache/redis/`. No testcontainers, Docker SDK, fakeredis, or new Python dependencies.
 - Localhost-only safety: `REDIS_HOST` must be `127.0.0.1` or `localhost`. Remote hosts fail setup. Tests never call `FLUSHALL`, `FLUSHDB`, or `KEYS *`. Each test uses unique application keys and deletes only those keys.
@@ -266,7 +266,7 @@ Chunk 23 Qdrant document vector index/search adapter tests (offline):
 
 Chunk 24 Qdrant service profile and live vector integration tests:
 
-- Compose static tests (`tests/architecture/test_qdrant_live_integration_boundary.py`): image is exactly `qdrant/qdrant:v1.19.1`; service `qdrant` is gated on profile `qdrant`; loopback bind; published host port uses `QDRANT_PORT` and container REST 6333 only; 6334/6335 are not published; `QDRANT_API_KEY` interpolation required as `QDRANT__SERVICE__API_KEY`; no empty read-only key; telemetry disabled; named volume `qdrant-data` mounted at `/qdrant/storage`; no bind mount; no `depends_on` with TimescaleDB or Redis; approved services are `timescaledb`, `redis`, and `qdrant`; production Qdrant modules still contain no `create_collection` / `VectorParams` / distance enums; `create_app()` remains unwired.
+- Compose static tests (`tests/architecture/test_qdrant_live_integration_boundary.py`): image is exactly `qdrant/qdrant:v1.19.1`; service `qdrant` is gated on profile `qdrant`; loopback bind; published host port uses `QDRANT_PORT` and container REST 6333 only; 6334/6335 are not published; `QDRANT_API_KEY` interpolation required as `QDRANT__SERVICE__API_KEY`; no empty read-only key; telemetry disabled; named volume `qdrant-data` mounted at `/qdrant/storage`; no bind mount; no `depends_on` with TimescaleDB, Redis, or n8n; approved services are `timescaledb`, `redis`, `qdrant`, and `n8n`; production Qdrant modules still contain no `create_collection` / `VectorParams` / distance enums; `create_app()` remains unwired.
 - Marker: `qdrant_integration`. Opt-in: `ENERGY_RUN_QDRANT_INTEGRATION=1`. Live modules skip cleanly when the flag is absent. If the flag is set and Qdrant is unreachable or unauthenticated, the suite fails rather than skips. Default `uv run pytest` does not require Docker and does not contact Qdrant.
 - Live suite path: `tests/integration/infrastructure/vector_store/qdrant/`. No testcontainers, Docker SDK, local `:memory:` Qdrant, or new Python dependencies.
 - Localhost-only safety: `QDRANT_HOST` must be `127.0.0.1` or `localhost`. Remote hosts fail setup. Tests never print `QDRANT_API_KEY`.
@@ -279,6 +279,20 @@ Chunk 24 Qdrant service profile and live vector integration tests:
   then `ENERGY_RUN_QDRANT_INTEGRATION=1 uv run pytest -m qdrant_integration`
   then `docker compose --profile qdrant stop qdrant`.
   Do not put a real API key in docs or commands. Compose Qdrant is stopped after live validation. The named volume is not destroyed by default. No live third-party APIs.
+
+Chunk 25 n8n local service foundation and live readiness tests:
+
+- Compose static tests (`tests/architecture/test_n8n_compose_profile.py`): image is exactly `n8nio/n8n:2.37.10`; service `n8n` is gated on profile `n8n`; loopback bind; published host port uses `N8N_HOST_PORT` defaulting to 5678; container `N8N_PORT` remains 5678; custom host port is supported; `N8N_ENCRYPTION_KEY` interpolation required with no default; diagnostics/version/templates/personalization disabled; named volume `n8n-data` mounted at `/home/node/.n8n`; no bind mount; no `depends_on`; approved services are `timescaledb`, `redis`, `qdrant`, and `n8n`; production Python has no n8n SDK; `create_app()` remains unwired; no production `n8n/` or `workflows/` artifacts.
+- Marker: `n8n_integration`. Opt-in: `ENERGY_RUN_N8N_INTEGRATION=1`. Live modules skip cleanly when the flag is absent. If the flag is set and n8n is unreachable, the suite fails rather than skips. Default `uv run pytest` does not require Docker and does not contact n8n.
+- Live suite path: `tests/integration/infrastructure/orchestration/n8n/`. No testcontainers, Docker SDK, n8n Python SDK, or new Python dependencies. HTTPX is the existing test HTTP client.
+- Localhost-only safety: tests contact `127.0.0.1` only. They never print `N8N_ENCRYPTION_KEY`.
+- Readiness: the fixture polls `GET /healthz/readiness` with a 60-second bound and short async sleeps. This retry loop exists only in test infrastructure.
+- Live server tests: `GET /healthz` returns 200; `GET /healthz/readiness` returns 200. No owner setup, login, workflow creation, credentials, or webhook tests.
+- **Default pytest remains independent of services.** The integration suite requires an explicitly started local `n8n` profile:
+  `docker compose --profile n8n up -d n8n`
+  then `ENERGY_RUN_N8N_INTEGRATION=1 uv run pytest -m n8n_integration`
+  then `docker compose --profile n8n stop n8n`.
+  Do not put a real encryption key in docs or commands. Compose n8n is stopped after live validation. The named volume is not destroyed by default. No live third-party APIs.
 
 ## CI expectations (future)
 

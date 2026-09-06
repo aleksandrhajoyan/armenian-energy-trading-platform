@@ -45,6 +45,7 @@ markers = [
     "postgres_integration: requires the opt-in local PostgreSQL/TimescaleDB Compose service",
     "redis_integration: requires the opt-in local Redis Compose service",
     "qdrant_integration: requires the opt-in local Qdrant Compose service",
+    "n8n_integration: requires the opt-in local n8n Compose service",
 ]
 
 [tool.ruff]
