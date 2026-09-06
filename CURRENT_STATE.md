@@ -4,13 +4,13 @@ Living snapshot. Update at the end of every chunk. Do not list features that do 
 
 ## Phase and chunk
 
-- **Current phase:** Phase 3 — Application orchestration foundation (complete at contract/skeleton level; orchestration execution is not complete)
-- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization; Chunk 9 — Duplicate Timestamp Policy and Interval Validation; Chunk 10 — Missing-Interval Detection and Gap Reporting; Chunk 11 — DLQ Persistence Boundary; Chunk 12 — Unstructured Document Extraction Boundary; Chunk 13 — Async PostgreSQL/TimescaleDB Persistence Foundation; Chunk 14 — Consumption PostgreSQL Persistence Slice; Chunk 15 — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration; Chunk 16 — Application Cache Port Boundary; Chunk 17 — Async Redis Cache Infrastructure (Offline); Chunk 18 — Redis Service Profile and Live Cache Integration; Chunk 19 — Application Document Embedding Port Boundary; Chunk 20 — Application Document Vector Indexing Boundary; Chunk 21 — Application Document Vector Retrieval Boundary; Chunk 22 — Async Qdrant Client Foundation (Offline); Chunk 23 — Qdrant Document Vector Index/Search Adapter (Offline); Chunk 24 — Qdrant Service Profile and Live Vector Integration; Chunk 25 — n8n Local Service Foundation and Live Readiness; Chunk 26 — Application Agent Execution Contract Boundary; Chunk 27 — Application Orchestration State Contract — LangGraph-free; Chunk 28 — Minimal LangGraph Skeleton; Chunk 29 — Application Orchestration Failure Policy Hooks
-- **Next recommended chunk:** Weather & Renewable Forecast Agent — first application agent slice
+- **Current phase:** Phase 4 — Ingestion agents (in progress)
+- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization; Chunk 9 — Duplicate Timestamp Policy and Interval Validation; Chunk 10 — Missing-Interval Detection and Gap Reporting; Chunk 11 — DLQ Persistence Boundary; Chunk 12 — Unstructured Document Extraction Boundary; Chunk 13 — Async PostgreSQL/TimescaleDB Persistence Foundation; Chunk 14 — Consumption PostgreSQL Persistence Slice; Chunk 15 — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration; Chunk 16 — Application Cache Port Boundary; Chunk 17 — Async Redis Cache Infrastructure (Offline); Chunk 18 — Redis Service Profile and Live Cache Integration; Chunk 19 — Application Document Embedding Port Boundary; Chunk 20 — Application Document Vector Indexing Boundary; Chunk 21 — Application Document Vector Retrieval Boundary; Chunk 22 — Async Qdrant Client Foundation (Offline); Chunk 23 — Qdrant Document Vector Index/Search Adapter (Offline); Chunk 24 — Qdrant Service Profile and Live Vector Integration; Chunk 25 — n8n Local Service Foundation and Live Readiness; Chunk 26 — Application Agent Execution Contract Boundary; Chunk 27 — Application Orchestration State Contract — LangGraph-free; Chunk 28 — Minimal LangGraph Skeleton; Chunk 29 — Application Orchestration Failure Policy Hooks; Chunk 30 — Weather & Renewable Forecast Agent Application Boundary and First Concrete Agent
+- **Next recommended chunk:** Weather & Renewable Forecast Agent — next implementation slice to be selected after Chunk 30 review
 
 ## What this repository is
 
-A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, explicit Consumption MW/kW plus IANA timezone normalization, fail-closed Consumption duplicate detection, optional interval-grid alignment, per-consumer internal gap reporting, an unwired filesystem-backed DLQ metadata persistence adapter, an application-owned unstructured document extraction boundary with no concrete PDF/OCR adapter, an application-owned document embedding port with no concrete embedding implementation, an application-owned document vector indexing port structurally implemented by `QdrantDocumentVectorIndex`, an application-owned document vector retrieval port structurally implemented by `QdrantDocumentVectorSearch`, an unwired Qdrant HTTP client foundation (`QdrantSettings`, `qdrant-client==1.19.0`, lazy `create_qdrant_client()`), concrete Qdrant document adapters (deterministic UUID point identity, closed payload, SHA-256 entry fingerprint, insert-only verified writes), an on-demand Compose Qdrant profile with opt-in live index/search tests, an unwired async PostgreSQL/TimescaleDB persistence foundation, an unwired Consumption PostgreSQL repository, an on-demand Compose TimescaleDB profile with live migration/repository tests, an application-owned vendor-neutral cache port, an unwired Redis cache adapter (`RedisSettings`, redis-py async factory, infrastructure codec, `RedisCache`), an on-demand Compose Redis profile with opt-in live cache tests, and an on-demand Compose n8n profile with opt-in live readiness tests, and an application-owned framework-neutral agent invocation boundary (`AgentName`, `AgentPort[TRequest, TResult]`) with no concrete agent, an application-owned framework-neutral workflow snapshot (`WorkflowPhase`, `WorkflowStatus`, `WorkflowState`), a minimal LangGraph runtime skeleton (`build_workflow_graph()`, `START → workflow_entry → END`) that consumes that snapshot as its state schema, and an application-owned framework-neutral failure-policy decision hook (`FailureAction`, `FailurePolicyContext`, `FailurePolicyPort`) with no concrete policy and no retry/fallback execution. It is **not** a running trading platform.
+A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, explicit Consumption MW/kW plus IANA timezone normalization, fail-closed Consumption duplicate detection, optional interval-grid alignment, per-consumer internal gap reporting, an unwired filesystem-backed DLQ metadata persistence adapter, an application-owned unstructured document extraction boundary with no concrete PDF/OCR adapter, an application-owned document embedding port with no concrete embedding implementation, an application-owned document vector indexing port structurally implemented by `QdrantDocumentVectorIndex`, an application-owned document vector retrieval port structurally implemented by `QdrantDocumentVectorSearch`, an unwired Qdrant HTTP client foundation (`QdrantSettings`, `qdrant-client==1.19.0`, lazy `create_qdrant_client()`), concrete Qdrant document adapters (deterministic UUID point identity, closed payload, SHA-256 entry fingerprint, insert-only verified writes), an on-demand Compose Qdrant profile with opt-in live index/search tests, an unwired async PostgreSQL/TimescaleDB persistence foundation, an unwired Consumption PostgreSQL repository, an on-demand Compose TimescaleDB profile with live migration/repository tests, an application-owned vendor-neutral cache port, an unwired Redis cache adapter (`RedisSettings`, redis-py async factory, infrastructure codec, `RedisCache`), an on-demand Compose Redis profile with opt-in live cache tests, and an on-demand Compose n8n profile with opt-in live readiness tests, and an application-owned framework-neutral agent invocation boundary (`AgentName`, `AgentPort[TRequest, TResult]`), one concrete application agent (`WeatherAndRenewableForecastAgent`) with typed request/result DTOs and an application-owned canonical weather source port (`WeatherRecordSourcePort`) and no weather-provider implementation, an application-owned framework-neutral workflow snapshot (`WorkflowPhase`, `WorkflowStatus`, `WorkflowState`), a minimal LangGraph runtime skeleton (`build_workflow_graph()`, `START → workflow_entry → END`) that consumes that snapshot as its state schema, and an application-owned framework-neutral failure-policy decision hook (`FailureAction`, `FailurePolicyContext`, `FailurePolicyPort`) with no concrete policy and no retry/fallback execution. It is **not** a running trading platform.
 
 ## What is not implemented
 
@@ -43,7 +43,7 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - API/composition vector-index wiring
 - API/composition vector-search wiring
 - API/composition Qdrant wiring
-- All 13 concrete agents
+- The other 12 concrete agents
 - Chief Orchestrator Agent
 - Agent execution / AgentPort invocation from the graph
 - Business-phase routing / five-phase graph
@@ -74,7 +74,12 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Running n8n service as an always-on process
 - Actual n8n workflows
 - External acquisition credentials
-- Weather ingestion
+- Weather HTTP/API provider
+- Weather ACL adapter
+- Weather persistence
+- n8n weather workflow
+- Weather graph node
+- Weather ML / LLM calculation
 - Hydro ingestion
 - Generation ingestion
 - News ingestion
@@ -175,6 +180,10 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Application-owned frozen `FailurePolicyContext` (phase, sanitized error code, 1-based attempt number, optional `AgentName`)
 - Application-owned async structural `FailurePolicyPort.decide(context)` with no concrete policy
 - Failure-policy unit and architecture tests (structural fake; no retry/fallback execution; LangGraph-free)
+- Application-owned `WeatherRecordSourcePort` (keyword-only `fetch` of canonical `WeatherRecord` tuples)
+- Frozen `WeatherAndRenewableForecastRequest` / `WeatherAndRenewableForecastResult` application DTOs
+- Concrete `WeatherAndRenewableForecastAgent` structurally satisfying `AgentPort` (provider-neutral, unwired)
+- Weather source-port, agent, and architecture-boundary tests (structural fake; no live provider)
 - SQLAlchemy 2 async engine/session factories (`create_postgres_engine`, `create_session_factory`) using psycopg 3
 - Structured PostgreSQL URL construction (`postgresql+psycopg`) without logging credentials
 - Alembic migration foundation (`alembic.ini`, `alembic/env.py`)
@@ -217,7 +226,7 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 
 ## Pending work
 
-Everything after Chunk 29 in `ROADMAP.md`. Next is **Weather & Renewable Forecast Agent — first application agent slice**. Phase 3 foundation is complete at the contract/skeleton level; orchestration execution is not complete. Do not claim the trading workflow runs end-to-end. Do not claim a concrete agent exists. Do not install embedding SDKs or ML stacks until those chunks.
+Everything after Chunk 30 in `ROADMAP.md`. Next is **Weather & Renewable Forecast Agent — next implementation slice to be selected after Chunk 30 review**. Phase 4 has begun; it is not complete. One concrete application agent exists and is provider-neutral and unwired. Orchestration still invokes no agents. Do not claim the trading workflow runs end-to-end. Do not install embedding SDKs or ML stacks until those chunks.
 
 ## Known issues
 
@@ -249,7 +258,8 @@ Everything after Chunk 29 in `ROADMAP.md`. Next is **Weather & Renewable Forecas
 - Consumption persistence identity is `(consumer_id, timestamp)`; exact retries are idempotent; differing values conflict; adapters still do not query PostgreSQL
 - Cache is an application-owned `CachePort[TValue]`; infrastructure `RedisCache` is TTL-bound and ephemeral; Compose `redis` profile is optional and on-demand; no API/orchestration wiring, no locks
 - n8n is optional outer acquisition/scheduling infrastructure; Compose `n8n` profile is on-demand and loopback-only; n8n internal metadata is not the platform energy-data system of record; n8n must not bypass the ACL; no workflows or application/API/LangGraph wiring exist
-- Agent invocation is application-owned: `AgentName` plus structurally typed `AgentPort[TRequest, TResult]`; only `name` and async `run(request)` are shared; no concrete agent, registry, retry, or fallback
+- Agent invocation is application-owned: `AgentName` plus structurally typed `AgentPort[TRequest, TResult]`; only `name` and async `run(request)` are shared; no registry, retry, or fallback. One concrete agent exists (`WeatherAndRenewableForecastAgent`); the other 12 remain absent
+- Weather source access is application-owned: `WeatherRecordSourcePort.fetch` returns canonical `WeatherRecord` tuples only; no provider, ACL adapter, persistence, graph node, or API wiring
 - Workflow snapshot is application-owned: frozen `WorkflowState` with `WorkflowPhase` and `WorkflowStatus`; LangGraph consumes it as `state_schema` and does not redefine it; there is no transition policy or persistence, and no phase-specific canonical output slots
 - LangGraph skeleton is application-owned: `build_workflow_graph()` compiles `START → workflow_entry → END`; `workflow_entry` is async and no-op; no agents, phase routing, retry/fallback execution, checkpointer, store, cache, or API wiring
 - Failure-policy decisions are application-owned: `FailureAction` plus frozen `FailurePolicyContext` plus async structural `FailurePolicyPort`; no concrete policy, no retry/fallback execution, no LangGraph ownership, and no graph injection
@@ -272,7 +282,7 @@ TimescaleDB is available on demand under the Compose `postgres` profile (`timesc
 
 ## Current agents
 
-None implemented. Thirteen canonical identities are captured by application `AgentName`. Future agents will structurally satisfy `AgentPort` and consume canonical contracts through application ports; they must not parse raw source schemas. No concrete agent class exists.
+One concrete application agent exists: Weather & Renewable Forecast Agent (`WeatherAndRenewableForecastAgent`). It is provider-neutral and unwired: it consumes `WeatherAndRenewableForecastRequest`, calls `WeatherRecordSourcePort`, and returns `WeatherAndRenewableForecastResult` wrapping canonical `WeatherRecord` values. No weather provider, ACL adapter, persistence, or graph/API wiring exists. The other 12 concrete agents remain absent. Thirteen canonical identities are captured by application `AgentName`. Future agents will structurally satisfy `AgentPort` and consume canonical contracts through application ports; they must not parse raw source schemas.
 
 ## Current ML models
 

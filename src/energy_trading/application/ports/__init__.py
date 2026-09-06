@@ -24,6 +24,7 @@ from energy_trading.application.ports.structured_ingestion import (
     StructuredIngestionPort,
     StructuredIngestionResult,
 )
+from energy_trading.application.ports.weather_records import WeatherRecordSourcePort
 
 __all__ = [
     "CachePort",
@@ -40,4 +41,5 @@ __all__ = [
     "ExtractedDocumentChunk",
     "StructuredIngestionPort",
     "StructuredIngestionResult",
+    "WeatherRecordSourcePort",
 ]

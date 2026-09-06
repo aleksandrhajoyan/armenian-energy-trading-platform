@@ -598,3 +598,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - No concrete policy exists yet. No fixed retry count, backoff, delay, timeout, fallback target, or degraded-mode semantics exist.
   - LangGraph does not appear in the policy module. The Chunk 28 skeleton remains `START → workflow_entry → END` and does not call the policy. Retry/fallback execution will be introduced only when a real fallible orchestration node justifies it.
 - **Consequences:** Future graph nodes can ask a framework-neutral policy whether to retry, fall back, or fail without encoding those rules in LangGraph. Tests can use structural fakes. Concrete rules and execution remain later workflow work.
+
+---
+
+## ADR-040 — First concrete Weather agent consumes canonical records through an application-owned source port
+
+- **Status:** Accepted
+- **Context:** Chunks 26–29 established shared application orchestration contracts (`AgentPort`, `WorkflowState`, a no-op LangGraph skeleton, and a failure-policy decision hook) but no concrete agent. Phase 4 now needs the first concrete agent pattern. Choosing an HTTP weather provider, or allowing raw weather payloads into application, would violate the Anti-Corruption Layer. Persistence, graph invocation, retry/fallback execution, and ML are separate concerns and must not ride along with the first agent slice.
+- **Decision:**
+  - The first concrete agent is Weather & Renewable Forecast Agent. It structurally satisfies `AgentPort[WeatherAndRenewableForecastRequest, WeatherAndRenewableForecastResult]` and does not inherit a base class.
+  - Agent-specific request/result remain frozen application DTOs. The request carries only opaque `location_id` plus explicit `horizon_start` / `horizon_end`. The result contains a canonical `WeatherRecord` tuple.
+  - `WeatherRecordSourcePort` is application-owned. `fetch` is keyword-only and returns only already-canonical `WeatherRecord` values. External adapters remain infrastructure.
+  - Empty results are valid. The port and agent do not sort, interpolate, resample, infer cadence, or assume an Armenian DAM interval.
+  - No weather provider, persistence, graph wiring, retry/fallback execution, ML, or LLM numerical calculation is added. No new dependency is added.
+  - Canonical identity remains the existing `AgentName.WEATHER_AND_RENEWABLE_FORECAST` display value `Weather & Renewable Forecast Agent`.
+- **Consequences:** The first concrete agent pattern is proven without vendor coupling. A future infrastructure weather adapter can satisfy `WeatherRecordSourcePort`. Graph, persistence, and provider work remain separately reviewable. Hydro and other agents must not be auto-generated from this pattern until individually reviewed.

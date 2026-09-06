@@ -10,7 +10,9 @@ from tests.architecture.import_inspection import (
     annotation_type_names,
     async_function_arg_names,
     collect_import_violations,
+    imported_modules,
     imported_names,
+    is_forbidden,
 )
 
 AGENTS_ROOT = SRC_ROOT / "energy_trading" / "application" / "agents"
@@ -130,7 +132,16 @@ def _identifier_names(path: Path) -> set[str]:
 
 
 def test_agent_base_does_not_import_outer_layers_or_vendors() -> None:
-    assert collect_import_violations(AGENTS_ROOT, FORBIDDEN_PREFIXES) == []
+    package_forbidden = tuple(
+        prefix for prefix in FORBIDDEN_PREFIXES if prefix != "energy_trading.domain"
+    )
+    assert collect_import_violations(AGENTS_ROOT, package_forbidden) == []
+    leaked_base = [
+        f"{AGENT_BASE.relative_to(SRC_ROOT)} imports {module}"
+        for module in sorted(imported_modules(AGENT_BASE))
+        if is_forbidden(module, FORBIDDEN_PREFIXES)
+    ]
+    assert leaked_base == []
     leaked = sorted(name for name in imported_names(AGENT_BASE) if name in FORBIDDEN_CONTRACT_NAMES)
     assert leaked == []
     allowed = {"enum", "StrEnum", "typing", "Protocol"}
