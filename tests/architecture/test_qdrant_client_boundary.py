@@ -57,8 +57,6 @@ FORBIDDEN_QDRANT_IMPLEMENTATION = (
     "energy_trading.application.agents",
     "energy_trading.application.orchestration",
     "energy_trading.application.ports.document_embedding",
-    "energy_trading.application.ports.document_vector_index",
-    "energy_trading.application.ports.document_vector_search",
     "langchain",
     "langchain_core",
     "langgraph",
@@ -138,10 +136,21 @@ def test_qdrant_infrastructure_forbidden_dependencies() -> None:
     assert collect_import_violations(QDRANT_ROOT, FORBIDDEN_QDRANT_IMPLEMENTATION) == []
     for path in sorted(QDRANT_ROOT.rglob("*.py")):
         names = imported_names(path)
-        leaked = sorted(name for name in names if name in FORBIDDEN_CONTRACT_NAMES)
-        assert leaked == []
         assert "numpy" not in names
         assert "np" not in names
+
+
+def test_qdrant_client_foundation_does_not_import_application_document_contracts() -> None:
+    names = imported_names(QDRANT_CLIENT)
+    leaked = sorted(name for name in names if name in FORBIDDEN_CONTRACT_NAMES)
+    assert leaked == []
+    assert "energy_trading.application.errors" not in names
+    assert "ConflictError" not in names
+    assert "InvalidRequestError" not in names
+    assert "DependencyUnavailableError" not in names
+    assert "energy_trading.application.ports.document_vector_index" not in names
+    assert "energy_trading.application.ports.document_vector_search" not in names
+    assert "energy_trading.application.ports.document_extraction" not in names
 
 
 def test_create_app_does_not_wire_qdrant() -> None:
@@ -158,11 +167,17 @@ def test_create_app_does_not_wire_qdrant() -> None:
         assert "QdrantSettings" not in names
         assert "create_qdrant_client" not in names
         assert "load_qdrant_settings" not in names
+        assert "QdrantDocumentVectorIndex" not in names
+        assert "QdrantDocumentVectorSearch" not in names
+        assert "QdrantDocumentVectorConfig" not in names
     call_names = _create_app_call_names(API_APP)
     assert "create_qdrant_client" not in call_names
     assert "AsyncQdrantClient" not in call_names
     assert "QdrantSettings" not in call_names
     assert "load_qdrant_settings" not in call_names
+    assert "QdrantDocumentVectorIndex" not in call_names
+    assert "QdrantDocumentVectorSearch" not in call_names
+    assert "QdrantDocumentVectorConfig" not in call_names
     lowered = API_APP.read_text(encoding="utf-8").lower()
     assert "qdrant" not in lowered
 

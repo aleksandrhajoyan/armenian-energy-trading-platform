@@ -459,5 +459,27 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Application, API, domain, and ML never import Qdrant SDK types. `QdrantSettings` is separate from `AppSettings` and does not import `qdrant_client`. Process health does not require Qdrant environment variables.
   - The optional API key is `SecretStr | None`. Callers must not build or log a credential-bearing URL.
   - FastEmbed, Qdrant `models.Document` inference, and `cloud_inference` are not used. Embeddings remain produced through `DocumentEmbeddingPort`.
-  - Collection schema, vector dimension, distance metric, and point/payload semantics remain deferred to the document-vector adapter slice. A running Qdrant service remains deferred to the service-profile slice.
-- **Consequences:** Tests can construct `AsyncQdrantClient` against an unreachable host without a server. A later adapter can implement `DocumentVectorIndexPort` and `DocumentVectorSearchPort` using this factory without changing application signatures. Compose Qdrant and live tests are still future work.
+  - Collection schema, vector-size provisioning in Qdrant, and distance metric remain deferred. Point identity, closed payload, and insert-only writes are specified in ADR-033. A running Qdrant service remains deferred to the service-profile slice.
+- **Consequences:** Tests can construct `AsyncQdrantClient` against an unreachable host without a server. Chunk 23 adapters implement `DocumentVectorIndexPort` and `DocumentVectorSearchPort` using this factory without changing application signatures. Compose Qdrant and live tests are still future work.
+
+---
+
+## ADR-033 — Qdrant document points use deterministic identity and insert-only verified writes
+
+- **Status:** Accepted
+- **Context:** ADR-005 selected Qdrant as the local/dev vector database. ADR-029/030/031 published application-owned embedding, indexing, and retrieval ports. ADR-032 added an infrastructure-only `AsyncQdrantClient` without points or collections. Ordinary Qdrant upsert overwrite would violate application exact-retry/conflict semantics. Exposing Qdrant scores, point IDs, or open metadata payloads would leak infrastructure into application DTOs. Collection creation and distance choice still cannot be made until embedding-model/provisioning work exists.
+- **Decision:**
+  - ADR-005, ADR-029, ADR-030, ADR-031, and ADR-032 remain Accepted and are not superseded.
+  - Application ports remain Qdrant-free. Concrete adapters `QdrantDocumentVectorIndex` and `QdrantDocumentVectorSearch` structurally implement the existing ports in infrastructure.
+  - There is no generic `VectorStore`, `DocumentVectorStorePort`, or `QdrantVectorStorePort`. Index and search stay separate application abstractions and may share one client and one infrastructure `QdrantDocumentVectorConfig` (`collection_name`, `vector_size`).
+  - Qdrant point UUID derives deterministically (UUID5 over an unambiguous JSON encoding) from application identity `(document_id, chunk_id)`. Raw document/chunk strings are never used as point IDs. Point IDs do not appear on application DTOs.
+  - Payload is closed to normalized chunk fields plus an integrity fingerprint: `document_id`, `chunk_id`, `ordinal`, `text`, `page_number`, `content_sha256`. No arbitrary metadata, paths, URLs, OCR/provider objects, scores, or embedding-model fields.
+  - Exact application-entry fingerprint is SHA-256 over a deterministic serialization of `DocumentVectorIndexEntry`, including the embedding vector via exact stable `float.hex()` representation. The fingerprint is stored as hex `content_sha256`; the vector is not duplicated in payload for conflict detection. Qdrant's stored float representation is not compared.
+  - Ordinary Qdrant upsert overwrite semantics are not used. Writes use `UpdateMode.INSERT_ONLY` with `wait=True`.
+  - Pre-read and post-write retrieval (`with_payload=True`, `with_vectors=False`) enforce exact retry versus conflict. Matching fingerprint is an idempotent no-op. Differing fingerprint for the same identity is `ConflictError`. Malformed stored payload is `DependencyUnavailableError`, not an application conflict.
+  - There is no cross-entry transactional guarantee. Partial physical effects from concurrent writers are acceptable under existing port semantics. Exact retries remain safe.
+  - Search uses `query_points` with already-produced numeric query vectors. Qdrant scores remain infrastructure-only and are discarded. Result order is the backend ranking order. Returned values are existing `ExtractedDocumentChunk` objects.
+  - Collection creation, vector-size provisioning inside Qdrant, and distance choice are separate deployment infrastructure concerns. These adapters assume a future-provisioned collection.
+  - Qdrant inference remains disabled. Embeddings stay behind `DocumentEmbeddingPort`. Query-text embedding remains deferred.
+  - Adapters do not own `AsyncQdrantClient` lifecycle. A future composition root remains responsible for `await client.close()`. `create_app()` stays unwired.
+- **Consequences:** Offline fakes can prove identity, fingerprint, insert-only conflict, concurrent-writer, and search-translation behavior without a Qdrant process. Live collection provisioning, distance selection, Compose, and API wiring remain later work.

@@ -1,13 +1,21 @@
-"""Async Qdrant HTTP client foundation.
+"""Async Qdrant HTTP client foundation and document vector adapters.
 
-This package exposes the lazy ``AsyncQdrantClient`` factory. It does not
-create a global client, connect on import, manage collections, or implement
-document index/search ports. Future composition roots own client lifecycle
-(``close``) and wiring.
+This package exposes the lazy ``AsyncQdrantClient`` factory and the offline
+document index/search adapters. It does not create a global client, connect on
+import, manage collections, or wire ``create_app()``. Future composition roots
+own client lifecycle (``close``) and wiring.
 """
 
 from energy_trading.infrastructure.vector_store.qdrant.client import create_qdrant_client
+from energy_trading.infrastructure.vector_store.qdrant.document_vector import (
+    QdrantDocumentVectorConfig,
+    QdrantDocumentVectorIndex,
+    QdrantDocumentVectorSearch,
+)
 
 __all__ = [
+    "QdrantDocumentVectorConfig",
+    "QdrantDocumentVectorIndex",
+    "QdrantDocumentVectorSearch",
     "create_qdrant_client",
 ]
