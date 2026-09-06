@@ -9,7 +9,9 @@ from tests.architecture.import_inspection import (
     SRC_ROOT,
     annotation_type_names,
     collect_import_violations,
+    imported_modules,
     imported_names,
+    is_forbidden,
 )
 
 ORCHESTRATION_ROOT = SRC_ROOT / "energy_trading" / "application" / "orchestration"
@@ -149,7 +151,14 @@ def _base_names(class_def: ast.ClassDef) -> set[str]:
 
 
 def test_orchestration_state_does_not_import_outer_layers_or_vendors() -> None:
-    assert collect_import_violations(ORCHESTRATION_ROOT, FORBIDDEN_PREFIXES) == []
+    state_violations = [
+        f"{STATE_MODULE.relative_to(SRC_ROOT)} imports {module}"
+        for module in sorted(imported_modules(STATE_MODULE))
+        if is_forbidden(module, FORBIDDEN_PREFIXES)
+    ]
+    assert state_violations == []
+    package_forbidden = tuple(prefix for prefix in FORBIDDEN_PREFIXES if prefix != "langgraph")
+    assert collect_import_violations(ORCHESTRATION_ROOT, package_forbidden) == []
     leaked = sorted(name for name in imported_names(STATE_MODULE) if name in FORBIDDEN_TYPE_NAMES)
     assert leaked == []
     extras = (

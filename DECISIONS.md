@@ -60,10 +60,10 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 
 ## ADR-007 — LangGraph for application orchestration
 
-- **Status:** Accepted (planned; not implemented)
+- **Status:** Accepted (conceptual selection; first executable skeleton is ADR-038)
 - **Context:** Thirteen agents and five business phases need explicit routing, parallel Phase 2 join, retries, fallback, and workflow status.
 - **Decision:** LangGraph lives in the application layer. Nodes are thin. The Chief Orchestrator Agent owns graph state and policy. Conceptual flow: contract → parallel ingestion → ML forecasting → portfolio/risk → trading strategy → market-clearing input/result → settlement.
-- **Consequences:** LangGraph versioning and debugging become skills for the team. Orchestration could later move to another graph/workflow library without changing domain contracts. Graph must not contain ML training or DAM arithmetic.
+- **Consequences:** LangGraph versioning and debugging become skills for the team. Orchestration could later move to another graph/workflow library without changing domain contracts. Graph must not contain ML training or DAM arithmetic. Chunk 28 / ADR-038 implements only `START → workflow_entry → END`; five-phase routing remains future work.
 
 ---
 
@@ -541,8 +541,8 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - No base class or inheritance is required. Future agents satisfy the protocol structurally.
   - Request and result types remain specific to later agents. This chunk does not constrain them to one canonical model.
   - There is no generic payload dictionary, `Any`, `Mapping`, or shared `AgentResult` envelope.
-  - LangGraph does not define agent interfaces. When added, it must call agents through `AgentPort`.
-  - The LangGraph dependency remains deferred. No LangChain, OpenAI, Anthropic, or other agent SDK is installed.
+  - LangGraph does not define agent interfaces. When it invokes agents, it must call them through `AgentPort`.
+  - Chunk 28 installs LangGraph for a no-op graph skeleton only (ADR-038). No LangChain, OpenAI, Anthropic, or other agent SDK is installed as a direct dependency, and no agent is wired.
   - No registry, factory, shared workflow snapshot, retry, or fallback policy is added.
   - Existing `ApplicationError` types remain the expected-failure vocabulary. No `AgentError` hierarchy is introduced.
 - **Consequences:** Orchestration and tests can type against `AgentPort` with structural fakes before any agent exists. Each later agent can introduce a precise request/result pair without changing this seam. Graph runtime, snapshots, and retries stay later chunks.
@@ -560,5 +560,24 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - `WorkflowState` carries explicit `workflow_id`, `portfolio_id`, `delivery_date`, `correlation_id`, `phase`, `status`, and accumulated canonical `AdapterDiagnostic` values. Identifiers are opaque non-empty strings after surrounding whitespace is stripped; UUID syntax and FastAPI `X-Correlation-ID` rules are not duplicated. `delivery_date` is an actual `datetime.date`, not a `datetime` and not a timezone-bearing instant. No DAM interval is inferred.
   - There is no generic payload bag (`dict`, `Mapping`, `Any`, `TState`, metadata/artifacts/context). Phase-specific canonical output slots (`weather_records`, forecasts, bids, settlements, and similar) are not pre-created.
   - Construction validates field types and identifier non-emptiness only. There is no state machine: phase and status are not cross-validated, and there are no `advance`/`transition`/`mark_*` helpers.
-  - No Redis/PostgreSQL persistence, CAS, locks, retries, fallback, routing, or graph compilation is implied. LangGraph remains deferred and must consume this contract rather than redefine it. ADR-007 and ADR-036 remain Accepted and are not superseded.
+  - No Redis/PostgreSQL persistence, CAS, locks, retries, fallback, routing, or graph compilation is implied. LangGraph must consume this contract rather than redefine it. ADR-007 and ADR-036 remain Accepted and are not superseded. Chunk 28 / ADR-038 consumes this snapshot as the graph schema without changing it.
 - **Consequences:** Tests and later graph nodes can hold a typed snapshot before any runtime exists. A different orchestration framework can reuse the same contract. Transition policy, persistence, and concrete agents remain later chunks.
+
+---
+
+## ADR-038 — LangGraph is a thin application-layer runtime over application-owned workflow state
+
+- **Status:** Accepted
+- **Context:** ADR-007 selected LangGraph conceptually as the application orchestration engine. Chunk 26 published `AgentPort`. Chunk 27 published framework-neutral `WorkflowState`. Installing LangGraph without a deliberately tiny first seam would invite five-phase routing, agent wiring, retries, and persistence in one drop. The first executable integration must prove only that LangGraph can consume the already-published snapshot.
+- **Decision:**
+  - ADR-007, ADR-036, and ADR-037 remain Accepted and are not superseded. Chunk 28 implements only LangGraph's first executable skeleton, not the Chief Orchestrator and not five-phase routing.
+  - LangGraph is a direct application-runtime dependency with constraint `langgraph>=1.2.11,<1.3`. That range is the current reviewed pin, not a claim that 1.2.x is permanent; later upgrades require normal dependency review.
+  - LangGraph belongs to application orchestration. Production imports are confined to `energy_trading.application.orchestration.graph`. `state.py`, agents, domain, infrastructure, ML, and API remain LangGraph-free.
+  - Chunk 27 `WorkflowState` remains framework-neutral and authoritative. LangGraph consumes that contract as `state_schema`. There is no second graph state schema, TypedDict shadow, or Pydantic copy.
+  - The public factory is `build_workflow_graph()`. Every call constructs and compiles a fresh graph. There is no module-global compiled graph, singleton, or registry.
+  - Initial topology is only `START → workflow_entry → END`. `workflow_entry` is a private async no-op node: it performs no I/O, does not mutate state, and returns an empty LangGraph state update. The update changes no application state.
+  - Compilation is plain. No checkpointer, store, cache, interrupt, durable execution, Redis saver, or PostgreSQL saver is configured.
+  - No concrete agent is wired. The graph does not import `AgentPort` / `AgentName` and does not call use cases.
+  - No five-phase routing, conditional edges, retries, fallback, LangChain messages, or LLM provider dependency is added. Direct `langchain` is not a project dependency. Transitive `langchain-core` may exist because LangGraph requires it; project source must not import it.
+  - Future graph expansion (phase nodes, retries/fallback, agent invocation, persistence) must happen in separate reviewed chunks.
+- **Consequences:** The repository can compile and asynchronously invoke a no-op graph over frozen `WorkflowState` without encoding business workflow. Later chunks can add routing and policy without redefining state.

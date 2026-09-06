@@ -99,7 +99,7 @@ Each agent tested with port fakes. Assert canonical in/out. Especially: Consumer
 
 ### LangGraph routing tests
 
-When a graph exists: contract → parallel ingestion join → forecast → risk → strategy → clearing → settlement. Retry/fallback/degraded flags. Nodes stay thin (no business formulas in node bodies — architecture assertion as feasible). Nodes depend on application abstractions only.
+Chunk 28 covers only the no-op skeleton, not business routing. Planned later: contract → parallel ingestion join → forecast → risk → strategy → clearing → settlement. Retry/fallback/degraded flags. Nodes stay thin (no business formulas in node bodies — architecture assertion as feasible). Nodes depend on application abstractions only. Those five-phase routing tests do not exist yet.
 
 ### Infrastructure integration tests
 
@@ -302,7 +302,12 @@ Chunk 26 application agent execution contract tests:
 Chunk 27 application orchestration state contract tests:
 
 - Unit tests (`tests/unit/application/orchestration/test_state.py`): `WorkflowPhase` is a `StrEnum` with exactly 5 members (`contract`, `ingestion`, `forecasting`, `risk_and_bid`, `settlement`); `WorkflowStatus` is a `StrEnum` with exactly 4 members (`pending`, `running`, `succeeded`, `failed`). Valid frozen `WorkflowState` construction; identifier whitespace normalization; blank and non-string identifiers fail; `delivery_date` accepts `date` and rejects `datetime`; wrong phase/status types fail; empty diagnostics succeed; one or many real `AdapterDiagnostic` values succeed; list and wrong-type diagnostics fail; instance is frozen; diagnostics tuple cannot be mutated through the contract; identical values compare equal. No transition/execution methods exist. No live service.
-- Architecture test (`tests/architecture/test_orchestration_state_boundary.py`): the orchestration state module imports only stdlib plus canonical `AdapterDiagnostic`. `WorkflowState` is not generic and has no `TypeVar`/`Any`/`dict`/`Mapping` surface. Exact fields are `workflow_id`, `portfolio_id`, `delivery_date`, `correlation_id`, `phase`, `status`, and `diagnostics`. No payload/data/context/metadata/artifacts bag, no agent request/result fields, no retry/fallback/routing fields, no persistence/cache fields, and no LangGraph types. Construction validation only (`__post_init__`). `create_app()` remains unwired. No concrete agent is introduced.
+- Architecture test (`tests/architecture/test_orchestration_state_boundary.py`): the orchestration state module imports only stdlib plus canonical `AdapterDiagnostic`. `WorkflowState` is not generic and has no `TypeVar`/`Any`/`dict`/`Mapping` surface. Exact fields are `workflow_id`, `portfolio_id`, `delivery_date`, `correlation_id`, `phase`, `status`, and `diagnostics`. No payload/data/context/metadata/artifacts bag, no agent request/result fields, no retry/fallback/routing fields, no persistence/cache fields, and no LangGraph types. Construction validation only (`__post_init__`). `create_app()` remains unwired. No concrete agent is introduced. Package-wide vendor forbids still apply except that `langgraph` is allowed only in the graph module.
+
+Chunk 28 minimal LangGraph skeleton tests:
+
+- Unit tests (`tests/unit/application/orchestration/test_graph.py`): installed LangGraph satisfies `>=1.2.11,<1.3`; `build_workflow_graph()` returns a compiled graph; repeated factory calls create independent instances; `WorkflowState` is the state schema; exactly one application node `workflow_entry`; effective topology is `START → workflow_entry → END`; no phase-specific nodes; no conditional branches; async `ainvoke` preserves all seven snapshot fields including canonical `AdapterDiagnostic` values and does not mutate the original frozen `WorkflowState`. No live service.
+- Architecture test (`tests/architecture/test_langgraph_boundary.py`): production `langgraph` imports exist only in `application/orchestration/graph.py`. `state.py`, agent base, domain, infrastructure, ML, API, and unrelated application ports/use cases remain LangGraph-free. The graph module imports no infrastructure/ML/API/agents/LangChain and does not use messages, conditional edges, reducers, checkpointers, stores, or `AgentPort`/`AgentName`. `create_app()` remains unwired.
 
 ## CI expectations (future)
 

@@ -51,7 +51,7 @@ The currently justified local service foundations are complete: TimescaleDB/Post
 
 - [x] **Chunk 26** — Application Agent Execution Contract Boundary
 - [x] **Chunk 27** — Application Orchestration State Contract — LangGraph-free
-- [ ] LangGraph skeleton
+- [x] **Chunk 28** — Minimal LangGraph Skeleton
 - [ ] Retries / fallback policy hooks
 
 ## Phase 4 — Ingestion agents
@@ -115,5 +115,5 @@ The currently justified local service foundations are complete: TimescaleDB/Post
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 27
-- **Next:** LangGraph skeleton. Do not mark concrete agents complete. Production collection provisioning, production distance selection, embedding implementation, RAG, n8n workflows, and regulatory agents remain deferred.
+- **Completed:** Chunk 0 through Chunk 28
+- **Next:** Retries / fallback policy hooks. Do not mark concrete agents complete. Production collection provisioning, production distance selection, embedding implementation, RAG, n8n workflows, and regulatory agents remain deferred.
