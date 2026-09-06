@@ -256,6 +256,49 @@ There is no concrete vector-store implementation and no Qdrant schema in this ch
 
 ---
 
+## Application document vector retrieval contract (not a domain entity)
+
+`DocumentVectorSearchQuery` is an **application orchestration DTO** defined in `energy_trading.application.ports`. It is a frozen dataclass, not a canonical domain model, not a score DTO, not a Qdrant schema, and not a substitute for `RegulatoryConstraint`.
+
+`DocumentVectorSearchQuery` fields:
+
+- `vector` (non-empty `tuple` of finite Python `float` values)
+- `limit` (strictly positive integer; `bool` is rejected)
+
+Vector invariants:
+
+- the value must be a tuple
+- at least one element
+- each element is a finite `float` (zero and negatives are allowed)
+- `NaN` and positive or negative infinity are rejected
+- the vector is not automatically normalized
+- no hardcoded dimension; the DTO does not know the configured index dimension
+- no query text, provider, model, collection, distance metric, score, filter, offset, or payload fields
+
+Limit invariants:
+
+- the value must be an actual integer (`bool` is not accepted)
+- must be strictly greater than zero
+- no default limit and no hardcoded business top-k
+
+The application owns `DocumentVectorSearchPort`. The public async operation is `search(query: DocumentVectorSearchQuery) -> tuple[ExtractedDocumentChunk, ...]`.
+
+`search()` semantics:
+
+- input is an already-embedded numeric query; this port does not embed query text
+- results are existing normalized `ExtractedDocumentChunk` values, not embeddings, scores, point IDs, or backend payloads
+- tuple order is relevance ranking: most relevant to least relevant according to the concrete implementation
+- the application contract does not expose cosine, dot-product, Euclidean, or raw backend scores
+- `0 <= len(results) <= query.limit`; fewer than `limit` is valid; results are not fabricated to meet `limit`
+- an empty result tuple is a valid search outcome and is not `ResourceNotFoundError`
+- logical identity `(document_id, chunk_id)` appears at most once in one result; the same `chunk_id` under different documents remains distinct
+- a query vector incompatible with a future configured index dimension may be sanitized `InvalidRequestError`
+- unusable backend responses (duplicate identities, too many hits, malformed payloads, reconstructable-chunk failures) are sanitized `DependencyUnavailableError`
+
+There is no concrete vector-store implementation, no Qdrant schema, and no text-query embedding in this chunk.
+
+---
+
 ## Intentionally deferred contracts
 
 Additional contracts (tariff tables, official bid-message envelopes, imbalance components, user/identity) will be added when a chunk has verified requirements. Do not pre-create parallel “shadow” schemas in application code.

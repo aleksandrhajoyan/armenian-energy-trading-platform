@@ -16,6 +16,10 @@ from energy_trading.application.ports.document_vector_index import (
     DocumentVectorIndexEntry,
     DocumentVectorIndexPort,
 )
+from energy_trading.application.ports.document_vector_search import (
+    DocumentVectorSearchPort,
+    DocumentVectorSearchQuery,
+)
 from energy_trading.application.ports.structured_ingestion import (
     StructuredIngestionPort,
     StructuredIngestionResult,
@@ -31,6 +35,8 @@ __all__ = [
     "DocumentExtractionResult",
     "DocumentVectorIndexEntry",
     "DocumentVectorIndexPort",
+    "DocumentVectorSearchPort",
+    "DocumentVectorSearchQuery",
     "ExtractedDocumentChunk",
     "StructuredIngestionPort",
     "StructuredIngestionResult",

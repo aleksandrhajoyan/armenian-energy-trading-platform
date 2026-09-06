@@ -426,4 +426,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Retrieval/search is a separate future application concern. This port exposes only `index()`.
   - Collection names, point IDs, payload schema, distance metric, and client objects remain infrastructure concerns and are absent from the public contract.
   - Invalid batch semantics such as mixed vector dimensions are `InvalidRequestError`. Expected backend failure in a future adapter is sanitized `DependencyUnavailableError`. No retry policy belongs on the port.
-- **Consequences:** Application call sites and tests can exercise indexing identity, idempotency, and conflict rules with a structural fake. A later Qdrant adapter can implement this port without changing application signatures. Query embeddings and search remain undesigned until the retrieval chunk.
+- **Consequences:** Application call sites and tests can exercise indexing identity, idempotency, and conflict rules with a structural fake. A later Qdrant adapter can implement this port without changing application signatures. Query embeddings remain deferred. Search is owned by a separate retrieval port (ADR-031).
+
+---
+
+## ADR-031 — Vector retrieval exposes ranked normalized chunks, not backend search types
+
+- **Status:** Accepted
+- **Context:** ADR-005 selected Qdrant as the local/dev vector database. ADR-029 published application-owned embedding generation. ADR-030 published application-owned indexing without retrieval. Exposing Qdrant point IDs, payloads, collection names, distance metrics, or raw similarity scores on an application search port would couple orchestration to one vendor and leak backend ranking types into agents. Combining indexing and search into a generic `VectorStore` would mix distinct consumers. Embedding query text on this port would collapse deferred query-embedding work into retrieval.
+- **Decision:**
+  - ADR-005 remains Accepted and is not superseded. Qdrant remains the chosen local/dev vector-store technology. Concrete Qdrant implementation is still deferred and is now the next infrastructure concern.
+  - Application owns retrieval/search through `DocumentVectorSearchPort` and `DocumentVectorSearchQuery`.
+  - Search consumes an already-embedded numeric query vector plus a positive `limit`. Query-text embedding remains a separate deferred concern and does not extend `DocumentEmbeddingPort`.
+  - The port returns ranked normalized `ExtractedDocumentChunk` values. Tuple order conveys ranking. There is no score DTO and no raw similarity/distance score on the application contract.
+  - Collection names, point IDs, filters, distance metrics, score thresholds, pagination, namespace/tenant, and Qdrant objects are absent from the public contract.
+  - Indexing remains `DocumentVectorIndexPort`. Retrieval remains `DocumentVectorSearchPort`. There is no generic `VectorStore`.
+  - Zero matches are a valid empty tuple, not `ResourceNotFoundError`. Logical identity `(document_id, chunk_id)` is unique within one response.
+  - A query vector incompatible with a configured index dimension, when clearly a request incompatibility, is sanitized `InvalidRequestError`. Unusable backend results (duplicate identities, too many hits, malformed payloads, reconstructable-chunk failures) are sanitized `DependencyUnavailableError`. No retry policy belongs on the port.
+- **Consequences:** Application call sites and tests can exercise ranking, limit, uniqueness, empty-result, and sanitized failure semantics with a structural fake before any vector database exists. A later Qdrant adapter can implement this port without changing application signatures. Query embedding, collection configuration, filters, and live Qdrant remain later work.

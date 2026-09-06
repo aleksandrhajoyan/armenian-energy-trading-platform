@@ -39,7 +39,7 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 - [x] **Chunk 18** — Redis Service Profile and Live Cache Integration
 - [x] **Chunk 19** — Application Document Embedding Port Boundary
 - [x] **Chunk 20** — Application Document Vector Indexing Boundary
-- [ ] Application document retrieval/search boundary
+- [x] **Chunk 21** — Application Document Vector Retrieval Boundary
 - [ ] Concrete Qdrant infrastructure
 - [ ] Qdrant service profile/live integration
 - [ ] Docker Compose remaining services, when justified
@@ -112,5 +112,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 20
-- **Next:** Application Document Retrieval/Search Boundary — Qdrant-free. Concrete Qdrant remains a later slice.
+- **Completed:** Chunk 0 through Chunk 21
+- **Next:** Concrete Qdrant Infrastructure — Offline. Query-text embedding remains deferred and is not implemented work.
