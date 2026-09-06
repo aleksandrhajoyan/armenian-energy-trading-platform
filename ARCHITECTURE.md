@@ -74,6 +74,7 @@ This rule is enforced by AST import inspection:
 - `tests/architecture/test_time_series_gap_boundary.py` — gap reports stay infrastructure-local; application ports expose no gap ranges, missing-timestamp collections, or coverage windows.
 - `tests/architecture/test_dlq_persistence_boundary.py` — application `DeadLetterQueuePort` stays free of filesystem/raw-payload/database types; `FilesystemDeadLetterQueue` may depend on application errors and domain contracts but not on FastAPI, pandas/openpyxl, HTTP clients, databases, brokers, LLM/graph libraries, ML libraries, or Consumption CSV/Excel adapters.
 - `tests/architecture/test_document_extraction_boundary.py` — application `DocumentExtractionPort` and extraction DTOs expose no Path/bytes/URL/dict/OCR/PDF/Qdrant/LLM surface; `extract()` accepts only `self`.
+- `tests/architecture/test_document_embedding_boundary.py` — application `DocumentEmbeddingPort` and `DocumentChunkEmbedding` expose no Path/bytes/URL/dict/Qdrant/provider/model/NumPy/search surface; `embed()` accepts only `self` and already-normalized `ExtractedDocumentChunk` values.
 - `tests/architecture/test_postgres_persistence_boundary.py` — domain/application/API do not import SQLAlchemy, psycopg, Alembic, or the PostgreSQL factory package; `DatabaseSettings` stays free of runtime engine objects; PostgreSQL infrastructure imports none of FastAPI, agents, ML, ingestion adapters, Redis, or Qdrant.
 - `tests/architecture/test_consumption_repository_boundary.py` — `ConsumptionRepositoryPort` exposes no SQLAlchemy/session/raw-source types; `PostgresConsumptionRepository` may import application errors and canonical Consumption contracts but not FastAPI, adapters, Redis, Qdrant, or agents.
 - `tests/architecture/test_postgres_compose_profile.py` — `compose.yaml` pins `timescale/timescaledb:2.29.2-pg17`, gates `timescaledb` on the `postgres` profile, binds 127.0.0.1 only, uses a named volume and `pg_isready`, and defines no FastAPI/Qdrant/n8n/admin services.
@@ -124,6 +125,7 @@ Broader ML/agent import rules remain for later chunks.
 │       │   │   ├── cache.py
 │       │   │   ├── consumption_repository.py
 │       │   │   ├── dlq.py
+│       │   │   ├── document_embedding.py
 │       │   │   ├── document_extraction.py
 │       │   │   └── structured_ingestion.py
 │       │   └── use_cases/
@@ -182,7 +184,7 @@ Broader ML/agent import rules remain for later chunks.
 └── docs/
 ```
 
-Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. An application-owned unstructured document extraction boundary (`DocumentExtractionPort`, `DocumentExtractionResult`, `ExtractedDocumentChunk`) is implemented; there is no concrete PDF/OCR adapter. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Consumption duplicate-timestamp policy, optional interval-grid alignment, and internal compact gap reporting live under `structured/time_series/`. Interim filesystem-backed DLQ metadata persistence lives under `infrastructure/persistence/`. Async PostgreSQL/TimescaleDB engine and session factories live under `infrastructure/persistence/postgres/`. Typed `DatabaseSettings` live under `shared/config/database.py` and are loaded separately from process-health `AppSettings`. Typed `RedisSettings` live under `shared/config/redis.py` and are loaded separately from process health. Alembic owns a bootstrap migration plus Consumption `energy_trading.consumption_observations` (Timescale hypertable on `timestamp`). Application-owned `ConsumptionRepositoryPort` is implemented by unwired `PostgresConsumptionRepository`. An optional Compose `postgres` profile runs `timescale/timescaledb:2.29.2-pg17` on 127.0.0.1 only. Application-owned `CachePort[TValue]` is an async, generic, TTL-bound cache Protocol. Infrastructure `RedisCache[TValue]` structurally implements that port using redis-py `redis.asyncio.Redis`, an injected infrastructure-local `CacheCodec[TValue]`, and SHA-256 backend keys. Construction is lazy and unwired: no global client and no `create_app()` Redis lifecycle. An optional Compose `redis` profile runs `redis:8.2.9-alpine` on 127.0.0.1 only, with password authentication and persistence disabled. No other canonical tables or repositories exist. Empty architectural directories still use `.gitkeep`.
+Python packaging is in place: `pyproject.toml`, `uv.lock`, `.python-version` (CPython 3.12). Domain contracts and value objects are implemented under `src/energy_trading/domain/`. Application structured-ingestion ports are implemented. An application-owned unstructured document extraction boundary (`DocumentExtractionPort`, `DocumentExtractionResult`, `ExtractedDocumentChunk`) is implemented; there is no concrete PDF/OCR adapter. An application-owned document embedding boundary (`DocumentEmbeddingPort`, `DocumentChunkEmbedding`) is implemented; there is no concrete embedding provider, model, or Qdrant adapter. Deterministic schema field resolution lives under `src/energy_trading/infrastructure/adapters/structured/schema_mapping/`. Concrete structured adapters are `ConsumptionCsvAdapter` and `ConsumptionExcelAdapter`. Shared Consumption field-profile/MW-safety policy lives in `consumption_mapping.py` beside those adapters. Explicit Consumption MW/kW and IANA timezone normalization lives under `structured/normalization/`. Consumption duplicate-timestamp policy, optional interval-grid alignment, and internal compact gap reporting live under `structured/time_series/`. Interim filesystem-backed DLQ metadata persistence lives under `infrastructure/persistence/`. Async PostgreSQL/TimescaleDB engine and session factories live under `infrastructure/persistence/postgres/`. Typed `DatabaseSettings` live under `shared/config/database.py` and are loaded separately from process-health `AppSettings`. Typed `RedisSettings` live under `shared/config/redis.py` and are loaded separately from process health. Alembic owns a bootstrap migration plus Consumption `energy_trading.consumption_observations` (Timescale hypertable on `timestamp`). Application-owned `ConsumptionRepositoryPort` is implemented by unwired `PostgresConsumptionRepository`. An optional Compose `postgres` profile runs `timescale/timescaledb:2.29.2-pg17` on 127.0.0.1 only. Application-owned `CachePort[TValue]` is an async, generic, TTL-bound cache Protocol. Infrastructure `RedisCache[TValue]` structurally implements that port using redis-py `redis.asyncio.Redis`, an injected infrastructure-local `CacheCodec[TValue]`, and SHA-256 backend keys. Construction is lazy and unwired: no global client and no `create_app()` Redis lifecycle. An optional Compose `redis` profile runs `redis:8.2.9-alpine` on 127.0.0.1 only, with password authentication and persistence disabled. No other canonical tables or repositories exist. Empty architectural directories still use `.gitkeep`.
 
 ## Anti-Corruption Layer
 
@@ -315,15 +317,23 @@ The application-facing port and immutable result envelope are implemented. Deter
 
 ```
 PDF / Document
-  → future infrastructure extraction/OCR adapter
-  → DocumentExtractionPort / DocumentExtractionResult
-  → future embedding/indexing
+  → future extraction/OCR infrastructure
+  → DocumentExtractionPort
+  → ExtractedDocumentChunk
+  → DocumentEmbeddingPort
+  → DocumentChunkEmbedding
+  → future vector indexing/storage port
   → future Qdrant
-  → future regulatory retrieval/interpretation
+  → future retrieval/search
+  → future regulatory interpretation
   → RegulatoryConstraint
 ```
 
-Chunk 12 implements the application-owned extraction boundary only. `DocumentExtractionPort.extract()` accepts no document bytes, path, URL, or provider payload. The application may receive immutable `ExtractedDocumentChunk` values, canonical `AdapterDiagnostic` values, and canonical `DLQRecord` metadata (`payload_reference` only). Document bytes, vendor OCR schemas, bounding boxes, parser objects, and raw chunk dictionaries stay inside future infrastructure adapters. Extracted text is **not** a `RegulatoryConstraint`. There is no concrete PDF/OCR adapter, embedding port, vector store, Qdrant client, RAG/retrieval path, or Regulatory Intelligence Agent in this chunk.
+The application owns extraction and embedding abstractions. Concrete extraction/OCR and embedding implementations remain outer-layer concerns. Embedding generation is not a Qdrant responsibility. Vector indexing/storage and retrieval/search remain separate future application boundaries. `DocumentChunkEmbedding` is an application orchestration DTO: it is not a domain contract and not a `RegulatoryConstraint`.
+
+Chunk 12 implements the application-owned extraction boundary. `DocumentExtractionPort.extract()` accepts no document bytes, path, URL, or provider payload. The application may receive immutable `ExtractedDocumentChunk` values, canonical `AdapterDiagnostic` values, and canonical `DLQRecord` metadata (`payload_reference` only). Document bytes, vendor OCR schemas, bounding boxes, parser objects, and raw chunk dictionaries stay inside future infrastructure adapters. Extracted text is **not** a `RegulatoryConstraint`.
+
+Chunk 19 implements the application-owned embedding boundary. `DocumentEmbeddingPort.embed()` accepts only already-normalized `ExtractedDocumentChunk` values and returns `DocumentChunkEmbedding` values (opaque `document_id` / `chunk_id` plus a finite float vector). There is no concrete PDF/OCR adapter, embedding provider/model, vector indexing port, retrieval/search port, Qdrant client, RAG path, or Regulatory Intelligence Agent.
 
 ## DLQ conceptual behavior
 
@@ -477,7 +487,7 @@ Unexpected Exception
 
 ## Testing boundaries
 
-See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, the Consumption Excel adapter provider boundary, the Consumption unit/timezone normalization boundary, the Consumption time-series validation and gap-reporting boundary, the filesystem DLQ persistence boundary, the unstructured document extraction boundary, the PostgreSQL persistence foundation boundary, the Consumption repository boundary, the Compose TimescaleDB profile, the application cache-port boundary, the Redis cache infrastructure boundary, and the Compose Redis profile. Default tests do not require a running PostgreSQL/TimescaleDB or Redis process. Live persistence tests are opt-in (`ENERGY_RUN_POSTGRES_INTEGRATION=1`) after `docker compose --profile postgres up -d timescaledb`. Live Redis cache tests are opt-in (`ENERGY_RUN_REDIS_INTEGRATION=1`) after `docker compose --profile redis up -d redis`.
+See `TESTING_STRATEGY.md`. Default tests use fixtures, not live external APIs. Architecture tests lock domain and application import rules, the structured-ingestion ACL boundary, the infrastructure schema-mapping provider/file-I/O boundary, the Consumption CSV adapter provider boundary, the Consumption Excel adapter provider boundary, the Consumption unit/timezone normalization boundary, the Consumption time-series validation and gap-reporting boundary, the filesystem DLQ persistence boundary, the unstructured document extraction boundary, the document embedding boundary, the PostgreSQL persistence foundation boundary, the Consumption repository boundary, the Compose TimescaleDB profile, the application cache-port boundary, the Redis cache infrastructure boundary, and the Compose Redis profile. Default tests do not require a running PostgreSQL/TimescaleDB or Redis process. Live persistence tests are opt-in (`ENERGY_RUN_POSTGRES_INTEGRATION=1`) after `docker compose --profile postgres up -d timescaledb`. Live Redis cache tests are opt-in (`ENERGY_RUN_REDIS_INTEGRATION=1`) after `docker compose --profile redis up -d redis`.
 
 ## Runtime baseline (implemented)
 

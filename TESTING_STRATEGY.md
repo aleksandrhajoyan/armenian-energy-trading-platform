@@ -50,7 +50,7 @@ Infrastructure integration tests against a running PostgreSQL process are **not*
 
 | Directory | Intent |
 | --- | --- |
-| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, document-extraction ports, cache port, Redis settings/client/cache adapter, infrastructure adapters, filesystem DLQ persistence, PostgreSQL engine/Alembic foundation |
+| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, document-extraction ports, document-embedding ports, cache port, Redis settings/client/cache adapter, infrastructure adapters, filesystem DLQ persistence, PostgreSQL engine/Alembic foundation |
 | `tests/integration/` | Opt-in live PostgreSQL/TimescaleDB tests (`postgres_integration`) and opt-in live Redis cache tests (`redis_integration`); other containers later |
 | `tests/architecture/` | Import-graph / layering rules |
 | `tests/fixtures/` | CSV/Excel/PDF snippets, malformed series, canonical JSON |
@@ -234,6 +234,12 @@ Chunk 18 Redis service profile and live cache tests:
 - Live server tests: authenticated `PING` returns `PONG`; Redis version is exactly `8.2.9`; unauthenticated `PING` raises redis-py `AuthenticationError` without echoing the password; `appendonly` is `no`; `save` is empty.
 - Live `RedisCache` tests: set/get round-trip; miss is `None`; overwrite; overwrite resets TTL; delete; missing delete succeeds; real expiry polled within a bounded timeout; key isolation; surrounding whitespace normalization. Codec is test-only UTF-8 `str`; no production default serializer.
 - **Default pytest remains independent of services.** The integration suite requires an explicitly started local `redis` profile. Compose Redis is stopped and removed after live validation. No live third-party APIs.
+
+Chunk 19 application document embedding port boundary tests:
+
+- Unit tests (`tests/unit/application/ports/test_document_embedding.py`): valid frozen `DocumentChunkEmbedding`; identifier whitespace normalization; empty/whitespace-only `document_id`/`chunk_id` rejected; `vector` must be a tuple; empty vector rejected; finite positive/negative/zero floats accepted; `NaN` and positive/negative infinity rejected. A test-only fake structurally satisfies async `DocumentEmbeddingPort.embed()` without inheriting an infrastructure base class and is not a production embedder. Coverage includes one-to-one batch mapping, preserved document/chunk identity, preserved input order, empty input returning an empty tuple, equal vector dimensionality in one successful batch, and a sanitized `DependencyUnavailableError`. No NumPy. No service dependency.
+- Architecture test (`tests/architecture/test_document_embedding_boundary.py`): application embedding module imports none of infrastructure/API/ML, FastAPI/Starlette, Qdrant, Redis, SQLAlchemy/psycopg/Alembic, NumPy/SciPy/sklearn/torch/tensorflow, transformers/sentence-transformers, OpenAI/LangChain/LangGraph, pandas/openpyxl, HTTP clients, or PDF/OCR libraries. Public annotations expose no `Path`/`bytes`/`dict`/`Mapping`/`Any`/ndarray/provider/Qdrant/metadata/collection/distance/search types. `embed()` accepts only `self` and `chunks: tuple[ExtractedDocumentChunk, ...]` and returns `tuple[DocumentChunkEmbedding, ...]`. API/`create_app()` remains unwired.
+- Qdrant live tests still do not exist. No embedding-provider, model-download, or vector-index integration tests are added.
 
 Still planned: fail if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 

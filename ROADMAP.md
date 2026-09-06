@@ -37,8 +37,12 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 - [x] **Chunk 16** — Application Cache Port Boundary (Redis-free)
 - [x] **Chunk 17** — Async Redis Cache Infrastructure (Offline)
 - [x] **Chunk 18** — Redis Service Profile and Live Cache Integration
-- [ ] Qdrant
-- [ ] Docker Compose with profiles (remaining services)
+- [x] **Chunk 19** — Application Document Embedding Port Boundary
+- [ ] Application document vector indexing/storage boundary
+- [ ] Application document retrieval/search boundary
+- [ ] Concrete Qdrant infrastructure
+- [ ] Qdrant service profile/live integration
+- [ ] Docker Compose remaining services, when justified
 
 ## Phase 3 — Application orchestration foundation
 
@@ -108,5 +112,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 18
-- **Next:** Next Phase 2 slice to be selected after Chunk 18 publication; Qdrant remains pending.
+- **Completed:** Chunk 0 through Chunk 19
+- **Next:** Application-owned document vector indexing/storage boundary (Qdrant-free). Retrieval/search and concrete Qdrant remain later slices.

@@ -392,3 +392,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - `create_app()` remains unwired. No Redis readiness endpoint, orchestration state, CAS, or locks.
   - ADR-006, ADR-026, and ADR-027 remain Accepted and are not superseded.
 - **Consequences:** Developers can prove the published Redis adapter against a compatible local server without starting TimescaleDB, Qdrant, or the API. API cache injection remains a later chunk.
+
+---
+
+## ADR-029 — Document embedding generation is separate from vector storage/retrieval
+
+- **Status:** Accepted
+- **Context:** ADR-005 selected Qdrant as the local/dev vector database for regulatory/document retrieval. Chunk 12 published application-owned document extraction without embeddings. Hiding embedding generation inside a future Qdrant or generic `VectorStore` abstraction would collapse distinct responsibilities: text-to-vector generation, persistence of vectors, and later search. Selecting a model SDK now would add a heavy dependency before any retrieval contract exists.
+- **Decision:**
+  - ADR-005 remains Accepted and is not superseded. Qdrant is still the planned local/dev vector database.
+  - Application owns `DocumentEmbeddingPort`. Infrastructure or `ml` may later implement it structurally. There is no infrastructure base class.
+  - The port embeds only already-normalized `ExtractedDocumentChunk` values. It does not accept document bytes, paths, URLs, OCR payloads, credentials, vendor dictionaries, or Qdrant objects.
+  - Output is `DocumentChunkEmbedding` (`document_id`, `chunk_id`, finite float `vector`). This is an application orchestration DTO, not a domain contract and not a `RegulatoryConstraint`.
+  - Embedding generation is not hidden inside Qdrant and is not a vector-index or search operation. No persistence or retrieval occurs through this port.
+  - No concrete embedding model or provider is selected. No model SDK, OpenAI, SentenceTransformers, HuggingFace, torch, tensorflow, or NumPy dependency is added.
+  - Vector indexing/storage is deferred to its own application boundary. Retrieval/search is deferred separately. Query embedding semantics are deferred until retrieval requirements are designed.
+  - No RAG, reranking, hybrid search, BM25, LangChain, LangGraph, agent, or LLM regulatory interpretation is added.
+  - Invalid caller input is `InvalidRequestError`. Unavailable or unusable embedding backends become sanitized `DependencyUnavailableError`. Public messages must not include chunk text, secrets, provider bodies, stack traces, model paths, or URLs. Retries are not part of this boundary.
+- **Consequences:** Application call sites and tests can use a structural fake before any embedding adapter exists. A later concrete implementation can satisfy this port without changing application signatures. Qdrant remains a future infrastructure concern behind a still-to-be-designed indexing/storage boundary, not behind this embedding port.

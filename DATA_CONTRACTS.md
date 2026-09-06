@@ -194,6 +194,33 @@ Valid outcomes include complete success, partial extraction, complete extraction
 
 ---
 
+## Application document embedding contract (not a domain entity)
+
+`DocumentChunkEmbedding` is an **application orchestration DTO** defined in `energy_trading.application.ports`. It is a frozen dataclass, not a canonical domain model and not a substitute for `RegulatoryConstraint`.
+
+`DocumentChunkEmbedding` fields:
+
+- `document_id` (non-empty opaque identifier; surrounding whitespace stripped)
+- `chunk_id` (non-empty opaque identifier; surrounding whitespace stripped)
+- `vector` (non-empty `tuple` of finite Python `float` values)
+
+Vector invariants:
+
+- the value must be a tuple
+- at least one element
+- each element is a finite `float` (zero and negatives are allowed)
+- `NaN` and positive or negative infinity are rejected
+- the vector is not automatically normalized
+- no cosine/dot/Euclidean semantics are assumed
+- no hardcoded dimension; dimension is `len(vector)` when needed
+- no provider, model, collection, distance metric, metadata, or payload fields
+
+The application owns `DocumentEmbeddingPort`. The public async operation is `embed(chunks: tuple[ExtractedDocumentChunk, ...]) -> tuple[DocumentChunkEmbedding, ...]`. Input chunks have already crossed the extraction ACL. An empty input tuple is valid and returns an empty tuple. One output embedding corresponds to each input chunk, in input order, with identical `document_id` and `chunk_id`. A successful batch uses one positive vector dimensionality. The port does not persist, search, retrieve, or produce `RegulatoryConstraint` values. Query embedding is deferred.
+
+There is no concrete embedding implementation in this chunk.
+
+---
+
 ## Intentionally deferred contracts
 
 Additional contracts (tariff tables, official bid-message envelopes, imbalance components, user/identity) will be added when a chunk has verified requirements. Do not pre-create parallel “shadow” schemas in application code.
