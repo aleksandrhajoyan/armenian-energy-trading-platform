@@ -44,13 +44,13 @@ Chunk 4 structured-ingestion boundary tests:
 
 `tests/architecture/test_domain_dependencies.py` uses the standard library `ast` module to fail if `energy_trading.domain` imports `energy_trading.api`, `application`, `infrastructure`, `ml`, `shared`, FastAPI, SQLAlchemy, psycopg, or Alembic. No extra architecture-testing dependency is used.
 
-Infrastructure integration tests against a running PostgreSQL process are **not** run by default. They require the Compose `postgres` profile and `ENERGY_RUN_POSTGRES_INTEGRATION=1`. Chunk 13 added offline PostgreSQL foundation tests that require no database service. Chunk 14 added offline Consumption table, migration, and repository tests that also require no database service. Redis live integration testing remains deferred until a concrete Redis implementation/service exists. Qdrant still has no live tests.
+Infrastructure integration tests against a running PostgreSQL process are **not** run by default. They require the Compose `postgres` profile and `ENERGY_RUN_POSTGRES_INTEGRATION=1`. Chunk 13 added offline PostgreSQL foundation tests that require no database service. Chunk 14 added offline Consumption table, migration, and repository tests that also require no database service. Chunk 17 added offline Redis settings, client-factory, codec, and `RedisCache` tests that require no Redis process. Redis live integration testing remains deferred until a Redis Compose service exists. Qdrant still has no live tests.
 
 ## Layout
 
 | Directory | Intent |
 | --- | --- |
-| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, document-extraction ports, cache port, infrastructure adapters, filesystem DLQ persistence, PostgreSQL engine/Alembic foundation |
+| `tests/unit/` | Domain contracts/value objects, settings, health, application errors, API envelope, observability, structured-ingestion ports, document-extraction ports, cache port, Redis settings/client/cache adapter, infrastructure adapters, filesystem DLQ persistence, PostgreSQL engine/Alembic foundation |
 | `tests/integration/` | Opt-in live PostgreSQL/TimescaleDB tests (`postgres_integration`); other containers later |
 | `tests/architecture/` | Import-graph / layering rules |
 | `tests/fixtures/` | CSV/Excel/PDF snippets, malformed series, canonical JSON |
@@ -103,7 +103,7 @@ When a graph exists: contract → parallel ingestion join → forecast → risk 
 
 ### Infrastructure integration tests
 
-Opt-in (marker) tests for PostgreSQL/TimescaleDB, Redis, Qdrant against Compose **when** those services exist. Not run by default. Redis live integration testing remains deferred until a concrete Redis implementation/service exists. Still no live third-party market APIs.
+Opt-in (marker) tests for PostgreSQL/TimescaleDB, Redis, Qdrant against Compose **when** those services exist. Not run by default. Redis live integration testing remains deferred until a Redis Compose service exists. Still no live third-party market APIs.
 
 ### API tests
 
@@ -214,8 +214,17 @@ Chunk 15 PostgreSQL/TimescaleDB service profile and live persistence tests:
 Chunk 16 application cache port boundary tests:
 
 - Unit tests (`tests/unit/application/ports/test_cache.py`): a test-only in-memory fake structurally satisfies async generic `CachePort[ConsumptionRecord]`; it does not inherit an infrastructure base class and is not a production cache. Coverage includes cache miss (`None`), typed canonical round-trip, overwrite of an existing key, replacement establishing a new TTL, deterministic expiry without wall-clock sleep, delete of an existing entry, idempotent delete of a missing key, blank/whitespace-only keys as `InvalidRequestError`, and zero/negative TTL as `InvalidRequestError`.
-- Architecture test (`tests/architecture/test_cache_boundary.py`): application `CachePort` imports none of infrastructure/API/ML, FastAPI/Starlette, Redis/`redis.asyncio`, SQLAlchemy/psycopg/Alembic, Qdrant, pandas/openpyxl, HTTP clients, LangChain/LangGraph/OpenAI, or ML libraries. Public annotations expose no Redis client/pool types, `bytes`, `dict`, `Mapping`, or `Any`. `pyproject.toml`/`uv.lock` declare no Redis package; `compose.yaml` has no Redis service; API/`create_app()` does not import or construct `CachePort` or a concrete cache; no `RedisSettings` class and no infrastructure cache `.py` implementation.
-- Redis live integration tests remain deferred until a concrete Redis implementation/service exists.
+- Architecture test (`tests/architecture/test_cache_boundary.py`): application `CachePort` imports none of infrastructure/API/ML, FastAPI/Starlette, Redis/`redis.asyncio`, SQLAlchemy/psycopg/Alembic, Qdrant, pandas/openpyxl, HTTP clients, LangChain/LangGraph/OpenAI, or ML libraries. Public annotations expose no Redis client/pool types, `bytes`, `dict`, `Mapping`, or `Any`. API/`create_app()` does not import or construct `CachePort` or a concrete cache. `compose.yaml` still has no Redis service.
+- Redis live integration tests remain deferred until a Redis Compose service exists.
+
+Chunk 17 async Redis cache infrastructure (offline) tests:
+
+- Redis settings tests (`tests/unit/test_redis_settings.py`): valid `RedisSettings`; default port 6379, DB 0, SSL false, timeout 5s, max connections 10; blank host rejected; host whitespace normalized; invalid ports rejected; negative DB rejected; zero/negative timeout and max connections rejected; optional password; blank password becomes `None`; nonblank password is not stripped; sentinel password absent from `repr`/`str`; `env_file=None` isolates local `.env`. No Redis process.
+- Client factory tests (`tests/unit/infrastructure/cache/test_redis_client.py`): `create_redis_client` returns `redis.asyncio.Redis` without connecting; host/port/db/ssl/timeouts/max connections/`decode_responses=False` propagate; password is supplied internally; no module-global client; `aclose()` in cleanup. No PING/GET/SET/DELETE against a server.
+- Codec tests (`tests/unit/infrastructure/cache/test_codec.py`): a test-only typed codec structurally satisfies `CacheCodec[ConsumptionRecord]`; encode/decode round-trip; decode failure is `CacheCodecError`.
+- `RedisCache` tests (`tests/unit/infrastructure/cache/test_redis_cache.py`): fake Redis command surface only. Structural `CachePort[ConsumptionRecord]`; GET miss is `None`; bytes decode to typed records; SET encodes and uses hashed `energy-trading:cache:<sha256>` keys; raw application-key sentinel is not sent to Redis; whitespace-normalized keys share a backend key; SET uses `px`; 1 µs→1 ms, 1 ms→1 ms, 1500 µs→2 ms, 1 s→1000 ms; overwrite resets TTL; DELETE is one call and `0` is success; blank key and zero/negative TTL are `InvalidRequestError` before I/O; Redis/codec/non-byte GET/unsuccessful SET map to sanitized `DependencyUnavailableError` without sentinel text.
+- Architecture tests (`tests/architecture/test_redis_cache_boundary.py`): domain/application/API/ML do not import redis-py or infrastructure cache; `RedisSettings` has no redis-py/runtime engine types; cache package must not import FastAPI, SQLAlchemy, Qdrant, adapters, agents, LangGraph, or ML; codec has no pickle/marshal/shelve/eval/Redis client types; `create_app()` still creates no Redis client; Compose remains Redis-free; no `redis_integration` marker.
+- Default pytest requires no Redis process. Live Redis integration remains deferred.
 
 Still planned: fail if `ml` imports agents or orchestration; if agents import XGBoost, LightGBM, Prophet, or concrete model classes; if `api` contains domain formulas beyond mapping HTTP ↔ use cases.
 

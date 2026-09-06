@@ -1,9 +1,8 @@
-"""Application cache port must stay vendor-neutral and unwired."""
+"""Application CachePort remains vendor-neutral; API stays unwired."""
 
 from __future__ import annotations
 
 import ast
-import tomllib
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
@@ -18,12 +17,7 @@ PORTS_ROOT = SRC_ROOT / "energy_trading" / "application" / "ports"
 CACHE_PORT = PORTS_ROOT / "cache.py"
 API_ROOT = SRC_ROOT / "energy_trading" / "api"
 API_APP = API_ROOT / "app.py"
-CONFIG_ROOT = SRC_ROOT / "energy_trading" / "shared" / "config"
-INFRASTRUCTURE_ROOT = SRC_ROOT / "energy_trading" / "infrastructure"
-INFRASTRUCTURE_CACHE = INFRASTRUCTURE_ROOT / "cache"
 COMPOSE_FILE = ROOT / "compose.yaml"
-PYPROJECT_FILE = ROOT / "pyproject.toml"
-LOCK_FILE = ROOT / "uv.lock"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -86,8 +80,6 @@ FORBIDDEN_TYPE_NAMES = frozenset(
     }
 )
 
-REDIS_PACKAGE_NAMES = frozenset({"redis", "hiredis", "aioredis", "redis-py"})
-
 
 def _async_function(path: Path, function_name: str) -> ast.AsyncFunctionDef:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -115,13 +107,6 @@ def _base_names(class_def: ast.ClassDef) -> set[str]:
         elif isinstance(base, ast.Attribute):
             names.add(base.attr)
     return names
-
-
-def _requirement_name(item: str) -> str:
-    name = item.split("[", 1)[0]
-    for separator in (">", "<", "=", " "):
-        name = name.split(separator, 1)[0]
-    return name.strip().lower()
 
 
 def _top_level_service_names(text: str) -> list[str]:
@@ -181,23 +166,6 @@ def test_public_cache_annotations_exclude_redis_and_untyped_payloads() -> None:
         assert function.args.kwarg is None
 
 
-def test_no_redis_python_dependency_is_declared() -> None:
-    pyproject = tomllib.loads(PYPROJECT_FILE.read_text(encoding="utf-8"))
-    declared = [
-        *pyproject["project"]["dependencies"],
-        *pyproject.get("dependency-groups", {}).get("dev", []),
-    ]
-    leaked = [
-        _requirement_name(item)
-        for item in declared
-        if _requirement_name(item) in REDIS_PACKAGE_NAMES
-    ]
-    assert leaked == []
-    lock = tomllib.loads(LOCK_FILE.read_text(encoding="utf-8"))
-    lock_names = {package["name"].lower() for package in lock.get("package", [])}
-    assert lock_names.isdisjoint(REDIS_PACKAGE_NAMES)
-
-
 def test_compose_has_no_redis_service() -> None:
     text = COMPOSE_FILE.read_text(encoding="utf-8")
     names = _top_level_service_names(text)
@@ -219,6 +187,8 @@ def test_api_composition_does_not_import_or_construct_cache() -> None:
         names = imported_names(path)
         assert "CachePort" not in names
         assert "Redis" not in names
+        assert "RedisCache" not in names
+        assert "create_redis_client" not in names
     app_source = API_APP.read_text(encoding="utf-8")
     tree = ast.parse(app_source, filename=str(API_APP))
     create_app = next(
@@ -237,20 +207,8 @@ def test_api_composition_does_not_import_or_construct_cache() -> None:
             call_names.add(func.attr)
     assert "CachePort" not in call_names
     assert "Redis" not in call_names
+    assert "RedisCache" not in call_names
+    assert "create_redis_client" not in call_names
     lowered = app_source.lower()
     assert "redis" not in lowered
     assert "cacheport" not in lowered
-
-
-def test_no_concrete_cache_or_redis_settings_implementation() -> None:
-    py_files = sorted(INFRASTRUCTURE_CACHE.rglob("*.py"))
-    assert py_files == []
-    assert collect_import_violations(INFRASTRUCTURE_ROOT, ("redis", "hiredis", "aioredis")) == []
-    forbidden_settings = {"RedisSettings", "CacheSettings"}
-    hits: list[str] = []
-    for path in sorted(CONFIG_ROOT.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and node.name in forbidden_settings:
-                hits.append(f"{path.relative_to(SRC_ROOT)}:{node.name}")
-    assert hits == []

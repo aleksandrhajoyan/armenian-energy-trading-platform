@@ -358,3 +358,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Chunk 16 introduces no Redis Python dependency, Redis settings, Redis DSN, Redis Compose service, serializer, health check, use case, agent, or API composition wiring. ADR-006 remains Accepted and is not superseded: Redis is still the planned local/dev implementation technology for this port.
   - The cache is not approved for secret storage. Credentials, authorization material, raw vendor payloads, and document bytes are not part of the port.
 - **Consequences:** Application call sites and tests can use a structural fake before any Redis adapter exists. A later Redis infrastructure chunk can implement this port without changing application signatures. Orchestration checkpoints and locks cannot silently reuse cache overwrite semantics.
+
+---
+
+## ADR-027 — Async Redis cache infrastructure remains outside application
+
+- **Status:** Accepted
+- **Context:** ADR-006 selected Redis as the local/dev cache technology. ADR-026 published application-owned `CachePort[TValue]` without a concrete adapter. Chunk 17 needed a reviewable redis-py implementation before any Compose service, live integration, or `create_app()` wiring. Pickle and other executable serializers would turn the cache into an unsafe object store. Application keys must not become visible Redis key names. Cache overwrite is not CAS for orchestration state.
+- **Decision:**
+  - The official `redis` package (`redis>=8,<9`, redis-py async API) implements the cache. `hiredis`, RedisOM, fakeredis, and `aioredis` are out of scope. ADR-006 and ADR-026 remain Accepted and are not superseded.
+  - `RedisSettings` is loaded separately from `AppSettings` (`REDIS_` prefix). `create_app()` does not require or load Redis settings. There is no process-wide Redis settings cache.
+  - `create_redis_client(settings)` returns `redis.asyncio.Redis` with keyword construction (`decode_responses=False`). It does not connect on import, does not `PING`, and does not build or log a password-bearing DSN. A future composition root owns `await client.aclose()`. The factory and `RedisCache` do not close the shared client.
+  - Serialization is an injected infrastructure-local `CacheCodec[TValue]` (`encode`/`decode` bytes). `CacheCodecError` is infrastructure-only and must not appear on `CachePort`. There is no default pickle/marshal/shelve/`Any`/dict serializer.
+  - `RedisCache[TValue]` structurally implements `CachePort[TValue]` and does not inherit it. Backend keys are `energy-trading:cache:` plus the SHA-256 hex digest of the normalized UTF-8 application key.
+  - Positive `timedelta` TTL converts to integer Redis `PX` milliseconds. Sub-millisecond positive durations round up to 1 ms. Blank keys and non-positive TTL are `InvalidRequestError` before backend I/O.
+  - Redis `RedisError`, codec failures, non-byte GET payloads, and unsuccessful SET outcomes become sanitized `DependencyUnavailableError`. No Redis-specific application errors. No retries in the adapter.
+  - Chunk 17 adds no Redis Compose service, live integration marker, API wiring, orchestration state, CAS, or distributed locks. PostgreSQL/TimescaleDB remains the system of record. Cache loss/flush/expiry is acceptable.
+- **Consequences:** Offline tests can exercise Redis settings, client construction, and adapter semantics with fakes. Operators still must not start Redis until a later service-profile chunk. Application code remains Redis-type-free.
