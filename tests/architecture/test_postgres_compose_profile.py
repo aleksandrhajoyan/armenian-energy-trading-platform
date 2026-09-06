@@ -12,6 +12,22 @@ def _compose_text() -> str:
     return COMPOSE_FILE.read_text(encoding="utf-8")
 
 
+def _service_block(text: str, service_name: str) -> str:
+    names = _top_level_service_names(text)
+    if service_name not in names:
+        msg = f"service {service_name!r} not found"
+        raise AssertionError(msg)
+    start = text.index(f"\n  {service_name}:")
+    following = names[names.index(service_name) + 1 :]
+    if following:
+        end = text.index(f"\n  {following[0]}:")
+        return text[start:end]
+    volumes_at = text.find("\nvolumes:", start)
+    if volumes_at == -1:
+        return text[start:]
+    return text[start:volumes_at]
+
+
 def _top_level_service_names(text: str) -> list[str]:
     names: list[str] = []
     in_services = False
@@ -47,12 +63,14 @@ def test_pinned_timescaledb_image_is_exact_release_tag() -> None:
     assert "bitnami" not in text.lower()
 
 
-def test_single_timescaledb_service_is_postgres_profile_gated() -> None:
+def test_timescaledb_service_is_postgres_profile_gated() -> None:
     text = _compose_text()
     names = _top_level_service_names(text)
-    assert names == ["timescaledb"]
-    assert "profiles:" in text
-    assert "- postgres" in text
+    assert "timescaledb" in names
+    timescaledb_block = _service_block(text, "timescaledb")
+    assert "profiles:" in timescaledb_block
+    assert "- postgres" in timescaledb_block
+    assert "- redis" not in timescaledb_block
 
 
 def test_database_port_is_loopback_bound() -> None:
@@ -73,12 +91,11 @@ def test_named_volume_is_used_without_bind_mount_data_dir() -> None:
 
 
 def test_healthcheck_uses_pg_isready_without_password() -> None:
-    text = _compose_text()
-    assert "healthcheck:" in text
-    assert "pg_isready" in text
-    lowered = text.lower()
-    assert "postgres_password" in lowered
-    health_block = text.split("healthcheck:", 1)[1]
+    timescaledb_block = _service_block(_compose_text(), "timescaledb")
+    assert "healthcheck:" in timescaledb_block
+    assert "pg_isready" in timescaledb_block
+    assert "POSTGRES_PASSWORD" in timescaledb_block
+    health_block = timescaledb_block.split("healthcheck:", 1)[1]
     assert "PASSWORD" not in health_block
     assert "ENERGY_DB_PASSWORD" not in health_block
 
@@ -91,12 +108,11 @@ def test_password_auth_required_and_not_hardcoded() -> None:
     assert "change-me" not in text
 
 
-def test_compose_has_no_app_redis_qdrant_or_admin_services() -> None:
+def test_compose_has_no_app_qdrant_or_admin_services() -> None:
     text = _compose_text().lower()
     forbidden = (
         "fastapi",
         "uvicorn",
-        "redis:",
         "qdrant",
         "n8n",
         "pgadmin",

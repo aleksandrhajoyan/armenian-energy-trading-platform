@@ -12,7 +12,6 @@ from tests.architecture.import_inspection import (
     imported_names,
 )
 
-ROOT = SRC_ROOT.parent
 DOMAIN_ROOT = SRC_ROOT / "energy_trading" / "domain"
 APPLICATION_ROOT = SRC_ROOT / "energy_trading" / "application"
 API_ROOT = SRC_ROOT / "energy_trading" / "api"
@@ -22,8 +21,6 @@ CONFIG_ROOT = SRC_ROOT / "energy_trading" / "shared" / "config"
 REDIS_SETTINGS = CONFIG_ROOT / "redis.py"
 CACHE_ROOT = SRC_ROOT / "energy_trading" / "infrastructure" / "cache"
 CODEC = CACHE_ROOT / "codec.py"
-COMPOSE_FILE = ROOT / "compose.yaml"
-PYPROJECT_FILE = ROOT / "pyproject.toml"
 
 FORBIDDEN_REDIS_LIBRARIES = (
     "redis",
@@ -79,29 +76,6 @@ FORBIDDEN_CACHE_IMPLEMENTATION = (
 )
 
 UNSAFE_CODEC_NAMES = frozenset({"pickle", "marshal", "shelve", "eval", "exec", "Redis"})
-
-
-def _top_level_service_names(text: str) -> list[str]:
-    names: list[str] = []
-    in_services = False
-    for line in text.splitlines():
-        if line.startswith("services:"):
-            in_services = True
-            continue
-        if not in_services:
-            continue
-        if (
-            line
-            and not line.startswith(" ")
-            and not line.startswith("\t")
-            and not line.startswith("#")
-        ):
-            break
-        if line.startswith("  ") and not line.startswith("    ") and line.rstrip().endswith(":"):
-            name = line.strip()[:-1]
-            if name and not name.startswith("#"):
-                names.append(name)
-    return names
 
 
 def _class_names(path: Path) -> set[str]:
@@ -182,16 +156,3 @@ def test_codec_has_no_redis_client_or_unsafe_serializer() -> None:
         and node.func.id in {"eval", "exec"}
     ]
     assert eval_hits == []
-
-
-def test_compose_still_has_no_redis_service() -> None:
-    text = COMPOSE_FILE.read_text(encoding="utf-8")
-    names = _top_level_service_names(text)
-    assert "redis" not in names
-    assert "redis:" not in text.lower()
-
-
-def test_no_redis_live_integration_marker() -> None:
-    source = PYPROJECT_FILE.read_text(encoding="utf-8")
-    assert "redis_integration" not in source
-    assert "ENERGY_RUN_REDIS_INTEGRATION" not in source

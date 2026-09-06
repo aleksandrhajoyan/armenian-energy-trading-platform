@@ -375,3 +375,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Redis `RedisError`, codec failures, non-byte GET payloads, and unsuccessful SET outcomes become sanitized `DependencyUnavailableError`. No Redis-specific application errors. No retries in the adapter.
   - Chunk 17 adds no Redis Compose service, live integration marker, API wiring, orchestration state, CAS, or distributed locks. PostgreSQL/TimescaleDB remains the system of record. Cache loss/flush/expiry is acceptable.
 - **Consequences:** Offline tests can exercise Redis settings, client construction, and adapter semantics with fakes. Operators still must not start Redis until a later service-profile chunk. Application code remains Redis-type-free.
+
+---
+
+## ADR-028 — Pinned local Redis service profile and live cache validation
+
+- **Status:** Accepted
+- **Context:** Chunk 17 published redis-py `RedisCache` without a running server. Live proof required a pinned, on-demand Compose service that cannot become a system of record, cannot share a profile with TimescaleDB, and cannot be reached from the LAN. WSL2 RAM remains limited, so Redis must not be always-on. Application `CachePort` and `RedisCache` public semantics stay unchanged.
+- **Decision:**
+  - Local Redis uses the exact Docker Official Image `redis:8.2.9-alpine`. The pin is a patch tag, not `latest`, `redis:8`, `redis:8-alpine`, `redis:8.2`, Redis Stack, Bitnami, Sentinel, or Cluster.
+  - Compose defines one cache service, `redis`, gated on profile `redis`. Start with `docker compose --profile redis up -d redis`. Stop/remove with `docker compose --profile redis stop redis` and `docker compose --profile redis rm -f redis` so an independently running TimescaleDB is undisturbed.
+  - The published port is loopback-only (`127.0.0.1` plus `REDIS_PORT`). Local Compose Redis requires a non-empty `REDIS_PASSWORD` interpolated into the container. `RedisSettings.password` remains optional for other future providers. Healthcheck uses `redis-cli ping` and `PONG`, authenticating via container `REDISCLI_AUTH`, not `redis-cli -a`.
+  - Persistence is disabled (`save ""`, `appendonly no`). There is no Redis named volume and no `/data` bind mount. Cache loss on container removal is acceptable. PostgreSQL/TimescaleDB remains the system of record (ADR-004).
+  - TimescaleDB (`postgres` profile) and Redis (`redis` profile) have no `depends_on` relationship.
+  - Live tests live under `tests/integration/cache/redis/`, use marker `redis_integration`, and require `ENERGY_RUN_REDIS_INTEGRATION=1`. They cover authenticated PING, exact version `8.2.9`, unauthenticated rejection, disabled AOF/RDB, and real `RedisCache` set/get/overwrite/delete/expiry. They accept only `127.0.0.1`/`localhost`, use unique keys, and never `FLUSHALL`/`FLUSHDB`/`KEYS *`. Default `uv run pytest` stays service-independent. testcontainers, the Docker SDK, and fakeredis are not used.
+  - `create_app()` remains unwired. No Redis readiness endpoint, orchestration state, CAS, or locks.
+  - ADR-006, ADR-026, and ADR-027 remain Accepted and are not superseded.
+- **Consequences:** Developers can prove the published Redis adapter against a compatible local server without starting TimescaleDB, Qdrant, or the API. API cache injection remains a later chunk.

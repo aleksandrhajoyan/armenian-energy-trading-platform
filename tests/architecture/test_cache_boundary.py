@@ -12,12 +12,10 @@ from tests.architecture.import_inspection import (
     imported_names,
 )
 
-ROOT = SRC_ROOT.parent
 PORTS_ROOT = SRC_ROOT / "energy_trading" / "application" / "ports"
 CACHE_PORT = PORTS_ROOT / "cache.py"
 API_ROOT = SRC_ROOT / "energy_trading" / "api"
 API_APP = API_ROOT / "app.py"
-COMPOSE_FILE = ROOT / "compose.yaml"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -109,29 +107,6 @@ def _base_names(class_def: ast.ClassDef) -> set[str]:
     return names
 
 
-def _top_level_service_names(text: str) -> list[str]:
-    names: list[str] = []
-    in_services = False
-    for line in text.splitlines():
-        if line.startswith("services:"):
-            in_services = True
-            continue
-        if not in_services:
-            continue
-        if (
-            line
-            and not line.startswith(" ")
-            and not line.startswith("\t")
-            and not line.startswith("#")
-        ):
-            break
-        if line.startswith("  ") and not line.startswith("    ") and line.rstrip().endswith(":"):
-            name = line.strip()[:-1]
-            if name and not name.startswith("#"):
-                names.append(name)
-    return names
-
-
 def test_cache_port_does_not_import_outer_layers_or_vendors() -> None:
     assert collect_import_violations(CACHE_PORT.parent, FORBIDDEN_PREFIXES) == []
     leaked = sorted(name for name in imported_names(CACHE_PORT) if name in FORBIDDEN_TYPE_NAMES)
@@ -164,14 +139,6 @@ def test_public_cache_annotations_exclude_redis_and_untyped_payloads() -> None:
     for function in (get_fn, set_fn, delete_fn):
         assert function.args.vararg is None
         assert function.args.kwarg is None
-
-
-def test_compose_has_no_redis_service() -> None:
-    text = COMPOSE_FILE.read_text(encoding="utf-8")
-    names = _top_level_service_names(text)
-    assert "redis" not in names
-    assert "redis:" not in text.lower()
-    assert "redis/redis" not in text.lower()
 
 
 def test_api_composition_does_not_import_or_construct_cache() -> None:
