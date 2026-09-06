@@ -526,3 +526,23 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Live tests live under `tests/integration/infrastructure/orchestration/n8n/`, use marker `n8n_integration`, and require `ENERGY_RUN_N8N_INTEGRATION=1`. They prove service readiness only (`GET /healthz` and `GET /healthz/readiness` return HTTP 200) against `127.0.0.1` with a bounded ~60-second readiness poll. Default pytest stays service-independent. testcontainers and the Docker SDK are not used.
   - This local HTTP profile is development/test infrastructure, not the production n8n security architecture. Production deployment/security remains separate future work.
 - **Consequences:** Developers can start a pinned local n8n and prove readiness without TimescaleDB, Redis, Qdrant, or the API. Future acquisition workflows must still terminate at an infrastructure/application ACL boundary. Operators must not treat n8n SQLite as canonical energy data.
+
+---
+
+## ADR-036 — Agent invocation is application-owned, structurally typed, and framework-neutral
+
+- **Status:** Accepted
+- **Context:** Phase 3 needs a reviewable invocation seam before any concrete agent, LangGraph runtime, shared workflow snapshot, retry policy, or LLM SDK exists. Letting LangGraph, LangChain, or a generic payload dictionary define agent interfaces would couple orchestration to one framework and collapse 13 different request/result shapes into an untyped envelope. An inheritance-based `BaseAgent` would force a shared constructor, logger, and lifecycle that the architecture does not yet have.
+- **Decision:**
+  - Exactly 13 canonical agent identities exist. They match `AGENTS.md` display names and are not renamed or aliased.
+  - `AgentName` is an application-level `enum.StrEnum`. It is not a domain entity and not a runtime lookup table.
+  - The shared contract is generic `AgentPort[TRequest, TResult]`, a `typing.Protocol`.
+  - Only identity (`name`) and async `run(request)` are common. There is no `execute`/`invoke`/`stream` surface.
+  - No base class or inheritance is required. Future agents satisfy the protocol structurally.
+  - Request and result types remain specific to later agents. This chunk does not constrain them to one canonical model.
+  - There is no generic payload dictionary, `Any`, `Mapping`, or shared `AgentResult` envelope.
+  - LangGraph does not define agent interfaces. When added, it must call agents through `AgentPort`.
+  - The LangGraph dependency remains deferred. No LangChain, OpenAI, Anthropic, or other agent SDK is installed.
+  - No registry, factory, shared workflow snapshot, retry, or fallback policy is added.
+  - Existing `ApplicationError` types remain the expected-failure vocabulary. No `AgentError` hierarchy is introduced.
+- **Consequences:** Orchestration and tests can type against `AgentPort` with structural fakes before any agent exists. Each later agent can introduce a precise request/result pair without changing this seam. Graph runtime, snapshots, and retries stay later chunks.

@@ -2,7 +2,7 @@
 
 Compact specification for all 13 agents. Names in this file are canonical. Do not rename or invent aliases in code or docs.
 
-**Status:** specification only. No agent is implemented. Canonical input/output contracts are implemented in `energy_trading.domain.models`.
+**Status:** specification of agent responsibilities remains in this file. No concrete agent is implemented. Canonical input/output contracts are implemented in `energy_trading.domain.models`. Application now owns shared identity and invocation types: `AgentName` (exactly these 13 display names) and generic `AgentPort[TRequest, TResult]`. Future agents structurally satisfy that protocol. The shared verb is `async run(request)`. Request and result contracts remain agent-specific and are not defined here. There is no LangGraph runtime, registry, shared workflow snapshot, retry policy, or prompt/tool/model catalog.
 
 Agents live in the application layer. They consume and return canonical typed contracts (`DATA_CONTRACTS.md`). They never import concrete infrastructure adapters or concrete ML implementations; they depend on application ports. The composition root injects implementations from `infrastructure` and `ml`.
 

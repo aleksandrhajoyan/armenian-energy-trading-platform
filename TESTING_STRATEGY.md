@@ -294,6 +294,11 @@ Chunk 25 n8n local service foundation and live readiness tests:
   then `docker compose --profile n8n stop n8n`.
   Do not put a real encryption key in docs or commands. Compose n8n is stopped after live validation. The named volume is not destroyed by default. No live third-party APIs.
 
+Chunk 26 application agent execution contract tests:
+
+- Unit tests (`tests/unit/application/agents/test_agent_contract.py`): `AgentName` is a `StrEnum` with exactly 13 members; values match the canonical `AGENTS.md` display names including ampersands and capitalization; values are unique and unaliased. A test-only structural fake satisfies generic `AgentPort` without inheriting a production base class. Coverage includes identity, async `run(request)` returning a typed result, `inspect.signature` of `run(self, request)`, coroutine `run`, and a public surface of only `name` plus `run`. No network, Docker, LLM, ML, database, Redis, Qdrant, or n8n.
+- Architecture test (`tests/architecture/test_agent_boundary.py`): the agents package imports none of infrastructure/ML/API/domain, FastAPI/Starlette, LangGraph/LangChain, LLM SDKs, Qdrant/Redis/SQLAlchemy, ML libraries, HTTP clients, or n8n. `AgentPort` is a generic Protocol over `TRequest`/`TResult`, not an ABC. `name` is a property; `run` is async and accepts only `self` and `request`. Public annotations and identifiers exclude `Any`, `dict`, `Mapping`, snapshot/callback/tool/message/model/prompt types. `create_app()` remains unwired.
+
 ## CI expectations (future)
 
 - Unit + architecture tests on every change once a runner exists.

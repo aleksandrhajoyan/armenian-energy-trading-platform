@@ -49,9 +49,9 @@ The currently justified local service foundations are complete: TimescaleDB/Post
 
 ## Phase 3 — Application orchestration foundation
 
-- [ ] Agent interfaces (ports)
-- [ ] Orchestration state
-- [ ] LangGraph skeleton (conceptual flow only until nodes are filled)
+- [x] **Chunk 26** — Application Agent Execution Contract Boundary
+- [ ] Application Orchestration State Contract — LangGraph-free
+- [ ] LangGraph skeleton
 - [ ] Retries / fallback policy hooks
 
 ## Phase 4 — Ingestion agents
@@ -115,5 +115,5 @@ The currently justified local service foundations are complete: TimescaleDB/Post
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 25
-- **Next:** Architect reassessment of the next functional Phase 2 slice; do not automatically begin agent/LangGraph orchestration. Production collection provisioning, production distance selection, embedding implementation, RAG, n8n workflows, and regulatory agents remain deferred.
+- **Completed:** Chunk 0 through Chunk 26
+- **Next:** Application Orchestration State Contract — LangGraph-free. Do not mark concrete agents complete. Production collection provisioning, production distance selection, embedding implementation, RAG, n8n workflows, and regulatory agents remain deferred.
