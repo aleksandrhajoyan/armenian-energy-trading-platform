@@ -1,10 +1,15 @@
-# On-demand local TimescaleDB and Redis for infrastructure integration.
+# On-demand local TimescaleDB, Redis, and Qdrant for infrastructure integration.
 # TimescaleDB start: docker compose --profile postgres up -d timescaledb
 # Redis start:       docker compose --profile redis up -d redis
 # Redis stop:        docker compose --profile redis stop redis
 # Redis remove:      docker compose --profile redis rm -f redis
+# Qdrant start:      docker compose --profile qdrant up -d qdrant
+# Qdrant stop:       docker compose --profile qdrant stop qdrant
 #
 # Profiles are independent. This file does not containerize the API.
+# Local Qdrant publishes REST only on 127.0.0.1 and requires QDRANT_API_KEY.
+# That is local development/test infrastructure, not production Qdrant security.
+# Production requires appropriately secured networking/TLS.
 
 services:
   timescaledb:
@@ -52,5 +57,21 @@ services:
       retries: 12
       start_period: 5s
 
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    profiles:
+      - qdrant
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
+      QDRANT__TELEMETRY_DISABLED: "true"
+    ports:
+      - target: 6333
+        published: ${QDRANT_PORT:-6333}
+        host_ip: 127.0.0.1
+        protocol: tcp
+    volumes:
+      - qdrant-data:/qdrant/storage
+
 volumes:
   timescale-data:
+  qdrant-data:

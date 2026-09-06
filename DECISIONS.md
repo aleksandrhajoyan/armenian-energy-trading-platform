@@ -483,3 +483,26 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Qdrant inference remains disabled. Embeddings stay behind `DocumentEmbeddingPort`. Query-text embedding remains deferred.
   - Adapters do not own `AsyncQdrantClient` lifecycle. A future composition root remains responsible for `await client.close()`. `create_app()` stays unwired.
 - **Consequences:** Offline fakes can prove identity, fingerprint, insert-only conflict, concurrent-writer, and search-translation behavior without a Qdrant process. Live collection provisioning, distance selection, Compose, and API wiring remain later work.
+
+---
+
+## ADR-034 — Local Qdrant runs as an authenticated opt-in profile with test-only collection provisioning
+
+- **Status:** Accepted
+- **Context:** ADR-005 selected Qdrant as the local/dev vector database. Chunks 22–23 delivered an infrastructure-only `AsyncQdrantClient` plus insert-only document index/search adapters without a running server. Live proof requires a pinned, on-demand Compose service that cannot become a system of record, cannot share a profile with TimescaleDB or Redis, and cannot be reached from the LAN. WSL2 RAM remains limited, so Qdrant must not be always-on. Production collection schema and embedding distance still cannot be chosen until an embedding model exists. Application ports and Chunk 22/23 adapter semantics stay unchanged.
+- **Decision:**
+  - ADR-005, ADR-029, ADR-030, ADR-031, ADR-032, and ADR-033 remain Accepted and are not superseded.
+  - Local/dev Qdrant uses the exact image `qdrant/qdrant:v1.19.1`. The pin is a patch tag, not `latest`, `v1`, `v1.19`, `dev`, `master`, a GPU image, or an unprivileged variant.
+  - Compose defines one vector service, `qdrant`, gated on profile `qdrant`. Start with `docker compose --profile qdrant up -d qdrant`. Stop with `docker compose --profile qdrant stop qdrant` so independently running TimescaleDB or Redis is undisturbed.
+  - Only REST port 6333 is host-published, loopback-only (`127.0.0.1` plus `QDRANT_PORT`). Ports 6334 and 6335 are not published. The production Python client remains REST (`prefer_grpc=False`).
+  - The local profile requires a non-empty `QDRANT_API_KEY` interpolated as `QDRANT__SERVICE__API_KEY`. An empty read-only API key is not configured. `QdrantSettings.api_key` remains optional for other future providers.
+  - Local HTTP plus API key is acceptable only because the published port is loopback-only. This is local development/test infrastructure, not the production Qdrant security architecture. Production requires appropriately secured networking/TLS.
+  - Telemetry is disabled for the local project service (`QDRANT__TELEMETRY_DISABLED=true`).
+  - Storage uses the Compose named volume `qdrant-data` mounted at `/qdrant/storage`. There is no Windows host bind mount and no snapshots volume in this chunk.
+  - The service is opt-in. Process health and `create_app()` do not require Qdrant. Default pytest does not contact Qdrant.
+  - Live tests live under `tests/integration/infrastructure/vector_store/qdrant/`, use marker `qdrant_integration`, and require `ENERGY_RUN_QDRANT_INTEGRATION=1`. They use `QdrantSettings` and `create_qdrant_client()`, poll `get_collections()` with a bounded 30-second timeout, and accept only `127.0.0.1`/`localhost`. They never print the API key.
+  - Temporary test collections are uniquely named per fixture and deleted in cleanup. Test-only vector configuration is size `3` and `models.Distance.DOT`. That fixture metric does **not** select a production embedding distance and is not added to `QdrantSettings` or `QdrantDocumentVectorConfig` defaults.
+  - Production Qdrant modules still do not create, recreate, or delete collections and still do not reference `VectorParams` or distance enums. Production collection provisioning remains deferred.
+  - Application ports/contracts remain unchanged. `create_app()` remains unwired. Qdrant inference remains disabled. Query-text embedding, RAG, and agents remain deferred.
+  - Default `uv run pytest` stays service-independent. testcontainers and the Docker SDK are not used.
+- **Consequences:** Developers can prove the published document index/search adapters against a compatible local Qdrant without starting TimescaleDB, Redis, or the API. Production distance selection, collection bootstrap, embedding models, and API composition remain later chunks.

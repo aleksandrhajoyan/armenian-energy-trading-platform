@@ -6,7 +6,7 @@ from tests.architecture.import_inspection import SRC_ROOT
 
 COMPOSE_FILE = SRC_ROOT.parent / "compose.yaml"
 PINNED_IMAGE = "redis:8.2.9-alpine"
-APPROVED_SERVICES = ["timescaledb", "redis"]
+APPROVED_SERVICES = ["timescaledb", "redis", "qdrant"]
 
 
 def _compose_text() -> str:
@@ -75,9 +75,10 @@ def test_redis_service_is_redis_profile_gated() -> None:
     assert "profiles:" in redis_block
     assert "- redis" in redis_block
     assert "- postgres" not in redis_block
+    assert "- qdrant" not in redis_block
 
 
-def test_approved_compose_services_are_exactly_timescaledb_and_redis() -> None:
+def test_approved_compose_services_are_timescaledb_redis_and_qdrant() -> None:
     names = _top_level_service_names(_compose_text())
     assert names == APPROVED_SERVICES
 
@@ -130,14 +131,15 @@ def test_redis_and_timescaledb_are_independently_profile_gated() -> None:
     assert "- redis" in redis_block
     assert "- redis" not in timescaledb_block
     assert "- postgres" not in redis_block
+    assert "- qdrant" not in timescaledb_block
+    assert "- qdrant" not in redis_block
 
 
-def test_compose_has_no_api_qdrant_cluster_or_admin_services() -> None:
+def test_compose_has_no_api_cluster_or_admin_services() -> None:
     text = _compose_text().lower()
     forbidden = (
         "fastapi",
         "uvicorn",
-        "qdrant",
         "n8n",
         "pgadmin",
         "grafana",

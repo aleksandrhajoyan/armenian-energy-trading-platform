@@ -42,7 +42,7 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 - [x] **Chunk 21** — Application Document Vector Retrieval Boundary
 - [x] **Chunk 22** — Async Qdrant Client Foundation (Offline)
 - [x] Chunk 23 — Qdrant Document Vector Index/Search Adapter (Offline)
-- [ ] Qdrant service profile and live vector integration
+- [x] Chunk 24 — Qdrant Service Profile and Live Vector Integration
 - [ ] Docker Compose remaining services, when justified
 
 ## Phase 3 — Application orchestration foundation
@@ -113,5 +113,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 23
-- **Next:** Qdrant Service Profile and Live Vector Integration. Query-text embedding remains deferred and is not implemented work.
+- **Completed:** Chunk 0 through Chunk 24
+- **Next:** Docker Compose remaining services, when justified. Production collection provisioning, production distance selection, embedding implementation, RAG, and regulatory agents remain deferred.

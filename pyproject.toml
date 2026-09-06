@@ -44,6 +44,7 @@ asyncio_default_fixture_loop_scope = "function"
 markers = [
     "postgres_integration: requires the opt-in local PostgreSQL/TimescaleDB Compose service",
     "redis_integration: requires the opt-in local Redis Compose service",
+    "qdrant_integration: requires the opt-in local Qdrant Compose service",
 ]
 
 [tool.ruff]

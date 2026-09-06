@@ -5,12 +5,12 @@ Living snapshot. Update at the end of every chunk. Do not list features that do 
 ## Phase and chunk
 
 - **Current phase:** Phase 2 — Infrastructure
-- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization; Chunk 9 — Duplicate Timestamp Policy and Interval Validation; Chunk 10 — Missing-Interval Detection and Gap Reporting; Chunk 11 — DLQ Persistence Boundary; Chunk 12 — Unstructured Document Extraction Boundary; Chunk 13 — Async PostgreSQL/TimescaleDB Persistence Foundation; Chunk 14 — Consumption PostgreSQL Persistence Slice; Chunk 15 — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration; Chunk 16 — Application Cache Port Boundary; Chunk 17 — Async Redis Cache Infrastructure (Offline); Chunk 18 — Redis Service Profile and Live Cache Integration; Chunk 19 — Application Document Embedding Port Boundary; Chunk 20 — Application Document Vector Indexing Boundary; Chunk 21 — Application Document Vector Retrieval Boundary; Chunk 22 — Async Qdrant Client Foundation (Offline); Chunk 23 — Qdrant Document Vector Index/Search Adapter (Offline)
-- **Next recommended chunk:** Qdrant Service Profile and Live Vector Integration. Live Qdrant does not exist. Query-text embedding remains deferred.
+- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization; Chunk 9 — Duplicate Timestamp Policy and Interval Validation; Chunk 10 — Missing-Interval Detection and Gap Reporting; Chunk 11 — DLQ Persistence Boundary; Chunk 12 — Unstructured Document Extraction Boundary; Chunk 13 — Async PostgreSQL/TimescaleDB Persistence Foundation; Chunk 14 — Consumption PostgreSQL Persistence Slice; Chunk 15 — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration; Chunk 16 — Application Cache Port Boundary; Chunk 17 — Async Redis Cache Infrastructure (Offline); Chunk 18 — Redis Service Profile and Live Cache Integration; Chunk 19 — Application Document Embedding Port Boundary; Chunk 20 — Application Document Vector Indexing Boundary; Chunk 21 — Application Document Vector Retrieval Boundary; Chunk 22 — Async Qdrant Client Foundation (Offline); Chunk 23 — Qdrant Document Vector Index/Search Adapter (Offline); Chunk 24 — Qdrant Service Profile and Live Vector Integration
+- **Next recommended chunk:** Docker Compose remaining services, when justified. Production collection provisioning, production distance selection, and query-text embedding remain deferred. Do not jump to agents or LangGraph merely because local Qdrant exists.
 
 ## What this repository is
 
-A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, explicit Consumption MW/kW plus IANA timezone normalization, fail-closed Consumption duplicate detection, optional interval-grid alignment, per-consumer internal gap reporting, an unwired filesystem-backed DLQ metadata persistence adapter, an application-owned unstructured document extraction boundary with no concrete PDF/OCR adapter, an application-owned document embedding port with no concrete embedding implementation, an application-owned document vector indexing port structurally implemented offline by `QdrantDocumentVectorIndex`, an application-owned document vector retrieval port structurally implemented offline by `QdrantDocumentVectorSearch`, an unwired Qdrant HTTP client foundation (`QdrantSettings`, `qdrant-client==1.19.0`, lazy `create_qdrant_client()`), concrete offline Qdrant document adapters (deterministic UUID point identity, closed payload, SHA-256 entry fingerprint, insert-only verified writes), an unwired async PostgreSQL/TimescaleDB persistence foundation, an unwired Consumption PostgreSQL repository, an on-demand Compose TimescaleDB profile with live migration/repository tests, an application-owned vendor-neutral cache port, an unwired Redis cache adapter (`RedisSettings`, redis-py async factory, infrastructure codec, `RedisCache`), and an on-demand Compose Redis profile with opt-in live cache tests. It is **not** a running trading platform.
+A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, explicit Consumption MW/kW plus IANA timezone normalization, fail-closed Consumption duplicate detection, optional interval-grid alignment, per-consumer internal gap reporting, an unwired filesystem-backed DLQ metadata persistence adapter, an application-owned unstructured document extraction boundary with no concrete PDF/OCR adapter, an application-owned document embedding port with no concrete embedding implementation, an application-owned document vector indexing port structurally implemented by `QdrantDocumentVectorIndex`, an application-owned document vector retrieval port structurally implemented by `QdrantDocumentVectorSearch`, an unwired Qdrant HTTP client foundation (`QdrantSettings`, `qdrant-client==1.19.0`, lazy `create_qdrant_client()`), concrete Qdrant document adapters (deterministic UUID point identity, closed payload, SHA-256 entry fingerprint, insert-only verified writes), an on-demand Compose Qdrant profile with opt-in live index/search tests, an unwired async PostgreSQL/TimescaleDB persistence foundation, an unwired Consumption PostgreSQL repository, an on-demand Compose TimescaleDB profile with live migration/repository tests, an application-owned vendor-neutral cache port, an unwired Redis cache adapter (`RedisSettings`, redis-py async factory, infrastructure codec, `RedisCache`), and an on-demand Compose Redis profile with opt-in live cache tests. It is **not** a running trading platform.
 
 ## What is not implemented
 
@@ -33,9 +33,9 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Unstructured document adapters (PDF/OCR acquisition and parsing)
 - Concrete document embedding implementation / provider / model
 - Query-text embedding
-- Qdrant collection configuration / creation
-- Vector distance selection
-- Qdrant Compose service / live tests
+- Production Qdrant collection configuration / creation
+- Production vector distance selection
+- Production Qdrant deployment/security design
 - Document reindex / replacement / delete
 - Search filters, score thresholds, pagination
 - RAG / regulatory interpretation
@@ -55,7 +55,7 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Application use case using the cache
 - Orchestration state / CAS / locks
 - Redis readiness endpoint
-- Running Qdrant service
+- Running Qdrant service as an always-on process
 - FastAPI Docker image / remaining Compose services
 - ML implementations
 - External integrations
@@ -129,8 +129,11 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - SHA-256 application-entry fingerprint including exact `float.hex()` vector members
 - Insert-only upsert (`UpdateMode.INSERT_ONLY`, `wait=True`) with pre-read/post-write verification
 - Ranked `query_points` translation that discards Qdrant scores
+- On-demand Compose `qdrant` profile (`qdrant` service, image `qdrant/qdrant:v1.19.1`, loopback REST 6333, required API key, telemetry disabled, named volume `qdrant-data`)
+- Live authenticated Qdrant readiness, unauthenticated rejection, index, exact retry, conflict, ranking, and limit tests (opt-in)
 - Qdrant client-foundation architecture tests (inner layers Qdrant-free; API unwired)
 - Qdrant document-vector adapter architecture tests (ports implemented in infrastructure; no collection management, inference, or API wiring)
+- Compose Qdrant profile and live-integration architecture tests
 - SQLAlchemy 2 async engine/session factories (`create_postgres_engine`, `create_session_factory`) using psycopg 3
 - Structured PostgreSQL URL construction (`postgresql+psycopg`) without logging credentials
 - Alembic migration foundation (`alembic.ini`, `alembic/env.py`)
@@ -173,7 +176,7 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 
 ## Pending work
 
-Everything after Chunk 23 in `ROADMAP.md`. Next is **Qdrant Service Profile and Live Vector Integration**. Do not install LangGraph, embedding SDKs, ML stacks, or unrelated Docker services until those chunks. Do not claim live Qdrant exists.
+Everything after Chunk 24 in `ROADMAP.md`. Next is **Docker Compose remaining services, when justified**. Do not install LangGraph, embedding SDKs, ML stacks, or unrelated Docker services until those chunks. Do not claim the local Qdrant profile is production-ready.
 
 ## Known issues
 
@@ -182,6 +185,7 @@ Everything after Chunk 23 in `ROADMAP.md`. Next is **Qdrant Service Profile and 
 - WSL2 RAM cap vs future Compose services is an operational risk (see `ARCHITECTURE.md`).
 - TimescaleDB is pinned to `timescale/timescaledb:2.29.2-pg17` for local development; it is on-demand, not always running.
 - Redis is pinned to `redis:8.2.9-alpine` for local development; it is on-demand, not always running.
+- Qdrant is pinned to `qdrant/qdrant:v1.19.1` for local development; it is on-demand, not always running. Local HTTP plus API key is not the production security model.
 
 ## Architectural constraints (in force)
 
@@ -196,9 +200,9 @@ Everything after Chunk 23 in `ROADMAP.md`. Next is **Qdrant Service Profile and 
 - Filesystem DLQ persistence stores canonical `DLQRecord` metadata only, is not wired to adapters or `create_app()`, and does not replace PostgreSQL as the planned system of record
 - Unstructured document extraction is an application port returning normalized text chunks; it is not a `RegulatoryConstraint` and has no concrete PDF/OCR adapter
 - Document embedding is an application-owned `DocumentEmbeddingPort` over already-normalized `ExtractedDocumentChunk` values; it is not Qdrant, not a domain contract, and has no concrete provider/model
-- Document vector indexing is an application-owned `DocumentVectorIndexPort` pairing a normalized chunk with its matching embedding; logical identity is `(document_id, chunk_id)`; exact retries are idempotent; conflicts fail closed; there is no generic `VectorStore`; infrastructure `QdrantDocumentVectorIndex` is the offline concrete writer
-- Document vector retrieval is an application-owned `DocumentVectorSearchPort`; input is an already-embedded finite query vector plus a positive `limit`; output is ranked `ExtractedDocumentChunk` values with unique `(document_id, chunk_id)` identities; zero matches are valid; backend scores, collection names, filters, and query text do not cross the port; indexing and search remain separate; there is no generic `VectorStore`; infrastructure `QdrantDocumentVectorSearch` is the offline concrete reader
-- Qdrant connectivity is infrastructure-only: typed `QdrantSettings` plus lazy `create_qdrant_client()`; domain/application/API/ML do not import the SDK; Qdrant does not generate embeddings; point identity/payload/fingerprint/insert-only writes exist offline; collection provisioning, distance selection, Compose service, live tests, and API wiring do not
+- Document vector indexing is an application-owned `DocumentVectorIndexPort` pairing a normalized chunk with its matching embedding; logical identity is `(document_id, chunk_id)`; exact retries are idempotent; conflicts fail closed; there is no generic `VectorStore`; infrastructure `QdrantDocumentVectorIndex` is the concrete writer
+- Document vector retrieval is an application-owned `DocumentVectorSearchPort`; input is an already-embedded finite query vector plus a positive `limit`; output is ranked `ExtractedDocumentChunk` values with unique `(document_id, chunk_id)` identities; zero matches are valid; backend scores, collection names, filters, and query text do not cross the port; indexing and search remain separate; there is no generic `VectorStore`; infrastructure `QdrantDocumentVectorSearch` is the concrete reader
+- Qdrant connectivity is infrastructure-only: typed `QdrantSettings` plus lazy `create_qdrant_client()`; domain/application/API/ML do not import the SDK; Qdrant does not generate embeddings; point identity/payload/fingerprint/insert-only writes exist; Compose `qdrant` profile is optional and on-demand; production collection provisioning, production distance selection, and API wiring do not
 - PostgreSQL/TimescaleDB persistence is an infrastructure factory plus the Consumption Core table/repository; Compose `postgres` profile is optional and on-demand; no global engine, no FastAPI wiring, no ingestion→repository wiring
 - Consumption persistence identity is `(consumer_id, timestamp)`; exact retries are idempotent; differing values conflict; adapters still do not query PostgreSQL
 - Cache is an application-owned `CachePort[TValue]`; infrastructure `RedisCache` is TTL-bound and ephemeral; Compose `redis` profile is optional and on-demand; no API/orchestration wiring, no locks
@@ -212,7 +216,7 @@ Everything after Chunk 23 in `ROADMAP.md`. Next is **Qdrant Service Profile and 
 
 ## Current services
 
-TimescaleDB is available on demand under the Compose `postgres` profile (`timescale/timescaledb:2.29.2-pg17`, loopback-only). Redis is available on demand under the Compose `redis` profile (`redis:8.2.9-alpine`, loopback-only, password required, non-persistent). Neither is assumed to be running continuously. Qdrant has an offline Python client foundation and document index/search adapters only; no Qdrant server is present.
+TimescaleDB is available on demand under the Compose `postgres` profile (`timescale/timescaledb:2.29.2-pg17`, loopback-only). Redis is available on demand under the Compose `redis` profile (`redis:8.2.9-alpine`, loopback-only, password required, non-persistent). Qdrant is available on demand under the Compose `qdrant` profile (`qdrant/qdrant:v1.19.1`, loopback-only REST 6333, API key required, telemetry disabled, named `qdrant-data`). None is assumed to be running continuously. The local Qdrant profile is not production-ready.
 
 ## Current APIs
 
