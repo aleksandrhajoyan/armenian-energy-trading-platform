@@ -99,7 +99,7 @@ Each agent tested with port fakes. Assert canonical in/out. Especially: Consumer
 
 ### LangGraph routing tests
 
-Chunk 28 covers only the no-op skeleton, not business routing. Planned later: contract → parallel ingestion join → forecast → risk → strategy → clearing → settlement. Retry/fallback/degraded flags. Nodes stay thin (no business formulas in node bodies — architecture assertion as feasible). Nodes depend on application abstractions only. Those five-phase routing tests do not exist yet.
+Chunk 28 covers only the no-op skeleton, not business routing. Planned later: contract → parallel ingestion join → forecast → risk → strategy → clearing → settlement. Retry/fallback *execution*, degraded flags, and five-phase routing tests do not exist yet. Chunk 29 covers the policy *decision* hook only; it does not execute retries or fallbacks. Nodes stay thin (no business formulas in node bodies — architecture assertion as feasible). Nodes depend on application abstractions only.
 
 ### Infrastructure integration tests
 
@@ -307,7 +307,12 @@ Chunk 27 application orchestration state contract tests:
 Chunk 28 minimal LangGraph skeleton tests:
 
 - Unit tests (`tests/unit/application/orchestration/test_graph.py`): installed LangGraph satisfies `>=1.2.11,<1.3`; `build_workflow_graph()` returns a compiled graph; repeated factory calls create independent instances; `WorkflowState` is the state schema; exactly one application node `workflow_entry`; effective topology is `START → workflow_entry → END`; no phase-specific nodes; no conditional branches; async `ainvoke` preserves all seven snapshot fields including canonical `AdapterDiagnostic` values and does not mutate the original frozen `WorkflowState`. No live service.
-- Architecture test (`tests/architecture/test_langgraph_boundary.py`): production `langgraph` imports exist only in `application/orchestration/graph.py`. `state.py`, agent base, domain, infrastructure, ML, API, and unrelated application ports/use cases remain LangGraph-free. The graph module imports no infrastructure/ML/API/agents/LangChain and does not use messages, conditional edges, reducers, checkpointers, stores, or `AgentPort`/`AgentName`. `create_app()` remains unwired.
+- Architecture test (`tests/architecture/test_langgraph_boundary.py`): production `langgraph` imports exist only in `application/orchestration/graph.py`. `state.py`, `failure_policy.py`, agent base, domain, infrastructure, ML, API, and unrelated application ports/use cases remain LangGraph-free. The graph module imports no infrastructure/ML/API/agents/LangChain and does not use messages, conditional edges, reducers, checkpointers, stores, or `AgentPort`/`AgentName`. `create_app()` remains unwired.
+
+Chunk 29 application orchestration failure-policy hook tests:
+
+- Unit tests (`tests/unit/application/orchestration/test_failure_policy.py`): `FailureAction` is a `StrEnum` with exactly `RETRY`/`retry`, `FALLBACK`/`fallback`, and `FAIL`/`fail`. Valid frozen `FailurePolicyContext` with no agent; each canonical `AgentName`; whitespace-stripped `error_code`; blank and non-string error codes fail; attempt 1 and later positive attempts succeed; attempt 0/negative/`bool`/non-int fail; `agent_name=None` and actual `AgentName` succeed; arbitrary agent-name strings fail; phase must be `WorkflowPhase`. A test-only structural fake satisfies async `FailurePolicyPort.decide(context)` without inheriting a production base class and can return each `FailureAction`. No sleeping, retries, or fallbacks are executed. No live service.
+- Architecture test (`tests/architecture/test_failure_policy_boundary.py`): production `failure_policy.py` imports none of infrastructure/ML/API, LangGraph/LangChain, FastAPI/Starlette, Redis/SQLAlchemy/Qdrant, HTTP clients, n8n, LLM/ML libraries, or Tenacity. Allowed project imports are `WorkflowPhase` and `AgentName`. Context fields are exactly `phase`, `error_code`, `attempt_number`, and `agent_name`. No `Any`/`dict`/`Mapping`/`TypeVar`, no exception-typed fields, no delay/backoff/max-attempt fields, no `WorkflowState` field, and no callback/callable field. `FailurePolicyPort` is a non-generic Protocol whose only public operation is async `decide`. No concrete production policy exists. The skeleton graph does not import or inject the port.
 
 ## CI expectations (future)
 

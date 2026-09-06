@@ -17,6 +17,7 @@ PRODUCTION_ROOT = SRC_ROOT / "energy_trading"
 ORCHESTRATION_ROOT = PRODUCTION_ROOT / "application" / "orchestration"
 GRAPH_MODULE = ORCHESTRATION_ROOT / "graph.py"
 STATE_MODULE = ORCHESTRATION_ROOT / "state.py"
+FAILURE_POLICY_MODULE = ORCHESTRATION_ROOT / "failure_policy.py"
 AGENTS_ROOT = PRODUCTION_ROOT / "application" / "agents"
 AGENT_BASE = AGENTS_ROOT / "base.py"
 PORTS_ROOT = PRODUCTION_ROOT / "application" / "ports"
@@ -123,6 +124,18 @@ def test_state_module_remains_langgraph_free() -> None:
     assert "langchain" not in names
     assert "langchain_core" not in names
     modules = imported_modules(STATE_MODULE)
+    assert not any(
+        is_forbidden(module, ("langgraph", "langchain", "langchain_core")) for module in modules
+    )
+
+
+def test_failure_policy_module_remains_langgraph_free() -> None:
+    names = imported_names(FAILURE_POLICY_MODULE)
+    assert "langgraph" not in names
+    assert "langchain" not in names
+    assert "langchain_core" not in names
+    assert "RetryPolicy" not in names
+    modules = imported_modules(FAILURE_POLICY_MODULE)
     assert not any(
         is_forbidden(module, ("langgraph", "langchain", "langchain_core")) for module in modules
     )

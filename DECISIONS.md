@@ -581,3 +581,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - No five-phase routing, conditional edges, retries, fallback, LangChain messages, or LLM provider dependency is added. Direct `langchain` is not a project dependency. Transitive `langchain-core` may exist because LangGraph requires it; project source must not import it.
   - Future graph expansion (phase nodes, retries/fallback, agent invocation, persistence) must happen in separate reviewed chunks.
 - **Consequences:** The repository can compile and asynchronously invoke a no-op graph over frozen `WorkflowState` without encoding business workflow. Later chunks can add routing and policy without redefining state.
+
+---
+
+## ADR-039 — Retry/fallback decisions are application-owned policy, separate from execution
+
+- **Status:** Accepted
+- **Context:** Chief Orchestrator will eventually own failure handling. Chunk 28 installed a no-op LangGraph skeleton. Letting LangGraph `RetryPolicy`, Tenacity, or a raw exception object define business retry/fallback semantics would couple orchestration policy to one runtime and leak unsanitized failure details into decision-making. Chunk 29 needs a reviewable decision seam before any fallible business node exists.
+- **Decision:**
+  - Framework runtime must not define business retry/fallback semantics. Application owns `FailureAction`, frozen `FailurePolicyContext`, and async structural `FailurePolicyPort`.
+  - `FailurePolicyContext` carries only `phase` (`WorkflowPhase`), a sanitized stable `error_code` string, a 1-based failed `attempt_number`, and optional canonical `agent_name` (`AgentName | None`).
+  - Raw exceptions, exception classes, messages, and tracebacks are excluded. Future execution code must translate an observed failure into `error_code` before policy evaluation. This chunk does not implement that translation.
+  - `FailureAction` is the closed initial decision set: `RETRY`, `FALLBACK`, and `FAIL`. Continue/skip/ignore/degraded/abort/pause/cancel are omitted until verified.
+  - `FALLBACK` means only that a future runtime may attempt a separately defined fallback path. It does not identify or implement that path.
+  - `FailurePolicyPort.decide(context)` is asynchronous and accepts only `FailurePolicyContext`. It does not accept `WorkflowState`, exception objects, dict metadata, graph runtime, Redis, retry callbacks, or fallback callables.
+  - No concrete policy exists yet. No fixed retry count, backoff, delay, timeout, fallback target, or degraded-mode semantics exist.
+  - LangGraph does not appear in the policy module. The Chunk 28 skeleton remains `START → workflow_entry → END` and does not call the policy. Retry/fallback execution will be introduced only when a real fallible orchestration node justifies it.
+- **Consequences:** Future graph nodes can ask a framework-neutral policy whether to retry, fall back, or fail without encoding those rules in LangGraph. Tests can use structural fakes. Concrete rules and execution remain later workflow work.
