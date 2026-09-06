@@ -5,12 +5,12 @@ Living snapshot. Update at the end of every chunk. Do not list features that do 
 ## Phase and chunk
 
 - **Current phase:** Phase 2 — Infrastructure
-- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization; Chunk 9 — Duplicate Timestamp Policy and Interval Validation; Chunk 10 — Missing-Interval Detection and Gap Reporting; Chunk 11 — DLQ Persistence Boundary; Chunk 12 — Unstructured Document Extraction Boundary; Chunk 13 — Async PostgreSQL/TimescaleDB Persistence Foundation; Chunk 14 — Consumption PostgreSQL Persistence Slice; Chunk 15 — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration; Chunk 16 — Application Cache Port Boundary; Chunk 17 — Async Redis Cache Infrastructure (Offline); Chunk 18 — Redis Service Profile and Live Cache Integration; Chunk 19 — Application Document Embedding Port Boundary
-- **Next recommended chunk:** Application-owned document vector indexing/storage boundary (Qdrant-free). Vector indexing, retrieval/search, and concrete Qdrant infrastructure remain unimplemented.
+- **Completed chunks:** Chunk 0 — Documentation and repository skeleton; Chunk 1 — Python Project Bootstrap, Dependency Management, Typed Configuration, and Minimal Application Health Check; Chunk 2 — Canonical Domain Contracts and Value Objects; Chunk 3 — Error Contracts, Diagnostics, and Observability Foundation; Chunk 4 — Adapter Ports and Structured Ingestion Boundary; Chunk 5 — Semantic Schema Mapping and Field Resolution Engine; Chunk 6 — CSV Structured Ingestion Adapter; Chunk 7 — Excel Structured Ingestion Adapter; Chunk 8 — Deterministic Consumption Unit and Timezone Normalization; Chunk 9 — Duplicate Timestamp Policy and Interval Validation; Chunk 10 — Missing-Interval Detection and Gap Reporting; Chunk 11 — DLQ Persistence Boundary; Chunk 12 — Unstructured Document Extraction Boundary; Chunk 13 — Async PostgreSQL/TimescaleDB Persistence Foundation; Chunk 14 — Consumption PostgreSQL Persistence Slice; Chunk 15 — PostgreSQL/TimescaleDB Service Profile and Live Persistence Integration; Chunk 16 — Application Cache Port Boundary; Chunk 17 — Async Redis Cache Infrastructure (Offline); Chunk 18 — Redis Service Profile and Live Cache Integration; Chunk 19 — Application Document Embedding Port Boundary; Chunk 20 — Application Document Vector Indexing Boundary
+- **Next recommended chunk:** Application Document Retrieval/Search Boundary — Qdrant-free. Concrete Qdrant infrastructure remains unimplemented.
 
 ## What this repository is
 
-A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, explicit Consumption MW/kW plus IANA timezone normalization, fail-closed Consumption duplicate detection, optional interval-grid alignment, per-consumer internal gap reporting, an unwired filesystem-backed DLQ metadata persistence adapter, an application-owned unstructured document extraction boundary with no concrete PDF/OCR adapter, an application-owned document embedding port with no concrete embedding implementation, an unwired async PostgreSQL/TimescaleDB persistence foundation, an unwired Consumption PostgreSQL repository, an on-demand Compose TimescaleDB profile with live migration/repository tests, an application-owned vendor-neutral cache port, an unwired Redis cache adapter (`RedisSettings`, redis-py async factory, infrastructure codec, `RedisCache`), and an on-demand Compose Redis profile with opt-in live cache tests. It is **not** a running trading platform.
+A reproducible Python 3.12 application skeleton with typed settings, a FastAPI factory, process health, canonical domain contracts, transport-neutral application errors, a standard API error envelope, correlation IDs, structured JSON logging, an application-facing structured ingestion boundary, a deterministic infrastructure-local schema field-resolution engine, a concrete Consumption CSV adapter, a concrete Consumption Excel `.xlsx` adapter, explicit Consumption MW/kW plus IANA timezone normalization, fail-closed Consumption duplicate detection, optional interval-grid alignment, per-consumer internal gap reporting, an unwired filesystem-backed DLQ metadata persistence adapter, an application-owned unstructured document extraction boundary with no concrete PDF/OCR adapter, an application-owned document embedding port with no concrete embedding implementation, an application-owned document vector indexing port with no concrete vector-store implementation, an unwired async PostgreSQL/TimescaleDB persistence foundation, an unwired Consumption PostgreSQL repository, an on-demand Compose TimescaleDB profile with live migration/repository tests, an application-owned vendor-neutral cache port, an unwired Redis cache adapter (`RedisSettings`, redis-py async factory, infrastructure codec, `RedisCache`), and an on-demand Compose Redis profile with opt-in live cache tests. It is **not** a running trading platform.
 
 ## What is not implemented
 
@@ -32,10 +32,14 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Ingestion → `ConsumptionRepositoryPort` wiring
 - Unstructured document adapters (PDF/OCR acquisition and parsing)
 - Concrete document embedding implementation / provider / model
-- Document vector indexing/storage port
+- Concrete vector-store implementation
 - Document retrieval/search
+- Query embeddings
+- Vector collection management
+- Document reindex / replacement / delete
 - RAG / retrieval
 - API/composition embedding wiring
+- API/composition vector-index wiring
 - Agents
 - LangGraph
 - Running PostgreSQL / TimescaleDB service as an always-on process
@@ -106,6 +110,8 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - Immutable `ExtractedDocumentChunk` and `DocumentExtractionResult` application DTOs (normalized text only; no embeddings, paths, or raw bytes)
 - Application-owned document embedding port (`DocumentEmbeddingPort`)
 - Immutable `DocumentChunkEmbedding` application DTO (opaque document/chunk identity plus a finite float vector; no provider/model/distance fields)
+- Application-owned document vector indexing port (`DocumentVectorIndexPort`)
+- Immutable `DocumentVectorIndexEntry` application DTO (paired `ExtractedDocumentChunk` + matching `DocumentChunkEmbedding`; identity `(document_id, chunk_id)`)
 - SQLAlchemy 2 async engine/session factories (`create_postgres_engine`, `create_session_factory`) using psycopg 3
 - Structured PostgreSQL URL construction (`postgresql+psycopg`) without logging credentials
 - Alembic migration foundation (`alembic.ini`, `alembic/env.py`)
@@ -127,6 +133,7 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 - DLQ persistence architecture tests (application port has no filesystem/raw-payload surface; filesystem adapter has no CSV/Excel/HTTP/DB/LLM/ML imports)
 - Document extraction architecture tests (application port has no Path/bytes/URL/OCR/PDF/Qdrant surface; `extract()` accepts only `self`)
 - Document embedding architecture tests (application port has no Path/bytes/Qdrant/provider/model/NumPy/search surface; `embed()` accepts only extracted chunks)
+- Document vector indexing architecture tests (application port has no Path/bytes/Qdrant/collection/point/search surface; `index()` accepts only paired index entries)
 - PostgreSQL persistence architecture tests (domain/application/API unwired; settings have no engine objects)
 - Consumption repository architecture tests (port has no SQLAlchemy/session surface; repository is infrastructure-only)
 - Compose TimescaleDB profile architecture tests
@@ -146,7 +153,7 @@ A reproducible Python 3.12 application skeleton with typed settings, a FastAPI f
 
 ## Pending work
 
-Everything after Chunk 19 in `ROADMAP.md`. Next is an application-owned document vector indexing/storage boundary (Qdrant-free). Do not install LangGraph, Qdrant, embedding SDKs, ML stacks, or unrelated Docker services until those chunks.
+Everything after Chunk 20 in `ROADMAP.md`. Next is an application-owned document retrieval/search boundary (Qdrant-free). Do not install LangGraph, Qdrant, embedding SDKs, ML stacks, or unrelated Docker services until those chunks.
 
 ## Known issues
 
@@ -169,6 +176,7 @@ Everything after Chunk 19 in `ROADMAP.md`. Next is an application-owned document
 - Filesystem DLQ persistence stores canonical `DLQRecord` metadata only, is not wired to adapters or `create_app()`, and does not replace PostgreSQL as the planned system of record
 - Unstructured document extraction is an application port returning normalized text chunks; it is not a `RegulatoryConstraint` and has no concrete PDF/OCR adapter
 - Document embedding is an application-owned `DocumentEmbeddingPort` over already-normalized `ExtractedDocumentChunk` values; it is not Qdrant, not a domain contract, and has no concrete provider/model
+- Document vector indexing is an application-owned `DocumentVectorIndexPort` pairing a normalized chunk with its matching embedding; logical identity is `(document_id, chunk_id)`; exact retries are idempotent; conflicts fail closed; there is no generic `VectorStore`, retrieval, or Qdrant adapter
 - PostgreSQL/TimescaleDB persistence is an infrastructure factory plus the Consumption Core table/repository; Compose `postgres` profile is optional and on-demand; no global engine, no FastAPI wiring, no ingestion→repository wiring
 - Consumption persistence identity is `(consumer_id, timestamp)`; exact retries are idempotent; differing values conflict; adapters still do not query PostgreSQL
 - Cache is an application-owned `CachePort[TValue]`; infrastructure `RedisCache` is TTL-bound and ephemeral; Compose `redis` profile is optional and on-demand; no API/orchestration wiring, no locks

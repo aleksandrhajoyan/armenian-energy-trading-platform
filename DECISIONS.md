@@ -410,3 +410,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - No RAG, reranking, hybrid search, BM25, LangChain, LangGraph, agent, or LLM regulatory interpretation is added.
   - Invalid caller input is `InvalidRequestError`. Unavailable or unusable embedding backends become sanitized `DependencyUnavailableError`. Public messages must not include chunk text, secrets, provider bodies, stack traces, model paths, or URLs. Retries are not part of this boundary.
 - **Consequences:** Application call sites and tests can use a structural fake before any embedding adapter exists. A later concrete implementation can satisfy this port without changing application signatures. Qdrant remains a future infrastructure concern behind a still-to-be-designed indexing/storage boundary, not behind this embedding port.
+
+---
+
+## ADR-030 — Application vector indexing boundary precedes Qdrant infrastructure
+
+- **Status:** Accepted
+- **Context:** ADR-005 selected Qdrant as the local/dev vector database. ADR-029 published application-owned embedding generation without persistence. Hiding indexing behind Qdrant collection/point/payload types, or collapsing write and search into a generic `VectorStore`, would couple application orchestration to one vendor and mix distinct consumers. Retrieval/search needs its own later contract.
+- **Decision:**
+  - ADR-005 remains Accepted and is not superseded. Qdrant remains the chosen local/dev vector-store technology. Concrete Qdrant implementation is still deferred.
+  - Application first owns vendor-neutral indexing semantics through `DocumentVectorIndexPort` and `DocumentVectorIndexEntry`.
+  - Indexing pairs a normalized `ExtractedDocumentChunk` with the matching `DocumentChunkEmbedding`. Nested DTOs are reused; there is no shadow document schema.
+  - Logical identity is `(document_id, chunk_id)`. Exact retries of the same application entry are idempotent. The same identity with different chunk or vector content fails closed as `ConflictError` rather than overwrite. There is no last-write-wins, replace, or reindex API in this chunk.
+  - There is no generic `VectorStore`, generic `Repository`, or Unit of Work.
+  - Retrieval/search is a separate future application concern. This port exposes only `index()`.
+  - Collection names, point IDs, payload schema, distance metric, and client objects remain infrastructure concerns and are absent from the public contract.
+  - Invalid batch semantics such as mixed vector dimensions are `InvalidRequestError`. Expected backend failure in a future adapter is sanitized `DependencyUnavailableError`. No retry policy belongs on the port.
+- **Consequences:** Application call sites and tests can exercise indexing identity, idempotency, and conflict rules with a structural fake. A later Qdrant adapter can implement this port without changing application signatures. Query embeddings and search remain undesigned until the retrieval chunk.

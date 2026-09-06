@@ -221,6 +221,41 @@ There is no concrete embedding implementation in this chunk.
 
 ---
 
+## Application document vector indexing contract (not a domain entity)
+
+`DocumentVectorIndexEntry` is an **application orchestration/storage-boundary DTO** defined in `energy_trading.application.ports`. It is a frozen dataclass, not a canonical domain model and not a substitute for `RegulatoryConstraint`.
+
+`DocumentVectorIndexEntry` fields:
+
+- `chunk` (`ExtractedDocumentChunk`)
+- `embedding` (`DocumentChunkEmbedding`)
+
+The entry does not duplicate nested fields. Normalized text and provenance remain on `chunk`. The numeric vector remains on `embedding`.
+
+Identity-match invariant:
+
+- `chunk.document_id` must equal `embedding.document_id`
+- `chunk.chunk_id` must equal `embedding.chunk_id`
+- a mismatch fails construction; neither side is rewritten
+- both fields must be the existing application DTO types, not dicts or tuples-as-records
+
+The application owns `DocumentVectorIndexPort`. The public async operation is `index(entries: tuple[DocumentVectorIndexEntry, ...]) -> None`.
+
+`index()` semantics:
+
+- `index(())` is a successful no-op and does not require backend I/O
+- logical identity is `(document_id, chunk_id)`; the same `chunk_id` under different documents is distinct
+- re-indexing the same identity with the exact same application entry (chunk + embedding, including ordinal, text, optional page number, and vector) is idempotent
+- the same identity with different application content fails closed as `ConflictError` (no last-write-wins, no silent overwrite)
+- exact in-call duplicates may be coalesced; in-call conflicting identities are `ConflictError`
+- one non-empty call must use a single vector dimensionality (`len(embedding.vector)`); mixed dimensions are `InvalidRequestError`
+- successful return means the supplied logical entries are indexed according to these semantics; cross-entry database transaction atomicity is not promised
+- the port does not search, retrieve, delete, replace, or manage collections
+
+There is no concrete vector-store implementation and no Qdrant schema in this chunk.
+
+---
+
 ## Intentionally deferred contracts
 
 Additional contracts (tariff tables, official bid-message envelopes, imbalance components, user/identity) will be added when a chunk has verified requirements. Do not pre-create parallel “shadow” schemas in application code.

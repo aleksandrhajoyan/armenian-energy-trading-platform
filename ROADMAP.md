@@ -38,7 +38,7 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 - [x] **Chunk 17** — Async Redis Cache Infrastructure (Offline)
 - [x] **Chunk 18** — Redis Service Profile and Live Cache Integration
 - [x] **Chunk 19** — Application Document Embedding Port Boundary
-- [ ] Application document vector indexing/storage boundary
+- [x] **Chunk 20** — Application Document Vector Indexing Boundary
 - [ ] Application document retrieval/search boundary
 - [ ] Concrete Qdrant infrastructure
 - [ ] Qdrant service profile/live integration
@@ -112,5 +112,5 @@ Split into reviewable chunks. Start services only when a chunk needs them (RAM b
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 19
-- **Next:** Application-owned document vector indexing/storage boundary (Qdrant-free). Retrieval/search and concrete Qdrant remain later slices.
+- **Completed:** Chunk 0 through Chunk 20
+- **Next:** Application Document Retrieval/Search Boundary — Qdrant-free. Concrete Qdrant remains a later slice.
