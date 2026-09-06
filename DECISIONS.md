@@ -630,3 +630,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Weather and Hydro are not generalized into a shared ingestion-agent base class, registry, or factory.
   - Canonical identity remains the existing `AgentName.HYDRO_RESOURCES` display value `Hydro Resources Agent`.
 - **Consequences:** The second concrete deterministic ingestion-agent pattern is proven without vendor coupling. A future infrastructure hydro adapter can satisfy `HydroRecordSourcePort`. Canonical Hydro can later feed other workflows through explicit reviewed boundaries. Generation Availability interaction remains later. Other agents remain separately reviewed.
+
+---
+
+## ADR-042 — First concrete Generation Availability agent consumes canonical records through an application-owned source port
+
+- **Status:** Accepted
+- **Context:** Chunks 30–31 established provider-neutral Weather and Hydro application-agent patterns: thin agents structurally satisfying `AgentPort`, consuming already-canonical records through application-owned source ports. Generation Availability is the next deterministic ingestion agent. External outage and plant-availability schemas must remain inside the infrastructure ACL. Hydro-derived capacity, status-to-MW rules, missing-asset semantics, and fleet-completeness policy are premature. Graph wiring, persistence, retry/fallback execution, and provider selection remain separate concerns and must not ride along with this first Generation slice. Three similar agents are not sufficient justification for a generic ingestion-agent framework.
+- **Decision:**
+  - The third concrete agent is Generation Availability Agent. It structurally satisfies `AgentPort[GenerationAvailabilityRequest, GenerationAvailabilityResult]` and does not inherit a base class.
+  - Agent-specific request/result remain frozen application DTOs. The request carries only opaque `asset_id` plus explicit `horizon_start` / `horizon_end`. The result contains a canonical `GenerationAvailabilityRecord` tuple.
+  - `GenerationAvailabilityRecordSourcePort` is application-owned. `fetch` is keyword-only and returns only already-canonical `GenerationAvailabilityRecord` values. External adapters remain infrastructure.
+  - Empty results are valid. Tuple order is preserved as returned by the future implementation. The port and agent do not sort, interpolate, resample, aggregate, infer cadence, fabricate missing assets or time points, or assume an Armenian DAM interval.
+  - The agent does not infer status, calculate `available_capacity_mw` or `total_capacity_mw`, apply derates, assume missing-asset availability or outage, or implement fleet-completeness policy. Canonical status and capacity fields are passed through unchanged if already present.
+  - There is no Hydro coupling: the Generation agent does not import `HydroResourcesAgent`, `HydroRecordSourcePort`, or `HydroRecord`, and does not construct generation records from Hydro output.
+  - No generation provider, persistence, graph wiring, retry/fallback execution, ML, LLM, or generic ingestion-agent abstraction is added. No new dependency is added.
+  - Weather, Hydro, and Generation are not generalized into a shared ingestion-agent base class, registry, or factory.
+  - Canonical identity remains the existing `AgentName.GENERATION_AVAILABILITY` display value `Generation Availability Agent`.
+- **Consequences:** The third concrete deterministic ingestion-agent boundary is proven without vendor coupling. A future infrastructure generation adapter may satisfy `GenerationAvailabilityRecordSourcePort`. Hydro/Generation composition remains future reviewed work. Partial fleet completeness must be defined explicitly later. Remaining agents continue to be added individually.

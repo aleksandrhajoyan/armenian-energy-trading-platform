@@ -20,6 +20,9 @@ from energy_trading.application.ports.document_vector_search import (
     DocumentVectorSearchPort,
     DocumentVectorSearchQuery,
 )
+from energy_trading.application.ports.generation_availability_records import (
+    GenerationAvailabilityRecordSourcePort,
+)
 from energy_trading.application.ports.hydro_records import HydroRecordSourcePort
 from energy_trading.application.ports.structured_ingestion import (
     StructuredIngestionPort,
@@ -40,6 +43,7 @@ __all__ = [
     "DocumentVectorSearchPort",
     "DocumentVectorSearchQuery",
     "ExtractedDocumentChunk",
+    "GenerationAvailabilityRecordSourcePort",
     "HydroRecordSourcePort",
     "StructuredIngestionPort",
     "StructuredIngestionResult",
