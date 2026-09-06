@@ -11,6 +11,7 @@ dependencies = [
     "psycopg[binary]>=3,<4",
     "pydantic",
     "pydantic-settings",
+    "qdrant-client>=1.19,<2",
     "redis>=8,<9",
     "sqlalchemy[asyncio]>=2,<3",
     "tzdata>=2026.3",

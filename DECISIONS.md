@@ -444,3 +444,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Zero matches are a valid empty tuple, not `ResourceNotFoundError`. Logical identity `(document_id, chunk_id)` is unique within one response.
   - A query vector incompatible with a configured index dimension, when clearly a request incompatibility, is sanitized `InvalidRequestError`. Unusable backend results (duplicate identities, too many hits, malformed payloads, reconstructable-chunk failures) are sanitized `DependencyUnavailableError`. No retry policy belongs on the port.
 - **Consequences:** Application call sites and tests can exercise ranking, limit, uniqueness, empty-result, and sanitized failure semantics with a structural fake before any vector database exists. A later Qdrant adapter can implement this port without changing application signatures. Query embedding, collection configuration, filters, and live Qdrant remain later work.
+
+---
+
+## ADR-032 — Official async Qdrant client remains infrastructure-only and does not perform embedding
+
+- **Status:** Accepted
+- **Context:** ADR-005 selected Qdrant as the local/dev vector database. Chunks 19–21 published application-owned embedding, indexing, and retrieval ports without a concrete vector database. Introducing Qdrant types into domain, application, API, or ML, or using Qdrant/FastEmbed inference, would collapse `DocumentEmbeddingPort` into the storage client and couple inner layers to one SDK. Collection dimension and distance cannot be chosen until an embedding model exists.
+- **Decision:**
+  - ADR-005 remains Accepted and is not superseded. Qdrant remains the chosen local/dev vector-store technology.
+  - The official `qdrant-client` library (`>=1.19,<2`) is the Python integration. `AsyncQdrantClient` is used.
+  - Client construction is lazy: `create_qdrant_client(settings)` performs no eager Qdrant command, version check, health probe, collection call, or upsert/query. There is no module-global client and no `lru_cache` of a client.
+  - REST is the initial transport (`prefer_grpc=False`). Local embedded mode (`location=":memory:"` / filesystem `path`) is not used as production infrastructure.
+  - Application, API, domain, and ML never import Qdrant SDK types. `QdrantSettings` is separate from `AppSettings` and does not import `qdrant_client`. Process health does not require Qdrant environment variables.
+  - The optional API key is `SecretStr | None`. Callers must not build or log a credential-bearing URL.
+  - FastEmbed, Qdrant `models.Document` inference, and `cloud_inference` are not used. Embeddings remain produced through `DocumentEmbeddingPort`.
+  - Collection schema, vector dimension, distance metric, and point/payload semantics remain deferred to the document-vector adapter slice. A running Qdrant service remains deferred to the service-profile slice.
+- **Consequences:** Tests can construct `AsyncQdrantClient` against an unreachable host without a server. A later adapter can implement `DocumentVectorIndexPort` and `DocumentVectorSearchPort` using this factory without changing application signatures. Compose Qdrant and live tests are still future work.
