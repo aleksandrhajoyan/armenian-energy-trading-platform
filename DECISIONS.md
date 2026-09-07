@@ -995,3 +995,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Runtime composition gains a stable seam. Tests can use structural fakes without inheriting a production base. Production cannot silently choose among simultaneous failures until a later concrete-policy chunk. Attempt tracking, `FailurePolicyContext` runtime construction, and LangGraph failure routing remain separate deferred concerns.
 
 ---
+
+## ADR-065 — Phase 2 attempt number is read through an explicit application boundary
+
+- **Status:** Accepted
+- **Context:** Existing `FailurePolicyContext` requires a 1-based `attempt_number`, but current runtime orchestration has no approved source for it. Attempt storage and retry mechanics must not leak into `WorkflowState`, failure classification, failure selection, context construction, or LangGraph nodes.
+- **Decision:**
+  - Application owns a Phase-2-specific, LangGraph-free, non-generic Protocol `ParallelIngestionAttemptNumberPort` in `parallel_ingestion_attempt_number.py`.
+  - The only public operation is async `get_attempt_number(self, workflow_id: str) -> int`.
+  - The port accepts only workflow identity and returns the current 1-based parallel-ingestion execution attempt. It is read-only, implementation-free, and storage-neutral.
+  - Chunk 55 introduces no concrete implementation, no ABC, no registry, no factory, and no increment/reset/set/record write API.
+  - Chunk 55 defines no mutation semantics, concurrency policy, maximum attempts, or durable backend. Concrete tracking requires separate architectural review.
+- **Consequences:** Future runtime composition has an explicit seam for the attempt number. Later infrastructure may read from an appropriate store without changing application consumers. How attempts are initialized, when increment occurs, concurrency, reset, retry ownership, and durable implementation remain deferred.
+
+---

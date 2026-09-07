@@ -4,7 +4,8 @@ transitions, failure-policy context construction, failure-policy decision
 service, terminal FAIL action execution, prepared failure-handling
 composition, Phase 2 agent-failure attribution, ExceptionGroup attributed-leaf
 extraction, sanitized one-leaf failure classification, tuple-level failure-fact
-classification composition, Phase 2 failure-fact selection contract, and LangGraph runtime.
+classification composition, Phase 2 failure-fact selection contract, Phase 2
+attempt-number source contract, and LangGraph runtime.
 """
 
 from energy_trading.application.orchestration.failure_policy import (
@@ -20,6 +21,9 @@ from energy_trading.application.orchestration.parallel_ingestion import (
 )
 from energy_trading.application.orchestration.parallel_ingestion_agent_failure import (
     ParallelIngestionAgentFailure,
+)
+from energy_trading.application.orchestration.parallel_ingestion_attempt_number import (
+    ParallelIngestionAttemptNumberPort,
 )
 from energy_trading.application.orchestration.parallel_ingestion_context import (
     ParallelIngestionWorkflowContextPort,
@@ -73,6 +77,7 @@ __all__ = [
     "FailurePolicyContext",
     "FailurePolicyPort",
     "ParallelIngestionAgentFailure",
+    "ParallelIngestionAttemptNumberPort",
     "ParallelIngestionExecutionPort",
     "ParallelIngestionFailureDecisionService",
     "ParallelIngestionFailureFact",
