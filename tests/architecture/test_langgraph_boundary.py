@@ -82,6 +82,7 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
     {
         "langgraph.graph",
         "langgraph.graph.state",
+        "energy_trading.application.orchestration.parallel_ingestion_transition",
         "energy_trading.application.orchestration.parallel_ingestion_workflow",
         "energy_trading.application.orchestration.state",
         "END",
@@ -90,6 +91,7 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
         "CompiledStateGraph",
         "ParallelIngestionWorkflowStep",
         "WorkflowState",
+        "advance_after_parallel_ingestion",
     }
 )
 
@@ -176,10 +178,11 @@ def test_graph_module_does_not_import_outer_layers_or_vendors() -> None:
     assert extras == set()
 
 
-def test_graph_module_depends_on_workflow_state_and_phase2_step_only() -> None:
+def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> None:
     names = imported_names(GRAPH_MODULE)
     assert "WorkflowState" in names
     assert "ParallelIngestionWorkflowStep" in names
+    assert "advance_after_parallel_ingestion" in names
     assert "WorkflowPhase" not in names
     assert "WorkflowStatus" not in names
     assert "AgentPort" not in names
@@ -190,7 +193,6 @@ def test_graph_module_depends_on_workflow_state_and_phase2_step_only() -> None:
     assert "ParallelIngestionWorkflowContextPort" not in names
     assert "ConcurrentParallelIngestionExecutor" not in names
     assert "FailurePolicyPort" not in names
-    assert "advance_after_parallel_ingestion" not in names
     assert "WeatherAndRenewableForecastAgent" not in names
     assert "HydroResourcesAgent" not in names
     assert "GenerationAvailabilityAgent" not in names
@@ -198,11 +200,11 @@ def test_graph_module_depends_on_workflow_state_and_phase2_step_only() -> None:
     assert "MarketMonitoringAgent" not in names
     modules = imported_modules(GRAPH_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion_workflow" in modules
+    assert "energy_trading.application.orchestration.parallel_ingestion_transition" in modules
     assert "energy_trading.application.orchestration.parallel_ingestion" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_context" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_executor" not in modules
     assert "energy_trading.application.orchestration.failure_policy" not in modules
-    assert "energy_trading.application.orchestration.parallel_ingestion_transition" not in modules
     assert "energy_trading.application.agents.weather_and_renewable_forecast" not in modules
     assert "energy_trading.application.agents.hydro_resources" not in modules
     assert "energy_trading.application.agents.generation_availability" not in modules
@@ -260,7 +262,7 @@ def test_graph_factory_requires_injected_parallel_ingestion_step() -> None:
     assert factory.args.kw_defaults == [None]
 
 
-def test_graph_topology_contains_phase2_node_and_does_not_construct_lower_deps() -> None:
+def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     source = GRAPH_MODULE.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(GRAPH_MODULE))
     string_constants = {
@@ -270,9 +272,11 @@ def test_graph_topology_contains_phase2_node_and_does_not_construct_lower_deps()
     }
     assert "workflow_entry" in string_constants
     assert "parallel_ingestion" in string_constants
+    assert "parallel_ingestion_success_transition" in string_constants
     add_node_count = 0
     add_edge_count = 0
     constructed: list[str] = []
+    transition_calls = 0
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -286,6 +290,8 @@ def test_graph_topology_contains_phase2_node_and_does_not_construct_lower_deps()
             add_node_count += 1
         elif name == "add_edge":
             add_edge_count += 1
+        elif name == "advance_after_parallel_ingestion":
+            transition_calls += 1
         if name in {
             "ParallelIngestionWorkflowStep",
             "ConcurrentParallelIngestionExecutor",
@@ -298,11 +304,16 @@ def test_graph_topology_contains_phase2_node_and_does_not_construct_lower_deps()
             "MarketMonitoringAgent",
         }:
             constructed.append(name)
-    assert add_node_count == 2
-    assert add_edge_count == 3
+    assert add_node_count == 3
+    assert add_edge_count == 4
+    assert transition_calls == 1
     assert constructed == []
     assert "FailurePolicyPort" not in source
     assert "add_conditional_edges" not in source
+    identifiers = _identifier_names(GRAPH_MODULE)
+    assert "replace" not in identifiers
+    assert "WorkflowPhase" not in identifiers
+    assert "WorkflowStatus" not in identifiers
 
 
 def test_graph_module_has_no_type_ignore_or_private_langgraph_imports() -> None:

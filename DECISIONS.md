@@ -808,3 +808,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - `WorkflowState` remains the published seven-field snapshot and gains no `advance()` / `transition()` helpers. `WorkflowPhase` and `WorkflowStatus` members are unchanged.
   - LangGraph remains `START → workflow_entry → parallel_ingestion → END`. `ParallelIngestionWorkflowStep` still returns the original state. Graph wiring of this transition, Phase 3 execution, general status lifecycle (pending/succeeded/failed), retry/fallback, and Chief Orchestrator remain separately reviewed chunks.
 - **Consequences:** Application callers can apply the successful Phase 2 control-state transition without a graph runtime. Production still has no LangGraph invocation of the transition and no Phase 3 routing.
+
+---
+
+## ADR-053 — LangGraph applies the published Phase 2 success transition in a thin node
+
+- **Status:** Accepted
+- **Context:** Chunk 42 published `advance_after_parallel_ingestion` outside `WorkflowState` and outside LangGraph. Chunk 41 still ended after `parallel_ingestion`. Inlining the replacement in `graph.py`, injecting the transition as a new factory dependency, or adding a Phase 3 forecasting node would mix policy, ports, and later routing into one slice.
+- **Decision:**
+  - Topology is `START → workflow_entry → parallel_ingestion → parallel_ingestion_success_transition → END`.
+  - `parallel_ingestion_success_transition` is a thin async node whose only application behavior is `advance_after_parallel_ingestion(state)` and return of that `WorkflowState`. It does not reimplement preconditions, `dataclasses.replace`, or phase/status assignment.
+  - `build_workflow_graph(*, parallel_ingestion_step: ParallelIngestionWorkflowStep)` is unchanged as a factory signature. The transition is pure application policy, not an injected port.
+  - The workflow step still sees the original `ingestion`/`running` snapshot. The transition runs only after that step returns successfully. A successful graph path ends at `forecasting`/`running` and does not execute Phase 3.
+  - If `ParallelIngestionWorkflowStep.run` raises, the transition node does not run. The exception propagates without retry, fallback, catch, or status mutation. An invalid state reaching the transition still raises the published `InvalidRequestError`.
+  - Conditional edges, five-phase routing, retry/degraded fan-in, checkpointer/store, Chief Orchestrator, and API/composition wiring remain separately reviewed chunks.
+- **Consequences:** Callers who can construct `ParallelIngestionWorkflowStep` can run the all-success Phase 2 path through LangGraph and receive a `forecasting`/`running` snapshot. Production still has no concrete context implementation and no Phase 3 agents.

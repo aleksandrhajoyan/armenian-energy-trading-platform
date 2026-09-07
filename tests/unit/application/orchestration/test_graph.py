@@ -1,4 +1,4 @@
-"""LangGraph skeleton over application-owned WorkflowState."""
+"""LangGraph runtime over application-owned WorkflowState."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import pytest
 from langgraph.graph import END, START
 from langgraph.graph.state import CompiledStateGraph
 
-from energy_trading.application.errors import DependencyUnavailableError
+from energy_trading.application.errors import DependencyUnavailableError, InvalidRequestError
 from energy_trading.application.orchestration import (
     WorkflowPhase,
     WorkflowState,
@@ -39,6 +39,12 @@ _FORBIDDEN_BUSINESS_NODES = frozenset(
         "settlement",
         "chief_orchestrator",
     }
+)
+
+_APPLICATION_NODES = (
+    "workflow_entry",
+    "parallel_ingestion",
+    "parallel_ingestion_success_transition",
 )
 
 
@@ -78,8 +84,8 @@ def _state(**overrides: object) -> WorkflowState:
         "portfolio_id": "portfolio-1",
         "delivery_date": date(2026, 9, 7),
         "correlation_id": "corr-1",
-        "phase": WorkflowPhase.CONTRACT,
-        "status": WorkflowStatus.PENDING,
+        "phase": WorkflowPhase.INGESTION,
+        "status": WorkflowStatus.RUNNING,
         "diagnostics": (),
     }
     values.update(overrides)
@@ -139,22 +145,23 @@ def test_builder_uses_workflow_state_as_schema() -> None:
     assert compiled.builder.state_schema is WorkflowState
 
 
-def test_graph_contains_workflow_entry_and_parallel_ingestion_nodes() -> None:
+def test_graph_contains_workflow_entry_parallel_ingestion_and_transition_nodes() -> None:
     compiled, _step = _compile()
     representation = compiled.get_graph()
     application_nodes = {node_id for node_id in representation.nodes if node_id not in {START, END}}
-    assert application_nodes == {"workflow_entry", "parallel_ingestion"}
+    assert application_nodes == set(_APPLICATION_NODES)
 
 
-def test_topology_is_start_to_workflow_entry_to_parallel_ingestion_to_end() -> None:
+def test_topology_is_start_entry_ingestion_transition_end() -> None:
     compiled, _step = _compile()
     representation = compiled.get_graph()
-    assert set(representation.nodes) == {START, "workflow_entry", "parallel_ingestion", END}
+    assert set(representation.nodes) == {START, *_APPLICATION_NODES, END}
     edges = {(edge.source, edge.target) for edge in representation.edges}
     assert edges == {
         (START, "workflow_entry"),
         ("workflow_entry", "parallel_ingestion"),
-        ("parallel_ingestion", END),
+        ("parallel_ingestion", "parallel_ingestion_success_transition"),
+        ("parallel_ingestion_success_transition", END),
     }
 
 
@@ -168,7 +175,7 @@ def test_graph_has_no_phase_specific_nodes() -> None:
 def test_graph_has_no_conditional_branches() -> None:
     compiled, _step = _compile()
     representation = compiled.get_graph()
-    assert len(representation.edges) == 3
+    assert len(representation.edges) == 4
     conditional = [
         edge
         for edge in representation.edges
@@ -177,65 +184,7 @@ def test_graph_has_no_conditional_branches() -> None:
     assert conditional == []
 
 
-async def test_ainvoke_delegates_once_to_injected_parallel_ingestion_step() -> None:
-    original = _state()
-    compiled, step = _compile()
-    result = await compiled.ainvoke(original)
-    reconstructed = _reconstruct(result)
-    assert step.calls == 1
-    assert len(step.received) == 1
-    received = step.received[0]
-    assert received.workflow_id == original.workflow_id
-    assert received.portfolio_id == original.portfolio_id
-    assert received.delivery_date == original.delivery_date
-    assert received.correlation_id == original.correlation_id
-    assert received.phase is original.phase
-    assert received.status is original.status
-    assert received.diagnostics == original.diagnostics
-    assert reconstructed == original
-    assert reconstructed.phase is WorkflowPhase.CONTRACT
-    assert reconstructed.status is WorkflowStatus.PENDING
-
-
-async def test_ainvoke_preserves_all_workflow_state_fields() -> None:
-    original = _state()
-    original_values = (
-        original.workflow_id,
-        original.portfolio_id,
-        original.delivery_date,
-        original.correlation_id,
-        original.phase,
-        original.status,
-        original.diagnostics,
-    )
-    compiled, _step = _compile()
-    result = await compiled.ainvoke(original)
-    reconstructed = _reconstruct(result)
-    assert reconstructed == original
-    assert original_values == (
-        original.workflow_id,
-        original.portfolio_id,
-        original.delivery_date,
-        original.correlation_id,
-        original.phase,
-        original.status,
-        original.diagnostics,
-    )
-    assert original.phase is WorkflowPhase.CONTRACT
-    assert original.status is WorkflowStatus.PENDING
-
-
-async def test_ainvoke_does_not_mutate_original_frozen_state() -> None:
-    original = _state()
-    compiled, _step = _compile()
-    await compiled.ainvoke(original)
-    assert original.phase is WorkflowPhase.CONTRACT
-    assert original.status is WorkflowStatus.PENDING
-    assert original.diagnostics == ()
-    assert original.workflow_id == "workflow-1"
-
-
-async def test_ainvoke_preserves_canonical_diagnostics() -> None:
+async def test_ainvoke_successful_path_ends_forecasting_running() -> None:
     first = diagnostic()
     second = AdapterDiagnostic(
         code="SCHEMA_AMBIGUOUS",
@@ -247,39 +196,48 @@ async def test_ainvoke_preserves_canonical_diagnostics() -> None:
     compiled, step = _compile()
     result = await compiled.ainvoke(original)
     reconstructed = _reconstruct(result)
-    assert reconstructed.diagnostics == (first, second)
-    assert original.diagnostics == (first, second)
-    assert reconstructed.phase is original.phase
-    assert reconstructed.status is original.status
-    assert step.received[0].diagnostics == (first, second)
-
-
-async def test_graph_does_not_change_phase_status_or_diagnostics() -> None:
-    original = _state(
-        phase=WorkflowPhase.FORECASTING,
-        status=WorkflowStatus.RUNNING,
-        diagnostics=(diagnostic(),),
-    )
-    compiled, _step = _compile()
-    result = await compiled.ainvoke(original)
-    reconstructed = _reconstruct(result)
+    assert step.calls == 1
+    assert len(step.received) == 1
+    received = step.received[0]
+    assert received.phase is WorkflowPhase.INGESTION
+    assert received.status is WorkflowStatus.RUNNING
+    assert received.workflow_id == original.workflow_id
+    assert received.portfolio_id == original.portfolio_id
+    assert received.delivery_date == original.delivery_date
+    assert received.correlation_id == original.correlation_id
+    assert received.diagnostics == (first, second)
     assert reconstructed.phase is WorkflowPhase.FORECASTING
     assert reconstructed.status is WorkflowStatus.RUNNING
-    assert reconstructed.diagnostics == original.diagnostics
     assert reconstructed.workflow_id == original.workflow_id
     assert reconstructed.portfolio_id == original.portfolio_id
     assert reconstructed.delivery_date == original.delivery_date
     assert reconstructed.correlation_id == original.correlation_id
+    assert reconstructed.diagnostics == (first, second)
+    assert original.phase is WorkflowPhase.INGESTION
+    assert original.status is WorkflowStatus.RUNNING
+    assert original.diagnostics == (first, second)
 
 
-async def test_astream_runs_workflow_entry_before_parallel_ingestion() -> None:
+async def test_ainvoke_does_not_mutate_original_frozen_state() -> None:
+    original = _state()
+    compiled, _step = _compile()
+    await compiled.ainvoke(original)
+    assert original.phase is WorkflowPhase.INGESTION
+    assert original.status is WorkflowStatus.RUNNING
+    assert original.diagnostics == ()
+    assert original.workflow_id == "workflow-1"
+
+
+async def test_astream_runs_entry_then_ingestion_then_transition() -> None:
     original = _state()
     compiled, step = _compile()
     node_order: list[str] = []
     async for chunk in compiled.astream(original, stream_mode="updates"):
         node_order.extend(chunk.keys())
-    assert node_order == ["workflow_entry", "parallel_ingestion"]
+    assert node_order == list(_APPLICATION_NODES)
     assert step.calls == 1
+    assert step.received[0].phase is WorkflowPhase.INGESTION
+    assert step.received[0].status is WorkflowStatus.RUNNING
 
 
 async def test_step_failure_propagates_from_ainvoke_without_retry() -> None:
@@ -291,6 +249,41 @@ async def test_step_failure_propagates_from_ainvoke_without_retry() -> None:
         await compiled.ainvoke(original)
     assert captured.value is error
     assert step.calls == 1
+    assert original.phase is WorkflowPhase.INGESTION
+    assert original.status is WorkflowStatus.RUNNING
+    assert original.diagnostics == ()
+
+
+async def test_step_failure_skips_transition_and_propagates_without_retry() -> None:
+    error = DependencyUnavailableError("phase 2 step unavailable")
+    step = _RecordingParallelIngestionStep(error=error)
+    compiled, _injected = _compile(step)
+    original = _state()
+    node_order: list[str] = []
+    with pytest.raises(DependencyUnavailableError) as captured:
+        async for chunk in compiled.astream(original, stream_mode="updates"):
+            node_order.extend(chunk.keys())
+    assert captured.value is error
+    assert step.calls == 1
+    assert "parallel_ingestion_success_transition" not in node_order
+    assert node_order == ["workflow_entry"]
+    assert original.phase is WorkflowPhase.INGESTION
+    assert original.status is WorkflowStatus.RUNNING
+    assert original.diagnostics == ()
+
+
+async def test_invalid_transition_precondition_propagates_unchanged() -> None:
+    original = _state(phase=WorkflowPhase.CONTRACT, status=WorkflowStatus.PENDING)
+    compiled, step = _compile()
+    with pytest.raises(InvalidRequestError) as captured:
+        await compiled.ainvoke(original)
+    assert captured.value.code == "invalid_request"
+    assert (
+        captured.value.message
+        == "Parallel-ingestion success transition requires ingestion phase and running status."
+    )
+    assert step.calls == 1
+    assert step.received[0].phase is WorkflowPhase.CONTRACT
+    assert step.received[0].status is WorkflowStatus.PENDING
     assert original.phase is WorkflowPhase.CONTRACT
     assert original.status is WorkflowStatus.PENDING
-    assert original.diagnostics == ()

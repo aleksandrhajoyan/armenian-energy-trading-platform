@@ -329,10 +329,9 @@ def test_workflow_state_remains_transition_free() -> None:
     assert "energy_trading.application.orchestration.parallel_ingestion_transition" not in modules
 
 
-def test_workflow_step_and_graph_remain_unwired_to_the_transition() -> None:
+def test_workflow_step_and_lower_deps_remain_unwired_to_the_transition() -> None:
     for path in (
         WORKFLOW_MODULE,
-        GRAPH_MODULE,
         EXECUTOR_MODULE,
         FAILURE_POLICY_MODULE,
         PLAN_MODULE,
@@ -349,17 +348,27 @@ def test_workflow_step_and_graph_remain_unwired_to_the_transition() -> None:
         assert "parallel_ingestion_transition" not in source
     workflow_source = WORKFLOW_MODULE.read_text(encoding="utf-8").lower()
     assert "langgraph" not in workflow_source
+
+
+def test_graph_delegates_to_published_transition_without_reimplementing_policy() -> None:
+    names = imported_names(GRAPH_MODULE)
+    assert "advance_after_parallel_ingestion" in names
+    modules = imported_modules(GRAPH_MODULE)
+    assert "energy_trading.application.orchestration.parallel_ingestion_transition" in modules
     graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
+    parsed = ast.parse(graph_source, filename=str(GRAPH_MODULE))
     string_constants = {
         node.value
-        for node in ast.walk(ast.parse(graph_source, filename=str(GRAPH_MODULE)))
+        for node in ast.walk(parsed)
         if isinstance(node, ast.Constant) and isinstance(node.value, str)
     }
     assert "workflow_entry" in string_constants
     assert "parallel_ingestion" in string_constants
+    assert "parallel_ingestion_success_transition" in string_constants
     add_node_count = 0
     add_edge_count = 0
-    for node in ast.walk(ast.parse(graph_source, filename=str(GRAPH_MODULE))):
+    transition_calls = 0
+    for node in ast.walk(parsed):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
@@ -372,9 +381,18 @@ def test_workflow_step_and_graph_remain_unwired_to_the_transition() -> None:
             add_node_count += 1
         elif name == "add_edge":
             add_edge_count += 1
-    assert add_node_count == 2
-    assert add_edge_count == 3
+        elif name == "advance_after_parallel_ingestion":
+            transition_calls += 1
+    assert add_node_count == 3
+    assert add_edge_count == 4
+    assert transition_calls == 1
     assert "add_conditional_edges" not in graph_source
+    identifiers = _identifier_names(GRAPH_MODULE)
+    assert "replace" not in identifiers
+    assert "WorkflowPhase" not in identifiers
+    assert "WorkflowStatus" not in identifiers
+    transition_source = TRANSITION_MODULE.read_text(encoding="utf-8").lower()
+    assert "langgraph" not in transition_source
 
 
 def test_api_composition_does_not_import_or_construct_the_transition() -> None:
