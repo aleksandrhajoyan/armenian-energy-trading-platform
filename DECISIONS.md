@@ -732,3 +732,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - LangGraph remains `START → workflow_entry → END` and does not import or inject the port. `WorkflowState` remains unchanged. `FailurePolicyPort` remains unconnected. `AgentPort` remains unchanged.
   - A future concrete implementation and any failure/partial/degraded fan-in policy remain separately reviewed chunks. This ADR does not pick an execution strategy.
 - **Consequences:** A later executor can implement the already-specific plan-to-success boundary without a generic payload bag. Graph wiring, Chief Orchestrator, and concurrency choice remain future work.
+
+---
+
+## ADR-048 — Phase 2 ingestion execution uses application-layer structured concurrency
+
+- **Status:** Accepted
+- **Context:** Chunks 35–37 published `ParallelIngestionPlan`, `ParallelIngestionExecutionPort`, and `ParallelIngestionSuccess`. The five Phase 2 agents already exist as application-layer services. Encoding this first executable slice inside LangGraph, or attaching retry/fallback/degraded unions to the first implementation, would freeze orchestrator policy before it is reviewed. Sequential execution would also hide the intended Phase 2 independence of the five branches.
+- **Decision:**
+  - Application owns concrete `ConcurrentParallelIngestionExecutor`. It structurally implements the already-published `ParallelIngestionExecutionPort`. It is not a generic executor framework, registry, or factory.
+  - Constructor dependencies are exactly the five existing application agents: `WeatherAndRenewableForecastAgent`, `HydroResourcesAgent`, `GenerationAvailabilityAgent`, `NewsIntelligenceAgent`, and `MarketMonitoringAgent`. Source adapters, `FailurePolicyPort`, LangGraph, Redis, persistence, and n8n are not injected.
+  - `execute` launches all five `agent.run(plan.<branch>)` calls inside one `asyncio.TaskGroup` before waiting for completion. This ADR scopes `TaskGroup` to this executor; it is not a platform-wide concurrency standard.
+  - `ParallelIngestionSuccess` is returned only when all five branches succeed. Result DTO objects are preserved. Records are not merged, sorted, or rewritten.
+  - Branch exceptions follow native TaskGroup cancellation and exception-group propagation. This slice does not retry, fall back, degrade, convert errors to empty results, or invent a partial-success aggregate.
+  - LangGraph remains `START → workflow_entry → END` and does not import or invoke the executor. `WorkflowState` remains unchanged. `FailurePolicyPort` remains unconnected.
+  - Graph join, failure/degraded fan-in contracts, retry/fallback execution, and Chief Orchestrator remain separately reviewed chunks.
+- **Consequences:** Callers can run the five current ingestion agents concurrently behind the existing port without a graph runtime. Orchestrator wiring and failure policy remain future work. A later chunk may replace or wrap this executor if reviewed concurrency or policy requirements differ.

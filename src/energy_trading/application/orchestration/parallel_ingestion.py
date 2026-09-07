@@ -16,7 +16,7 @@ Ownership:
   and ``ParallelIngestionExecutionPort``.
 * Existing agent request/result DTOs: reused as-is. This module does not
   shadow or replace them.
-* Future execution: a separately reviewed chunk may implement the port.
+* Future execution: a separately reviewed module may implement the port.
   This module does not execute agents and does not choose a concurrency
   strategy.
 
@@ -120,11 +120,12 @@ class ParallelIngestionExecutionPort(Protocol):
     """Framework-neutral parallel-ingestion execution contract.
 
     Implementations satisfy this protocol structurally. There is no
-    application base class and no concrete production executor.
+    application base class. A concrete executor lives in a separate module.
 
     ``execute`` accepts only a prepared ``ParallelIngestionPlan`` and
-    returns only ``ParallelIngestionSuccess``. It does not encode
-    concurrency, retry, fallback, degraded, or partial-success semantics.
+    returns only ``ParallelIngestionSuccess``. The protocol itself does not
+    encode concurrency, retry, fallback, degraded, or partial-success
+    semantics.
     """
 
     async def execute(self, plan: ParallelIngestionPlan) -> ParallelIngestionSuccess:

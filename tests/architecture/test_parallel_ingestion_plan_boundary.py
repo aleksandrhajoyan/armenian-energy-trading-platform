@@ -391,7 +391,6 @@ def test_parallel_ingestion_module_has_no_concrete_executor() -> None:
     production_executor_classes: list[str] = []
     forbidden_implementation_names = {
         "ParallelIngestionExecutor",
-        "ConcurrentParallelIngestionExecutor",
         "SequentialParallelIngestionExecutor",
         "ParallelIngestionRunner",
     }
@@ -429,12 +428,15 @@ def test_graph_and_failure_policy_remain_unwired_to_the_plan() -> None:
         assert "ParallelIngestionPlan" not in names
         assert "ParallelIngestionSuccess" not in names
         assert "ParallelIngestionExecutionPort" not in names
+        assert "ConcurrentParallelIngestionExecutor" not in names
         modules = imported_modules(path)
         assert "energy_trading.application.orchestration.parallel_ingestion" not in modules
+        assert "energy_trading.application.orchestration.parallel_ingestion_executor" not in modules
         source = path.read_text(encoding="utf-8")
         assert "ParallelIngestionPlan" not in source
         assert "ParallelIngestionSuccess" not in source
         assert "ParallelIngestionExecutionPort" not in source
+        assert "ConcurrentParallelIngestionExecutor" not in source
         assert "asyncio.gather" not in source
         assert "TaskGroup" not in source
 

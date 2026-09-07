@@ -1,4 +1,4 @@
-"""Application orchestration contracts and the minimal LangGraph skeleton."""
+"""Application orchestration contracts, concurrent ingestion executor, and LangGraph skeleton."""
 
 from energy_trading.application.orchestration.failure_policy import (
     FailureAction,
@@ -11,6 +11,9 @@ from energy_trading.application.orchestration.parallel_ingestion import (
     ParallelIngestionPlan,
     ParallelIngestionSuccess,
 )
+from energy_trading.application.orchestration.parallel_ingestion_executor import (
+    ConcurrentParallelIngestionExecutor,
+)
 from energy_trading.application.orchestration.state import (
     WorkflowPhase,
     WorkflowState,
@@ -18,6 +21,7 @@ from energy_trading.application.orchestration.state import (
 )
 
 __all__ = [
+    "ConcurrentParallelIngestionExecutor",
     "FailureAction",
     "FailurePolicyContext",
     "FailurePolicyPort",
