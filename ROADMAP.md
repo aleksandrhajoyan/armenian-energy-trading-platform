@@ -83,6 +83,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
   - [x] **Chunk 46** — Parallel Ingestion Failure-Policy Decision Boundary — Application-only
   - [x] **Chunk 47** — Parallel Ingestion Failure-Policy Context Construction — Application-only
   - [x] **Chunk 48** — Parallel Ingestion Terminal FAIL Action Execution — Application-only
+  - [x] **Chunk 49** — Prepared Parallel-Ingestion Failure Handling Composition — Application-only, LangGraph-free
 
 ## Phase 5 — Regulatory + pricing
 
@@ -136,5 +137,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 48
-- **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize production/durable workflow-context implementation, exception capture, retry/fallback execution, LangGraph failure-transition or decision-service wiring, Phase 3 execution, or API/composition graph wiring.
+- **Completed:** Chunk 0 through Chunk 49
+- **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize production/durable workflow-context implementation, exception capture, retry/fallback execution, LangGraph failure-transition, decision-service, action-executor, or failure-handling-composition wiring, Phase 3 execution, or API/composition graph wiring.

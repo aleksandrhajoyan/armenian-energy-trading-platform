@@ -332,6 +332,7 @@ def test_graph_module_does_not_import_or_inject_failure_policy() -> None:
     assert "ParallelIngestionFailureDecisionService" not in graph_source
     assert "build_parallel_ingestion_failure_policy_context" not in graph_source
     assert "execute_parallel_ingestion_failure_action" not in graph_source
+    assert "ParallelIngestionFailureHandlingService" not in graph_source
     policy_names = imported_names(FAILURE_POLICY_MODULE)
     assert "fail_parallel_ingestion" not in policy_names
     assert "advance_after_parallel_ingestion" not in policy_names
@@ -357,9 +358,14 @@ def test_graph_module_does_not_import_or_inject_failure_policy() -> None:
         "energy_trading.application.orchestration.parallel_ingestion_failure_action"
         not in policy_modules
     )
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_handling"
+        not in policy_modules
+    )
     assert "ParallelIngestionFailureDecisionService" not in policy_names
     assert "build_parallel_ingestion_failure_policy_context" not in policy_names
     assert "execute_parallel_ingestion_failure_action" not in policy_names
+    assert "ParallelIngestionFailureHandlingService" not in policy_names
 
 
 def test_api_composition_does_not_import_or_construct_failure_policy() -> None:

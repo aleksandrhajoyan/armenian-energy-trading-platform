@@ -901,3 +901,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Every currently published `FailureAction` member is handled explicitly. There is no silent default that returns success or original state. An unreachable assertion may exist only as a typing exhaustiveness guard.
   - LangGraph remains `START → workflow_entry → parallel_ingestion → parallel_ingestion_success_transition → END`. This function is not imported or called by `graph.py`, `parallel_ingestion_workflow.py`, the decision service, the context builder, or `fail_parallel_ingestion`. Runtime Phase 2 exceptions still propagate. Retry/fallback execution, graph failure routing, exception capture, and Chief Orchestrator remain separately reviewed chunks.
 - **Consequences:** Application callers can apply a terminal Phase 2 `FAIL` decision without a graph runtime. Production still has no retry/fallback mechanics, no LangGraph failure routing, and no complete failure-handling workflow.
+
+---
+
+## ADR-059 — Prepared Phase 2 failure handling is composed before runtime exception routing
+
+- **Status:** Accepted
+- **Context:** Chunk 46 published `ParallelIngestionFailureDecisionService`, which returns an already-decided `FailureAction` without executing it. Chunk 47 published context construction from already-sanitized typed facts. Chunk 48 published `execute_parallel_ingestion_failure_action`, which applies terminal `FAIL` and rejects `RETRY` / `FALLBACK` as not implemented. Folding those steps into LangGraph, into exception capture, or into a generic orchestrator would freeze independently reviewable concerns: how sanitized facts become context, which action the policy chooses, how that action is applied, and when graph catch/conditional routing exists. Duplicating `FailureAction` branching or `fail_parallel_ingestion` inside a composition service would split ownership already assigned to Chunks 45 and 48.
+- **Decision:**
+  - Application owns `ParallelIngestionFailureHandlingService` in `parallel_ingestion_failure_handling.py`. It is one concrete Phase-2-specific service, not a Protocol, ABC, registry, factory, generic handler, or workflow framework.
+  - Constructor injects exactly the published `ParallelIngestionFailureDecisionService`. Public operation is keyword-only `async handle(*, state: WorkflowState, context: FailurePolicyContext) -> WorkflowState`.
+  - The caller supplies an already-built sanitized `FailurePolicyContext`. This service does not construct context, does not inspect exceptions, and does not invent an agent identity.
+  - `handle` awaits `decide(context)` exactly once, then passes the returned `FailureAction` and the supplied `WorkflowState` to `execute_parallel_ingestion_failure_action`. Decision remains owned by `ParallelIngestionFailureDecisionService`. Action semantics remain owned by `execute_parallel_ingestion_failure_action`. Terminal state mutation remains owned by `fail_parallel_ingestion`.
+  - The composition service adds no `FailureAction` branching, no retry/fallback loops, no diagnostics mutation, and no exception translation. Policy exceptions and published executor errors propagate unchanged.
+  - Raw runtime failure interpretation remains deferred. LangGraph failure routing remains deferred. Retry/fallback execution remains deferred. This slice does not claim failure handling is complete.
+  - LangGraph remains `START → workflow_entry → parallel_ingestion → parallel_ingestion_success_transition → END`. This service is not imported or called by `graph.py`. Runtime Phase 2 exceptions still propagate.
+- **Consequences:** Application callers can compose an already-prepared Phase 2 failure path without a graph runtime. Production still has no exception capture, no sanitized-facts derivation from raw failures, no retry/fallback mechanics, no LangGraph failure routing, and no complete failure-handling workflow.

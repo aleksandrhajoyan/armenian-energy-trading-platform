@@ -475,6 +475,7 @@ def test_graph_does_not_import_or_call_the_failure_transition() -> None:
     assert "add_conditional_edges" not in graph_source
     assert "fail_parallel_ingestion" not in graph_source
     assert "execute_parallel_ingestion_failure_action" not in graph_source
+    assert "ParallelIngestionFailureHandlingService" not in graph_source
     identifiers = _identifier_names(GRAPH_MODULE)
     assert "replace" not in identifiers
     assert "WorkflowPhase" not in identifiers

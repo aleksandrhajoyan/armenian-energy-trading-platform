@@ -390,6 +390,7 @@ def test_graph_workflow_and_executor_remain_unwired_to_action_execution() -> Non
         assert "parallel_ingestion_failure_action" not in source
     graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
     assert "add_conditional_edges" not in graph_source
+    assert "ParallelIngestionFailureHandlingService" not in graph_source
 
 
 def test_api_composition_does_not_import_or_construct_the_action_executor() -> None:

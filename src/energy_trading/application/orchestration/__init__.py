@@ -1,7 +1,8 @@
 """Application orchestration contracts, concurrent ingestion executor,
 workflow context port, workflow step, Phase 2 success and terminal-failure
 transitions, failure-policy context construction, failure-policy decision
-service, terminal FAIL action execution, and LangGraph runtime.
+service, terminal FAIL action execution, prepared failure-handling
+composition, and LangGraph runtime.
 """
 
 from energy_trading.application.orchestration.failure_policy import (
@@ -30,6 +31,9 @@ from energy_trading.application.orchestration.parallel_ingestion_failure_context
 from energy_trading.application.orchestration.parallel_ingestion_failure_decision import (
     ParallelIngestionFailureDecisionService,
 )
+from energy_trading.application.orchestration.parallel_ingestion_failure_handling import (
+    ParallelIngestionFailureHandlingService,
+)
 from energy_trading.application.orchestration.parallel_ingestion_failure_transition import (
     fail_parallel_ingestion,
 )
@@ -52,6 +56,7 @@ __all__ = [
     "FailurePolicyPort",
     "ParallelIngestionExecutionPort",
     "ParallelIngestionFailureDecisionService",
+    "ParallelIngestionFailureHandlingService",
     "ParallelIngestionPlan",
     "ParallelIngestionSuccess",
     "ParallelIngestionWorkflowContextPort",

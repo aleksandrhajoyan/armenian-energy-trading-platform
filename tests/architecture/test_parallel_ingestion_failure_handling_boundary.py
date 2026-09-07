@@ -1,4 +1,4 @@
-"""Parallel-ingestion failure-policy decision service stays application-owned."""
+"""Prepared parallel-ingestion failure handling stays application-owned."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from pathlib import Path
 from tests.architecture.import_inspection import (
     SRC_ROOT,
     annotation_type_names,
-    async_function_arg_names,
     collect_import_violations,
     imported_modules,
     imported_names,
@@ -17,14 +16,17 @@ from tests.architecture.import_inspection import (
 
 PRODUCTION_ROOT = SRC_ROOT / "energy_trading"
 ORCHESTRATION_ROOT = PRODUCTION_ROOT / "application" / "orchestration"
-DECISION_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_failure_decision.py"
+HANDLING_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_failure_handling.py"
 FAILURE_POLICY_MODULE = ORCHESTRATION_ROOT / "failure_policy.py"
+DECISION_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_failure_decision.py"
+CONTEXT_BUILDER_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_failure_context.py"
+ACTION_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_failure_action.py"
 FAILURE_TRANSITION_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_failure_transition.py"
 SUCCESS_TRANSITION_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_transition.py"
 WORKFLOW_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_workflow.py"
 GRAPH_MODULE = ORCHESTRATION_ROOT / "graph.py"
 EXECUTOR_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_executor.py"
-CONTEXT_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_context.py"
+WORKFLOW_CONTEXT_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_context.py"
 PLAN_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion.py"
 STATE_MODULE = ORCHESTRATION_ROOT / "state.py"
 API_ROOT = PRODUCTION_ROOT / "api"
@@ -81,9 +83,14 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "TypedDict",
         "Callable",
         "Optional",
+        "Protocol",
+        "ABC",
         "Exception",
         "BaseException",
-        "WorkflowState",
+        "ExceptionGroup",
+        "FailureAction",
+        "FailurePolicyPort",
+        "AdapterDiagnostic",
         "ParallelIngestionPlan",
         "ParallelIngestionSuccess",
         "ParallelIngestionExecutionPort",
@@ -101,7 +108,8 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "RetryPolicy",
         "AgentPort",
         "AgentName",
-        "AdapterDiagnostic",
+        "WorkflowPhase",
+        "WorkflowStatus",
     }
 )
 
@@ -114,12 +122,18 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "Mapping",
         "MutableMapping",
         "Callable",
+        "Protocol",
+        "ABC",
         "Exception",
         "BaseException",
-        "WorkflowState",
+        "ExceptionGroup",
+        "FailureAction",
+        "FailurePolicyPort",
+        "build_parallel_ingestion_failure_policy_context",
         "fail_parallel_ingestion",
-        "execute_parallel_ingestion_failure_action",
         "advance_after_parallel_ingestion",
+        "replace",
+        "AdapterDiagnostic",
         "ParallelIngestionPlan",
         "ParallelIngestionSuccess",
         "ParallelIngestionExecutionPort",
@@ -133,32 +147,25 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "backoff",
         "asyncio",
         "TaskGroup",
+        "create_task",
         "sleep",
-        "retry",
-        "fallback",
         "wait",
-    }
-)
-
-FORBIDDEN_IMPLEMENTATION_NAMES = frozenset(
-    {
-        "DefaultFailurePolicy",
-        "RetryAllDependenciesPolicy",
-        "ExponentialBackoffPolicy",
-        "AgentFailurePolicy",
-        "StaticFailurePolicy",
-        "ConservativeFailurePolicy",
+        "WorkflowPhase",
+        "WorkflowStatus",
     }
 )
 
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
         "energy_trading.application.orchestration.failure_policy",
+        "energy_trading.application.orchestration.parallel_ingestion_failure_action",
+        "energy_trading.application.orchestration.parallel_ingestion_failure_decision",
+        "energy_trading.application.orchestration.state",
     }
 )
 
 ALLOWED_INIT_ANNOTATIONS = {
-    "policy": "FailurePolicyPort",
+    "decision_service": "ParallelIngestionFailureDecisionService",
 }
 
 
@@ -216,67 +223,64 @@ def _identifier_names(path: Path) -> set[str]:
     return names
 
 
-def _decide_method(class_def: ast.ClassDef) -> ast.AsyncFunctionDef:
+def _handle_method(class_def: ast.ClassDef) -> ast.AsyncFunctionDef:
     for node in class_def.body:
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "decide":
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "handle":
             return node
-    msg = "async method 'decide' not found on ParallelIngestionFailureDecisionService"
+    msg = "async method 'handle' not found on ParallelIngestionFailureHandlingService"
     raise AssertionError(msg)
 
 
-def test_decision_service_does_not_import_outer_layers_or_vendors() -> None:
+def test_handling_service_does_not_import_outer_layers_or_vendors() -> None:
     leaked = sorted(
         module
-        for module in imported_modules(DECISION_MODULE)
+        for module in imported_modules(HANDLING_MODULE)
         if is_forbidden(module, FORBIDDEN_PREFIXES)
     )
     assert leaked == []
-    extras = imported_modules(DECISION_MODULE) - ALLOWED_MODULE_IMPORTS
+    extras = imported_modules(HANDLING_MODULE) - ALLOWED_MODULE_IMPORTS
     assert extras == set()
     leaked_names = sorted(
-        name for name in imported_names(DECISION_MODULE) if name in FORBIDDEN_TYPE_NAMES
+        name for name in imported_names(HANDLING_MODULE) if name in FORBIDDEN_TYPE_NAMES
     )
     assert leaked_names == []
-    names = imported_names(DECISION_MODULE)
-    assert "FailureAction" in names
+    names = imported_names(HANDLING_MODULE)
     assert "FailurePolicyContext" in names
-    assert "FailurePolicyPort" in names
-    assert "WorkflowState" not in names
+    assert "WorkflowState" in names
+    assert "ParallelIngestionFailureDecisionService" in names
+    assert "execute_parallel_ingestion_failure_action" in names
+    assert "FailurePolicyPort" not in names
+    assert "FailureAction" not in names
     assert "fail_parallel_ingestion" not in names
-    assert "execute_parallel_ingestion_failure_action" not in names
-    assert "advance_after_parallel_ingestion" not in names
+    assert "build_parallel_ingestion_failure_policy_context" not in names
 
 
-def test_decision_service_module_exposes_exactly_one_production_class() -> None:
-    assert _module_class_names(DECISION_MODULE) == ["ParallelIngestionFailureDecisionService"]
-    class_def = _class_def(DECISION_MODULE, "ParallelIngestionFailureDecisionService")
+def test_handling_service_module_exposes_exactly_one_production_class() -> None:
+    assert _module_class_names(HANDLING_MODULE) == ["ParallelIngestionFailureHandlingService"]
+    class_def = _class_def(HANDLING_MODULE, "ParallelIngestionFailureHandlingService")
     assert _base_names(class_def) == set()
-    assert "Protocol" not in _base_names(class_def)
-    assert "ABC" not in _base_names(class_def)
     production_classes: list[str] = []
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
         parsed = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in parsed.body:
             if (
                 isinstance(node, ast.ClassDef)
-                and node.name == "ParallelIngestionFailureDecisionService"
+                and node.name == "ParallelIngestionFailureHandlingService"
             ):
                 production_classes.append(path.relative_to(SRC_ROOT).as_posix())
     assert production_classes == [
-        "energy_trading/application/orchestration/parallel_ingestion_failure_decision.py"
+        "energy_trading/application/orchestration/parallel_ingestion_failure_handling.py"
     ]
-    for name in FORBIDDEN_IMPLEMENTATION_NAMES:
-        assert name not in _identifier_names(DECISION_MODULE)
 
 
-def test_constructor_injects_exactly_the_published_failure_policy_port() -> None:
-    class_def = _class_def(DECISION_MODULE, "ParallelIngestionFailureDecisionService")
+def test_constructor_injects_exactly_the_published_decision_service() -> None:
+    class_def = _class_def(HANDLING_MODULE, "ParallelIngestionFailureHandlingService")
     init_fn = next(
         node
         for node in class_def.body
         if isinstance(node, ast.FunctionDef) and node.name == "__init__"
     )
-    assert tuple(arg.arg for arg in init_fn.args.args) == ("self", "policy")
+    assert tuple(arg.arg for arg in init_fn.args.args) == ("self", "decision_service")
     assert init_fn.args.posonlyargs == []
     assert init_fn.args.kwonlyargs == []
     assert init_fn.args.vararg is None
@@ -284,140 +288,125 @@ def test_constructor_injects_exactly_the_published_failure_policy_port() -> None
     assert _init_arg_annotations(class_def) == ALLOWED_INIT_ANNOTATIONS
 
 
-def test_decide_signature_is_async_context_to_action() -> None:
-    class_def = _class_def(DECISION_MODULE, "ParallelIngestionFailureDecisionService")
-    decide_fn = _decide_method(class_def)
-    assert tuple(arg.arg for arg in decide_fn.args.args) == ("self", "context")
-    assert decide_fn.args.posonlyargs == []
-    assert decide_fn.args.kwonlyargs == []
-    assert decide_fn.args.vararg is None
-    assert decide_fn.args.kwarg is None
-    assert decide_fn.args.args[1].annotation is not None
-    assert decide_fn.returns is not None
-    assert ast.unparse(decide_fn.args.args[1].annotation) == "FailurePolicyContext"
-    assert ast.unparse(decide_fn.returns) == "FailureAction"
-    assert async_function_arg_names(DECISION_MODULE, "decide") == ("self", "context")
+def test_handle_signature_is_async_keyword_only_state_and_context() -> None:
+    class_def = _class_def(HANDLING_MODULE, "ParallelIngestionFailureHandlingService")
+    handle_fn = _handle_method(class_def)
+    assert tuple(arg.arg for arg in handle_fn.args.args) == ("self",)
+    assert handle_fn.args.posonlyargs == []
+    assert tuple(arg.arg for arg in handle_fn.args.kwonlyargs) == ("state", "context")
+    assert handle_fn.args.vararg is None
+    assert handle_fn.args.kwarg is None
+    assert ast.unparse(handle_fn.args.kwonlyargs[0].annotation) == "WorkflowState"
+    assert ast.unparse(handle_fn.args.kwonlyargs[1].annotation) == "FailurePolicyContext"
+    assert ast.unparse(handle_fn.returns) == "WorkflowState"
+    assert handle_fn.args.kw_defaults == [None, None]
     public_methods = [
         node.name
         for node in class_def.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         and not node.name.startswith("_")
     ]
-    assert public_methods == ["decide"]
+    assert public_methods == ["handle"]
 
 
-def test_decide_delegates_once_without_branching_or_execution() -> None:
-    class_def = _class_def(DECISION_MODULE, "ParallelIngestionFailureDecisionService")
-    decide_fn = _decide_method(class_def)
+def test_handle_delegates_once_without_branching_or_transition_logic() -> None:
+    class_def = _class_def(HANDLING_MODULE, "ParallelIngestionFailureHandlingService")
+    handle_fn = _handle_method(class_def)
     control = [
         type(node).__name__
-        for node in ast.walk(decide_fn)
+        for node in ast.walk(handle_fn)
         if isinstance(node, (ast.If, ast.IfExp, ast.Match, ast.For, ast.While, ast.Try, ast.With))
     ]
     assert control == []
-    except_handlers = [node for node in ast.walk(decide_fn) if isinstance(node, ast.ExceptHandler)]
+    except_handlers = [node for node in ast.walk(handle_fn) if isinstance(node, ast.ExceptHandler)]
     assert except_handlers == []
-    policy_calls = 0
-    for node in ast.walk(decide_fn):
+    decide_calls = 0
+    execute_calls = 0
+    fail_calls = 0
+    replace_calls = 0
+    for node in ast.walk(handle_fn):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
-        if isinstance(func, ast.Attribute) and func.attr == "decide":
-            policy_calls += 1
+        name: str | None = None
+        if isinstance(func, ast.Name):
+            name = func.id
+        elif isinstance(func, ast.Attribute):
+            name = func.attr
+        if name == "decide":
+            decide_calls += 1
             assert len(node.args) == 1
             assert isinstance(node.args[0], ast.Name)
             assert node.args[0].id == "context"
-    assert policy_calls == 1
-    constructed = [
-        node.func.id
-        for node in ast.walk(decide_fn)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    ]
-    assert constructed == []
-    identifiers = _identifier_names(DECISION_MODULE)
+        if name == "execute_parallel_ingestion_failure_action":
+            execute_calls += 1
+            assert node.args == []
+            keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in node.keywords}
+            assert keywords == {"state": "state", "action": "action"}
+        if name == "fail_parallel_ingestion":
+            fail_calls += 1
+        if name == "replace":
+            replace_calls += 1
+    assert decide_calls == 1
+    assert execute_calls == 1
+    assert fail_calls == 0
+    assert replace_calls == 0
+    identifiers = _identifier_names(HANDLING_MODULE)
     leaked = sorted(name for name in identifiers if name in FORBIDDEN_IDENTIFIERS)
     assert leaked == []
-    names = annotation_type_names(DECISION_MODULE)
+    names = annotation_type_names(HANDLING_MODULE)
     leaked_types = sorted(name for name in names if name in FORBIDDEN_TYPE_NAMES)
     assert leaked_types == []
-    source = DECISION_MODULE.read_text(encoding="utf-8")
+    source = HANDLING_MODULE.read_text(encoding="utf-8")
     lowered = source.lower()
     assert "langgraph" not in lowered
     assert "langchain" not in lowered
     assert "fail_parallel_ingestion" not in source
-    assert "execute_parallel_ingestion_failure_action" not in source
-    assert "tenacity" not in lowered
+    assert "build_parallel_ingestion_failure_policy_context" not in source
+    assert "FailurePolicyPort" not in source
     assert "time.sleep" not in lowered
     assert "asyncio.sleep" not in lowered
+    assert "asyncio.taskgroup" not in lowered
 
 
-def test_failure_policy_contract_remains_unchanged_and_unwired_to_the_service() -> None:
-    names = imported_names(FAILURE_POLICY_MODULE)
-    assert "ParallelIngestionFailureDecisionService" not in names
-    modules = imported_modules(FAILURE_POLICY_MODULE)
-    assert (
-        "energy_trading.application.orchestration.parallel_ingestion_failure_decision"
-        not in modules
-    )
-    source = FAILURE_POLICY_MODULE.read_text(encoding="utf-8")
-    assert "ParallelIngestionFailureDecisionService" not in source
-    assert "parallel_ingestion_failure_decision" not in source
-    assert "build_parallel_ingestion_failure_policy_context" not in source
-    assert "parallel_ingestion_failure_context" not in source
-    assert "execute_parallel_ingestion_failure_action" not in source
-    assert "parallel_ingestion_failure_action" not in source
-
-
-def test_graph_workflow_and_transitions_remain_unwired_to_the_decision_service() -> None:
+def test_graph_workflow_and_lower_layers_remain_unwired_to_the_handling_service() -> None:
     for path in (
         GRAPH_MODULE,
         WORKFLOW_MODULE,
+        FAILURE_POLICY_MODULE,
+        DECISION_MODULE,
+        CONTEXT_BUILDER_MODULE,
+        ACTION_MODULE,
         FAILURE_TRANSITION_MODULE,
         SUCCESS_TRANSITION_MODULE,
         EXECUTOR_MODULE,
-        CONTEXT_MODULE,
+        WORKFLOW_CONTEXT_MODULE,
         PLAN_MODULE,
         STATE_MODULE,
     ):
         names = imported_names(path)
-        assert "ParallelIngestionFailureDecisionService" not in names
-        assert "build_parallel_ingestion_failure_policy_context" not in names
+        assert "ParallelIngestionFailureHandlingService" not in names
         modules = imported_modules(path)
-        assert (
-            "energy_trading.application.orchestration.parallel_ingestion_failure_decision"
-            not in modules
-        )
-        assert (
-            "energy_trading.application.orchestration.parallel_ingestion_failure_context"
-            not in modules
-        )
-        assert (
-            "energy_trading.application.orchestration.parallel_ingestion_failure_action"
-            not in modules
-        )
         assert (
             "energy_trading.application.orchestration.parallel_ingestion_failure_handling"
             not in modules
         )
         source = path.read_text(encoding="utf-8")
-        assert "ParallelIngestionFailureDecisionService" not in source
-        assert "parallel_ingestion_failure_decision" not in source
-        assert "build_parallel_ingestion_failure_policy_context" not in source
-        assert "execute_parallel_ingestion_failure_action" not in source
         assert "ParallelIngestionFailureHandlingService" not in source
+        assert "parallel_ingestion_failure_handling" not in source
     graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
     assert "add_conditional_edges" not in graph_source
 
 
-def test_api_composition_does_not_import_or_construct_the_decision_service() -> None:
+def test_api_composition_does_not_import_or_construct_the_handling_service() -> None:
     forbidden_wiring = (
         "energy_trading.application.orchestration",
-        "energy_trading.application.orchestration.parallel_ingestion_failure_decision",
+        "energy_trading.application.orchestration.parallel_ingestion_failure_handling",
     )
     assert collect_import_violations(API_ROOT, forbidden_wiring) == []
     for path in sorted(API_ROOT.rglob("*.py")):
         names = imported_names(path)
-        assert "ParallelIngestionFailureDecisionService" not in names
+        assert "ParallelIngestionFailureHandlingService" not in names
     app_source = API_APP.read_text(encoding="utf-8").lower()
-    assert "parallelingestionfailuredecisionservice" not in app_source
-    assert "parallel_ingestion_failure_decision" not in app_source
+    assert "parallelingestionfailurehandlingservice" not in app_source
+    assert "parallel_ingestion_failure_handling" not in app_source
