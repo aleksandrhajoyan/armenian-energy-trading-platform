@@ -86,7 +86,6 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "FailurePolicyContext",
         "FailureAction",
         "AgentPort",
-        "AgentName",
         "StateGraph",
         "CompiledStateGraph",
         "Send",
@@ -97,12 +96,15 @@ FORBIDDEN_TYPE_NAMES = frozenset(
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
         "asyncio",
+        "collections.abc",
+        "energy_trading.application.agents.base",
         "energy_trading.application.agents.generation_availability",
         "energy_trading.application.agents.hydro_resources",
         "energy_trading.application.agents.market_monitoring",
         "energy_trading.application.agents.news_intelligence",
         "energy_trading.application.agents.weather_and_renewable_forecast",
         "energy_trading.application.orchestration.parallel_ingestion",
+        "energy_trading.application.orchestration.parallel_ingestion_agent_failure",
     }
 )
 
@@ -211,6 +213,12 @@ def test_executor_does_not_import_outer_layers_or_vendors() -> None:
         name for name in imported_names(EXECUTOR_MODULE) if name in FORBIDDEN_TYPE_NAMES
     )
     assert leaked_names == []
+    names = imported_names(EXECUTOR_MODULE)
+    assert "ParallelIngestionAgentFailure" in names
+    assert "AgentName" in names
+    assert "FailurePolicyPort" not in names
+    assert "WorkflowState" not in names
+    assert "ExceptionGroup" not in names
 
 
 def test_executor_module_exposes_exactly_one_concrete_class() -> None:
@@ -304,6 +312,27 @@ def test_executor_uses_taskgroup_and_not_gather() -> None:
         if isinstance(func, ast.Attribute) and func.attr == "create_task":
             create_task_calls += 1
     assert create_task_calls == 5
+    except_types = [
+        ast.unparse(node.type) if node.type is not None else None
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ExceptHandler)
+    ]
+    assert except_types == ["Exception"]
+    assert "except*" not in source
+    raise_from_count = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Raise) or node.exc is None or node.cause is None:
+            continue
+        func = node.exc
+        name: str | None = None
+        if isinstance(func, ast.Call):
+            if isinstance(func.func, ast.Name):
+                name = func.func.id
+        if name == "ParallelIngestionAgentFailure":
+            raise_from_count += 1
+            assert isinstance(node.cause, ast.Name)
+            assert node.cause.id == "exc"
+    assert raise_from_count == 1
 
 
 def test_executor_public_contract_excludes_payload_and_runtime_types() -> None:
@@ -314,13 +343,16 @@ def test_executor_public_contract_excludes_payload_and_runtime_types() -> None:
     assert "Any" not in identifiers
     assert "dict" not in identifiers
     assert "Mapping" not in identifiers
+    assert "AgentPort" not in identifiers
     assert "FailurePolicyPort" not in identifiers
     assert "WorkflowState" not in identifiers
-    assert "AgentPort" not in identifiers
-    assert "AgentName" not in identifiers
+    assert "ExceptionGroup" not in identifiers
+    assert "ParallelIngestionAgentFailure" in identifiers
+    assert "AgentName" in identifiers
     source = EXECUTOR_MODULE.read_text(encoding="utf-8")
     assert "langgraph" not in source.lower()
     assert "langchain" not in source.lower()
+    assert "except*" not in source
 
 
 def test_workflow_state_shape_is_unchanged_by_the_executor() -> None:

@@ -917,3 +917,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Raw runtime failure interpretation remains deferred. LangGraph failure routing remains deferred. Retry/fallback execution remains deferred. This slice does not claim failure handling is complete.
   - LangGraph remains `START → workflow_entry → parallel_ingestion → parallel_ingestion_success_transition → END`. This service is not imported or called by `graph.py`. Runtime Phase 2 exceptions still propagate.
 - **Consequences:** Application callers can compose an already-prepared Phase 2 failure path without a graph runtime. Production still has no exception capture, no sanitized-facts derivation from raw failures, no retry/fallback mechanics, no LangGraph failure routing, and no complete failure-handling workflow.
+
+---
+
+## ADR-060 — Phase 2 agent failures are attributed before TaskGroup aggregation
+
+- **Status:** Accepted
+- **Context:** `ConcurrentParallelIngestionExecutor` runs the five Phase 2 agents concurrently through `asyncio.TaskGroup`. Native TaskGroup propagation yields an `ExceptionGroup` whose leaves no longer identify which agent owned the failed task. Downstream policy context needs a canonical `AgentName`, but that identity is only known at the executor boundary. Interpreting the `ExceptionGroup`, mapping error codes, or wiring LangGraph catch/conditional edges in the same slice would freeze independently reviewable concerns.
+- **Decision:**
+  - Application owns `ParallelIngestionAgentFailure` in `parallel_ingestion_agent_failure.py`. It is one Phase-2-specific exception class, not a generic orchestration-failure hierarchy, DTO, or `WorkflowState` field.
+  - Constructor input is exactly canonical `AgentName`. The outward message is a stable sanitized sentence that identifies that agent and does not include original exception text, repr, stack, vendor payload, or request/result contents.
+  - The original Python failure is retained only through `raise ParallelIngestionAgentFailure(agent_name) from exc`. There is no custom public exception-payload field.
+  - Each of the five executor tasks awaits one agent `run(...)` through an internal helper. Ordinary `Exception` failures are attributed. `asyncio.CancelledError` is a `BaseException` and is not wrapped, so sibling TaskGroup cancellation is not classified as agent failure.
+  - `ParallelIngestionExecutionPort.execute` remains an all-success contract returning `ParallelIngestionSuccess`. Failure still propagates. This slice does not flatten or interpret `ExceptionGroup`, does not derive `error_code`, does not construct `FailurePolicyContext`, and does not invoke Chunk 46–49 policy/handling surfaces.
+  - LangGraph remains `START → workflow_entry → parallel_ingestion → parallel_ingestion_success_transition → END`. Runtime Phase 2 exceptions still propagate from the graph.
+- **Consequences:** Callers can recover which Phase 2 agent failed from an attributed leaf while TaskGroup aggregation remains native. Production still has no ExceptionGroup interpretation, no error-code mapping, no policy routing, no LangGraph failure catching, and no complete failure-handling workflow.

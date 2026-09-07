@@ -5,6 +5,11 @@ This module is the first concrete implementation of
 application agents, runs them concurrently with ``asyncio.TaskGroup``, and
 returns ``ParallelIngestionSuccess`` only when all five branches succeed.
 
+When a branch raises an ordinary execution exception, the executor wraps
+that failure as ``ParallelIngestionAgentFailure`` with the canonical
+``AgentName`` for that branch. Sibling ``TaskGroup`` cancellation is not
+reclassified as an agent failure.
+
 Ownership:
 
 * Application: owns ``ConcurrentParallelIngestionExecutor``.
@@ -19,7 +24,9 @@ does not inherit a base class.
 """
 
 import asyncio
+from collections.abc import Awaitable
 
+from energy_trading.application.agents.base import AgentName
 from energy_trading.application.agents.generation_availability import GenerationAvailabilityAgent
 from energy_trading.application.agents.hydro_resources import HydroResourcesAgent
 from energy_trading.application.agents.market_monitoring import MarketMonitoringAgent
@@ -31,6 +38,9 @@ from energy_trading.application.orchestration.parallel_ingestion import (
     ParallelIngestionPlan,
     ParallelIngestionSuccess,
 )
+from energy_trading.application.orchestration.parallel_ingestion_agent_failure import (
+    ParallelIngestionAgentFailure,
+)
 
 
 class ConcurrentParallelIngestionExecutor:
@@ -39,7 +49,8 @@ class ConcurrentParallelIngestionExecutor:
     Constructor dependencies are the five concrete application agents. The
     executor does not own source adapters, graph runtime, or failure policy.
     Native ``asyncio.TaskGroup`` cancellation and exception propagation apply
-    when a branch raises.
+    when a branch raises. Attribution is added only for ordinary agent
+    execution failures.
     """
 
     def __init__(
@@ -66,14 +77,35 @@ class ConcurrentParallelIngestionExecutor:
 
         async with asyncio.TaskGroup() as group:
             weather_task = group.create_task(
-                self._weather_and_renewable_forecast.run(plan.weather_and_renewable_forecast)
+                self._run_attributed(
+                    AgentName.WEATHER_AND_RENEWABLE_FORECAST,
+                    self._weather_and_renewable_forecast.run(plan.weather_and_renewable_forecast),
+                )
             )
-            hydro_task = group.create_task(self._hydro_resources.run(plan.hydro_resources))
+            hydro_task = group.create_task(
+                self._run_attributed(
+                    AgentName.HYDRO_RESOURCES,
+                    self._hydro_resources.run(plan.hydro_resources),
+                )
+            )
             generation_task = group.create_task(
-                self._generation_availability.run(plan.generation_availability)
+                self._run_attributed(
+                    AgentName.GENERATION_AVAILABILITY,
+                    self._generation_availability.run(plan.generation_availability),
+                )
             )
-            news_task = group.create_task(self._news_intelligence.run(plan.news_intelligence))
-            market_task = group.create_task(self._market_monitoring.run(plan.market_monitoring))
+            news_task = group.create_task(
+                self._run_attributed(
+                    AgentName.NEWS_INTELLIGENCE,
+                    self._news_intelligence.run(plan.news_intelligence),
+                )
+            )
+            market_task = group.create_task(
+                self._run_attributed(
+                    AgentName.MARKET_MONITORING,
+                    self._market_monitoring.run(plan.market_monitoring),
+                )
+            )
         return ParallelIngestionSuccess(
             weather_and_renewable_forecast=weather_task.result(),
             hydro_resources=hydro_task.result(),
@@ -81,3 +113,14 @@ class ConcurrentParallelIngestionExecutor:
             news_intelligence=news_task.result(),
             market_monitoring=market_task.result(),
         )
+
+    async def _run_attributed[T](self, agent_name: AgentName, operation: Awaitable[T]) -> T:
+        """Await one agent ``run`` and attribute ordinary failures to ``agent_name``.
+
+        ``asyncio.CancelledError`` is a ``BaseException`` and is not wrapped.
+        """
+
+        try:
+            return await operation
+        except Exception as exc:
+            raise ParallelIngestionAgentFailure(agent_name) from exc

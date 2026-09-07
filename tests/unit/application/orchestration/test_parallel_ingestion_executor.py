@@ -9,6 +9,7 @@ from decimal import Decimal
 
 import pytest
 
+from energy_trading.application.agents import AgentName
 from energy_trading.application.agents.generation_availability import (
     GenerationAvailabilityAgent,
     GenerationAvailabilityRequest,
@@ -37,6 +38,7 @@ from energy_trading.application.agents.weather_and_renewable_forecast import (
 from energy_trading.application.errors import DependencyUnavailableError
 from energy_trading.application.orchestration import (
     ConcurrentParallelIngestionExecutor,
+    ParallelIngestionAgentFailure,
     ParallelIngestionExecutionPort,
     ParallelIngestionPlan,
     ParallelIngestionSuccess,
@@ -493,7 +495,15 @@ async def test_single_branch_failure_does_not_return_success_or_retry() -> None:
     fail_now.set()
     with pytest.raises(ExceptionGroup) as exc_info:
         await execute_task
-    assert any(isinstance(item, DependencyUnavailableError) for item in exc_info.value.exceptions)
+    attributed = [
+        item
+        for item in exc_info.value.exceptions
+        if isinstance(item, ParallelIngestionAgentFailure)
+    ]
+    assert len(attributed) == 1
+    assert attributed[0].agent_name is AgentName.WEATHER_AND_RENEWABLE_FORECAST
+    assert attributed[0].__cause__ is error
+    assert "weather source unavailable" not in str(attributed[0])
     assert weather_agent.calls == 1
     assert hydro_agent.calls == 1
     assert generation_agent.calls == 1
@@ -534,7 +544,15 @@ async def test_executor_does_not_fabricate_partial_success_on_failure() -> None:
     )
     with pytest.raises(ExceptionGroup) as exc_info:
         await executor.execute(_plan())
-    assert any(isinstance(item, DependencyUnavailableError) for item in exc_info.value.exceptions)
+    attributed = [
+        item
+        for item in exc_info.value.exceptions
+        if isinstance(item, ParallelIngestionAgentFailure)
+    ]
+    assert len(attributed) == 1
+    assert attributed[0].agent_name is AgentName.MARKET_MONITORING
+    assert attributed[0].__cause__ is error
+    assert "market source unavailable" not in str(attributed[0])
     assert market_agent.calls == 1
     assert weather_agent.calls == 1
     assert hydro_agent.calls == 1
