@@ -328,6 +328,19 @@ def test_graph_module_does_not_import_or_inject_failure_policy() -> None:
     graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
     assert "FailurePolicyPort" not in graph_source
     assert "decide(" not in graph_source
+    assert "fail_parallel_ingestion" not in graph_source
+    policy_names = imported_names(FAILURE_POLICY_MODULE)
+    assert "fail_parallel_ingestion" not in policy_names
+    assert "advance_after_parallel_ingestion" not in policy_names
+    policy_modules = imported_modules(FAILURE_POLICY_MODULE)
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_transition"
+        not in policy_modules
+    )
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_transition"
+        not in policy_modules
+    )
 
 
 def test_api_composition_does_not_import_or_construct_failure_policy() -> None:

@@ -193,6 +193,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "ParallelIngestionWorkflowContextPort" not in names
     assert "ConcurrentParallelIngestionExecutor" not in names
     assert "FailurePolicyPort" not in names
+    assert "fail_parallel_ingestion" not in names
     assert "WeatherAndRenewableForecastAgent" not in names
     assert "HydroResourcesAgent" not in names
     assert "GenerationAvailabilityAgent" not in names
@@ -201,6 +202,10 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     modules = imported_modules(GRAPH_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion_workflow" in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_transition" in modules
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_transition"
+        not in modules
+    )
     assert "energy_trading.application.orchestration.parallel_ingestion" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_context" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_executor" not in modules
@@ -273,6 +278,7 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "workflow_entry" in string_constants
     assert "parallel_ingestion" in string_constants
     assert "parallel_ingestion_success_transition" in string_constants
+    assert "parallel_ingestion_failure_transition" not in string_constants
     add_node_count = 0
     add_edge_count = 0
     constructed: list[str] = []
@@ -309,6 +315,7 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert transition_calls == 1
     assert constructed == []
     assert "FailurePolicyPort" not in source
+    assert "fail_parallel_ingestion" not in source
     assert "add_conditional_edges" not in source
     identifiers = _identifier_names(GRAPH_MODULE)
     assert "replace" not in identifiers

@@ -220,6 +220,24 @@ def test_workflow_state_has_only_construction_validation() -> None:
     ]
     assert defined == ["__post_init__"]
     assert not any(isinstance(node, ast.AsyncFunctionDef) for node in ast.walk(class_def))
+    assert {
+        "fail",
+        "mark_failed",
+        "transition",
+        "retry",
+        "fallback",
+        "fail_parallel_ingestion",
+        "advance_after_parallel_ingestion",
+    }.isdisjoint(defined)
+    names = imported_names(STATE_MODULE)
+    assert "fail_parallel_ingestion" not in names
+    assert "advance_after_parallel_ingestion" not in names
+    modules = imported_modules(STATE_MODULE)
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_transition"
+        not in modules
+    )
+    assert "energy_trading.application.orchestration.parallel_ingestion_transition" not in modules
 
 
 def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
