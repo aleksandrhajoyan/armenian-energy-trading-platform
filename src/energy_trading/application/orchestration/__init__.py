@@ -1,5 +1,5 @@
 """Application orchestration contracts, concurrent ingestion executor,
-workflow context port, workflow step, and LangGraph skeleton.
+workflow context port, workflow step, and LangGraph runtime.
 """
 
 from energy_trading.application.orchestration.failure_policy import (

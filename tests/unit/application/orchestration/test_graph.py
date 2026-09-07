@@ -1,13 +1,15 @@
-"""Minimal LangGraph skeleton over application-owned WorkflowState."""
+"""LangGraph skeleton over application-owned WorkflowState."""
 
 from __future__ import annotations
 
 from datetime import date
 from importlib.metadata import version
 
+import pytest
 from langgraph.graph import END, START
 from langgraph.graph.state import CompiledStateGraph
 
+from energy_trading.application.errors import DependencyUnavailableError
 from energy_trading.application.orchestration import (
     WorkflowPhase,
     WorkflowState,
@@ -38,6 +40,22 @@ _FORBIDDEN_BUSINESS_NODES = frozenset(
         "chief_orchestrator",
     }
 )
+
+
+class _RecordingParallelIngestionStep:
+    """Test-only stand-in for the injected Phase 2 workflow step."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.calls = 0
+        self.received: list[WorkflowState] = []
+
+    async def run(self, state: WorkflowState) -> WorkflowState:
+        self.calls += 1
+        self.received.append(state)
+        if self.error is not None:
+            raise self.error
+        return state
 
 
 def _parse_version(value: str) -> tuple[int, ...]:
@@ -80,6 +98,17 @@ def _reconstruct(payload: dict[str, object]) -> WorkflowState:
     )
 
 
+def _compile(
+    step: _RecordingParallelIngestionStep | None = None,
+) -> tuple[
+    CompiledStateGraph[WorkflowState, None, WorkflowState, WorkflowState],
+    _RecordingParallelIngestionStep,
+]:
+    injected = step if step is not None else _RecordingParallelIngestionStep()
+    compiled = build_workflow_graph(parallel_ingestion_step=injected)
+    return compiled, injected
+
+
 def test_installed_langgraph_satisfies_project_constraint() -> None:
     installed = version("langgraph")
     parsed = _parse_version(installed)
@@ -88,55 +117,84 @@ def test_installed_langgraph_satisfies_project_constraint() -> None:
     assert installed.startswith("1.2.")
 
 
+def test_build_workflow_graph_requires_parallel_ingestion_step() -> None:
+    with pytest.raises(TypeError):
+        build_workflow_graph()  # type: ignore[call-arg]
+
+
 def test_build_workflow_graph_returns_compiled_langgraph() -> None:
-    compiled = build_workflow_graph()
+    compiled, _step = _compile()
     assert isinstance(compiled, CompiledStateGraph)
 
 
 def test_repeated_factory_calls_create_independent_graphs() -> None:
-    first = build_workflow_graph()
-    second = build_workflow_graph()
+    first, _first_step = _compile()
+    second, _second_step = _compile()
     assert first is not second
     assert type(first) is type(second)
 
 
 def test_builder_uses_workflow_state_as_schema() -> None:
-    compiled = build_workflow_graph()
+    compiled, _step = _compile()
     assert compiled.builder.state_schema is WorkflowState
 
 
-def test_graph_contains_exactly_one_application_node() -> None:
-    compiled = build_workflow_graph()
+def test_graph_contains_workflow_entry_and_parallel_ingestion_nodes() -> None:
+    compiled, _step = _compile()
     representation = compiled.get_graph()
     application_nodes = {node_id for node_id in representation.nodes if node_id not in {START, END}}
-    assert application_nodes == {"workflow_entry"}
+    assert application_nodes == {"workflow_entry", "parallel_ingestion"}
 
 
-def test_topology_is_start_to_workflow_entry_to_end() -> None:
-    compiled = build_workflow_graph()
+def test_topology_is_start_to_workflow_entry_to_parallel_ingestion_to_end() -> None:
+    compiled, _step = _compile()
     representation = compiled.get_graph()
-    assert set(representation.nodes) == {START, "workflow_entry", END}
+    assert set(representation.nodes) == {START, "workflow_entry", "parallel_ingestion", END}
     edges = {(edge.source, edge.target) for edge in representation.edges}
-    assert edges == {(START, "workflow_entry"), ("workflow_entry", END)}
+    assert edges == {
+        (START, "workflow_entry"),
+        ("workflow_entry", "parallel_ingestion"),
+        ("parallel_ingestion", END),
+    }
 
 
 def test_graph_has_no_phase_specific_nodes() -> None:
-    compiled = build_workflow_graph()
+    compiled, _step = _compile()
     node_ids = set(compiled.get_graph().nodes)
     leaked = sorted(node_ids & _FORBIDDEN_BUSINESS_NODES)
     assert leaked == []
 
 
 def test_graph_has_no_conditional_branches() -> None:
-    compiled = build_workflow_graph()
+    compiled, _step = _compile()
     representation = compiled.get_graph()
-    assert len(representation.edges) == 2
+    assert len(representation.edges) == 3
     conditional = [
         edge
         for edge in representation.edges
         if getattr(edge, "conditional", False) or getattr(edge, "data", None) is not None
     ]
     assert conditional == []
+
+
+async def test_ainvoke_delegates_once_to_injected_parallel_ingestion_step() -> None:
+    original = _state()
+    compiled, step = _compile()
+    result = await compiled.ainvoke(original)
+    reconstructed = _reconstruct(result)
+    assert step.calls == 1
+    assert len(step.received) == 1
+    received = step.received[0]
+    assert received.workflow_id == original.workflow_id
+    assert received.portfolio_id == original.portfolio_id
+    assert received.delivery_date == original.delivery_date
+    assert received.correlation_id == original.correlation_id
+    assert received.phase is original.phase
+    assert received.status is original.status
+    assert received.diagnostics == original.diagnostics
+    assert reconstructed == original
+    assert reconstructed.phase is WorkflowPhase.CONTRACT
+    assert reconstructed.status is WorkflowStatus.PENDING
 
 
 async def test_ainvoke_preserves_all_workflow_state_fields() -> None:
@@ -150,7 +208,7 @@ async def test_ainvoke_preserves_all_workflow_state_fields() -> None:
         original.status,
         original.diagnostics,
     )
-    compiled = build_workflow_graph()
+    compiled, _step = _compile()
     result = await compiled.ainvoke(original)
     reconstructed = _reconstruct(result)
     assert reconstructed == original
@@ -169,7 +227,7 @@ async def test_ainvoke_preserves_all_workflow_state_fields() -> None:
 
 async def test_ainvoke_does_not_mutate_original_frozen_state() -> None:
     original = _state()
-    compiled = build_workflow_graph()
+    compiled, _step = _compile()
     await compiled.ainvoke(original)
     assert original.phase is WorkflowPhase.CONTRACT
     assert original.status is WorkflowStatus.PENDING
@@ -186,22 +244,23 @@ async def test_ainvoke_preserves_canonical_diagnostics() -> None:
         field_name="timestamp",
     )
     original = _state(diagnostics=(first, second))
-    compiled = build_workflow_graph()
+    compiled, step = _compile()
     result = await compiled.ainvoke(original)
     reconstructed = _reconstruct(result)
     assert reconstructed.diagnostics == (first, second)
     assert original.diagnostics == (first, second)
     assert reconstructed.phase is original.phase
     assert reconstructed.status is original.status
+    assert step.received[0].diagnostics == (first, second)
 
 
-async def test_noop_graph_does_not_change_phase_status_or_diagnostics() -> None:
+async def test_graph_does_not_change_phase_status_or_diagnostics() -> None:
     original = _state(
         phase=WorkflowPhase.FORECASTING,
         status=WorkflowStatus.RUNNING,
         diagnostics=(diagnostic(),),
     )
-    compiled = build_workflow_graph()
+    compiled, _step = _compile()
     result = await compiled.ainvoke(original)
     reconstructed = _reconstruct(result)
     assert reconstructed.phase is WorkflowPhase.FORECASTING
@@ -211,3 +270,27 @@ async def test_noop_graph_does_not_change_phase_status_or_diagnostics() -> None:
     assert reconstructed.portfolio_id == original.portfolio_id
     assert reconstructed.delivery_date == original.delivery_date
     assert reconstructed.correlation_id == original.correlation_id
+
+
+async def test_astream_runs_workflow_entry_before_parallel_ingestion() -> None:
+    original = _state()
+    compiled, step = _compile()
+    node_order: list[str] = []
+    async for chunk in compiled.astream(original, stream_mode="updates"):
+        node_order.extend(chunk.keys())
+    assert node_order == ["workflow_entry", "parallel_ingestion"]
+    assert step.calls == 1
+
+
+async def test_step_failure_propagates_from_ainvoke_without_retry() -> None:
+    error = DependencyUnavailableError("phase 2 step unavailable")
+    step = _RecordingParallelIngestionStep(error=error)
+    compiled, _injected = _compile(step)
+    original = _state()
+    with pytest.raises(DependencyUnavailableError) as captured:
+        await compiled.ainvoke(original)
+    assert captured.value is error
+    assert step.calls == 1
+    assert original.phase is WorkflowPhase.CONTRACT
+    assert original.status is WorkflowStatus.PENDING
+    assert original.diagnostics == ()

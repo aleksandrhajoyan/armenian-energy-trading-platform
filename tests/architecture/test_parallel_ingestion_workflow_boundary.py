@@ -346,9 +346,8 @@ def test_workflow_state_shape_is_unchanged_by_the_workflow_step() -> None:
     assert "energy_trading.application.orchestration.parallel_ingestion_workflow" not in modules
 
 
-def test_graph_executor_and_failure_policy_remain_unwired_to_the_workflow_step() -> None:
+def test_executor_and_failure_policy_remain_unwired_to_the_workflow_step() -> None:
     for path in (
-        GRAPH_MODULE,
         EXECUTOR_MODULE,
         FAILURE_POLICY_MODULE,
         PLAN_MODULE,
@@ -360,6 +359,10 @@ def test_graph_executor_and_failure_policy_remain_unwired_to_the_workflow_step()
         assert "energy_trading.application.orchestration.parallel_ingestion_workflow" not in modules
         source = path.read_text(encoding="utf-8")
         assert "ParallelIngestionWorkflowStep" not in source
+    graph_names = imported_names(GRAPH_MODULE)
+    assert "ParallelIngestionWorkflowStep" in graph_names
+    graph_modules = imported_modules(GRAPH_MODULE)
+    assert "energy_trading.application.orchestration.parallel_ingestion_workflow" in graph_modules
 
 
 def test_api_composition_does_not_import_or_construct_workflow_step() -> None:

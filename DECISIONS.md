@@ -779,3 +779,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Failures from resolve, execute, or record propagate naturally. Remaining operations do not run after an earlier failure. There is no retry, fallback, degraded continuation, diagnostics append, or `FailurePolicyPort` consultation.
   - LangGraph remains `START → workflow_entry → END` and does not import or invoke the step. Graph integration, phase/status transition, concrete context storage, and Chief Orchestrator remain separately reviewed chunks.
 - **Consequences:** Application callers can run one typed Phase 2 workflow step without a graph runtime. Orchestrator wiring and control-state transitions remain future work.
+
+---
+
+## ADR-051 — LangGraph invokes Phase 2 through an injected workflow step
+
+- **Status:** Accepted
+- **Context:** Chunk 40 published framework-neutral `ParallelIngestionWorkflowStep`. The graph was still `START → workflow_entry → END` and invoked no Phase 2 work. Expanding `WorkflowState`, importing the executor or five agents into `graph.py`, or adding phase/status transitions in the first graph wiring would freeze storage and routing policy before they are reviewed.
+- **Decision:**
+  - `build_workflow_graph(*, parallel_ingestion_step: ParallelIngestionWorkflowStep)` requires the Phase 2 step through keyword-only dependency injection. The factory does not instantiate the step, a context implementation, `ConcurrentParallelIngestionExecutor`, or any ingestion agent.
+  - Topology for this slice is `START → workflow_entry → parallel_ingestion → END`. `workflow_entry` remains an async no-op. `parallel_ingestion` awaits `parallel_ingestion_step.run(state)` and returns that `WorkflowState`.
+  - LangGraph depends only on the framework-neutral step for Phase 2. Lower-level execution and context dependencies remain behind the step.
+  - `WorkflowState` remains the published seven-field snapshot. The graph performs no phase/status mutation.
+  - Failures from the step propagate from `ainvoke`. There is no retry, fallback, degraded continuation, diagnostics append, or `FailurePolicyPort` consultation.
+  - Concrete context storage, API/composition wiring, Phase 2 join as phase-complete routing, and Chief Orchestrator remain separately reviewed chunks.
+- **Consequences:** Callers who can construct `ParallelIngestionWorkflowStep` can run Phase 2 through LangGraph on the all-success path. Production still has no context implementation and no `create_app()` graph wiring.

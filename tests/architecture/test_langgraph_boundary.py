@@ -82,11 +82,13 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
     {
         "langgraph.graph",
         "langgraph.graph.state",
+        "energy_trading.application.orchestration.parallel_ingestion_workflow",
         "energy_trading.application.orchestration.state",
         "END",
         "START",
         "StateGraph",
         "CompiledStateGraph",
+        "ParallelIngestionWorkflowStep",
         "WorkflowState",
     }
 )
@@ -174,9 +176,10 @@ def test_graph_module_does_not_import_outer_layers_or_vendors() -> None:
     assert extras == set()
 
 
-def test_graph_module_uses_only_workflow_state_contract() -> None:
+def test_graph_module_depends_on_workflow_state_and_phase2_step_only() -> None:
     names = imported_names(GRAPH_MODULE)
     assert "WorkflowState" in names
+    assert "ParallelIngestionWorkflowStep" in names
     assert "WorkflowPhase" not in names
     assert "WorkflowStatus" not in names
     assert "AgentPort" not in names
@@ -185,13 +188,24 @@ def test_graph_module_uses_only_workflow_state_contract() -> None:
     assert "ParallelIngestionSuccess" not in names
     assert "ParallelIngestionExecutionPort" not in names
     assert "ParallelIngestionWorkflowContextPort" not in names
-    assert "ParallelIngestionWorkflowStep" not in names
     assert "ConcurrentParallelIngestionExecutor" not in names
+    assert "FailurePolicyPort" not in names
+    assert "WeatherAndRenewableForecastAgent" not in names
+    assert "HydroResourcesAgent" not in names
+    assert "GenerationAvailabilityAgent" not in names
+    assert "NewsIntelligenceAgent" not in names
+    assert "MarketMonitoringAgent" not in names
     modules = imported_modules(GRAPH_MODULE)
+    assert "energy_trading.application.orchestration.parallel_ingestion_workflow" in modules
     assert "energy_trading.application.orchestration.parallel_ingestion" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_context" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_executor" not in modules
-    assert "energy_trading.application.orchestration.parallel_ingestion_workflow" not in modules
+    assert "energy_trading.application.orchestration.failure_policy" not in modules
+    assert "energy_trading.application.agents.weather_and_renewable_forecast" not in modules
+    assert "energy_trading.application.agents.hydro_resources" not in modules
+    assert "energy_trading.application.agents.generation_availability" not in modules
+    assert "energy_trading.application.agents.news_intelligence" not in modules
+    assert "energy_trading.application.agents.market_monitoring" not in modules
 
 
 def test_graph_module_excludes_forbidden_runtime_features() -> None:
@@ -226,6 +240,69 @@ def test_graph_module_excludes_forbidden_runtime_features() -> None:
     assert compile_call.keywords == []
 
 
+def test_graph_factory_requires_injected_parallel_ingestion_step() -> None:
+    tree = ast.parse(GRAPH_MODULE.read_text(encoding="utf-8"), filename=str(GRAPH_MODULE))
+    factory = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "build_workflow_graph"
+    )
+    assert factory.args.args == []
+    assert factory.args.vararg is None
+    assert factory.args.kwarg is None
+    assert factory.args.posonlyargs == []
+    assert [arg.arg for arg in factory.args.kwonlyargs] == ["parallel_ingestion_step"]
+    annotation = factory.args.kwonlyargs[0].annotation
+    assert annotation is not None
+    assert ast.unparse(annotation) == "ParallelIngestionWorkflowStep"
+    assert factory.args.kw_defaults == [None]
+
+
+def test_graph_topology_contains_phase2_node_and_does_not_construct_lower_deps() -> None:
+    source = GRAPH_MODULE.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(GRAPH_MODULE))
+    string_constants = {
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert "workflow_entry" in string_constants
+    assert "parallel_ingestion" in string_constants
+    add_node_count = 0
+    add_edge_count = 0
+    constructed: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name: str | None = None
+        if isinstance(func, ast.Name):
+            name = func.id
+        elif isinstance(func, ast.Attribute):
+            name = func.attr
+        if name == "add_node":
+            add_node_count += 1
+        elif name == "add_edge":
+            add_edge_count += 1
+        if name in {
+            "ParallelIngestionWorkflowStep",
+            "ConcurrentParallelIngestionExecutor",
+            "ParallelIngestionPlan",
+            "ParallelIngestionSuccess",
+            "WeatherAndRenewableForecastAgent",
+            "HydroResourcesAgent",
+            "GenerationAvailabilityAgent",
+            "NewsIntelligenceAgent",
+            "MarketMonitoringAgent",
+        }:
+            constructed.append(name)
+    assert add_node_count == 2
+    assert add_edge_count == 3
+    assert constructed == []
+    assert "FailurePolicyPort" not in source
+    assert "add_conditional_edges" not in source
+
+
 def test_graph_module_has_no_type_ignore_or_private_langgraph_imports() -> None:
     source = GRAPH_MODULE.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(GRAPH_MODULE), type_comments=True)
@@ -247,3 +324,5 @@ def test_api_composition_does_not_import_or_construct_graph() -> None:
     assert "build_workflow_graph" not in app_source
     assert "langgraph" not in app_source
     assert "workflow_entry" not in app_source
+    assert "parallel_ingestion" not in app_source
+    assert "parallelingestionworkflowstep" not in app_source
