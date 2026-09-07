@@ -748,3 +748,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - LangGraph remains `START → workflow_entry → END` and does not import or invoke the executor. `WorkflowState` remains unchanged. `FailurePolicyPort` remains unconnected.
   - Graph join, failure/degraded fan-in contracts, retry/fallback execution, and Chief Orchestrator remain separately reviewed chunks.
 - **Consequences:** Callers can run the five current ingestion agents concurrently behind the existing port without a graph runtime. Orchestrator wiring and failure policy remain future work. A later chunk may replace or wrap this executor if reviewed concurrency or policy requirements differ.
+
+---
+
+## ADR-049 — Phase 2 workflow payloads remain outside WorkflowState behind a typed context port
+
+- **Status:** Accepted
+- **Context:** Chunks 35–38 published `ParallelIngestionPlan`, `ParallelIngestionExecutionPort`, `ConcurrentParallelIngestionExecutor`, and `ParallelIngestionSuccess`. A future LangGraph node will need to start from `WorkflowState.workflow_id`, obtain the already-prepared plan, call the execution port, and record the all-five-success aggregate. Expanding the published seven-field `WorkflowState` with Phase 2 request/result bags, or introducing a generic dict/payload envelope, would collapse typed contracts into graph state and freeze storage policy before it is reviewed. Redis, PostgreSQL, and LangGraph checkpoint choices are not yet authorized for this seam.
+- **Decision:**
+  - Application owns non-generic `ParallelIngestionWorkflowContextPort`, a `typing.Protocol` with exactly two public operations: `async resolve_plan(self, workflow_id) -> ParallelIngestionPlan` and `async record_success(self, workflow_id, success: ParallelIngestionSuccess) -> None`.
+  - `workflow_id` reuses the published `WorkflowState.workflow_id` type. Chunk 39 does not invent a new workflow-identity type.
+  - `WorkflowState` remains the seven-field control snapshot. Plan and success objects are not embedded on it.
+  - There is no generic payload dictionary, `Any`, `Mapping`, callback, exception object, or storage-specific method name.
+  - The protocol does not choose in-memory, Redis, PostgreSQL, filesystem, cache, or LangGraph checkpoint storage. There is no concrete production implementation in this chunk.
+  - LangGraph remains `START → workflow_entry → END` and does not import or inject the context port. The executor, `FailurePolicyPort`, and `create_app()` remain unwired.
+  - A future context implementation and any graph-node wiring remain separately reviewed chunks. This ADR does not define missing-plan behavior, retry, fallback, or degraded semantics.
+- **Consequences:** A later graph node can use workflow identity plus this typed port instead of stuffing Phase 2 payloads into `WorkflowState`. Concrete context storage, LangGraph Phase 2 join, and Chief Orchestrator remain future work.

@@ -73,6 +73,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
   - [x] **Chunk 36** — Parallel Ingestion Successful Fan-In Contract — LangGraph-free
   - [x] **Chunk 37** — Parallel Ingestion Execution Boundary — LangGraph-free
   - [x] **Chunk 38** — Concurrent Parallel Ingestion Executor — All-Success Path, LangGraph-free
+  - [x] **Chunk 39** — Parallel Ingestion Workflow Context Boundary — LangGraph-free
 
 ## Phase 5 — Regulatory + pricing
 
@@ -126,5 +127,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 38
-- **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize LangGraph executor invocation, graph join, or failure-policy execution.
+- **Completed:** Chunk 0 through Chunk 39
+- **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize LangGraph executor invocation, graph join, concrete context implementation, or failure-policy execution.
