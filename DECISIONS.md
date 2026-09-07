@@ -981,3 +981,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Callers can turn an attributed Phase 2 failure tuple into a sanitized fact tuple without selecting among failures or invoking policy. Production still has no multi-failure selection policy, no attempt tracking, no exception-capture composition into `FailurePolicyContext`, no retry/fallback mechanics, no LangGraph failure routing, and no complete failure-handling workflow.
 
 ---
+
+## ADR-064 — Phase 2 multi-failure resolution uses an explicit selection boundary
+
+- **Status:** Accepted
+- **Context:** `asyncio.TaskGroup` can produce multiple simultaneous sanitized Phase 2 failure facts. Existing `FailurePolicyContext` carries one `error_code` and one optional agent identity. Embedding a winner rule into classification, context construction, exception handling, or LangGraph would couple independently reviewable concerns.
+- **Decision:**
+  - Application owns a Phase-2-specific, LangGraph-free, non-generic Protocol `ParallelIngestionFailureSelectionPort` in `parallel_ingestion_failure_selection.py`.
+  - The only public operation is synchronous `select(facts: tuple[ParallelIngestionFailureFact, ...]) -> ParallelIngestionFailureFact`.
+  - The port accepts already-sanitized `ParallelIngestionFailureFact` values only and resolves them to exactly one fact before a single-failure `FailurePolicyContext` can later be built.
+  - Chunk 54 introduces no concrete implementation, no ABC, no registry, no factory, and no empty-tuple production default.
+  - No first-element, last-element, agent-order, error-code, retryability, severity, frequency, majority, or aggregation winner rule is approved. Concrete selection semantics require separate architectural review.
+- **Consequences:** Runtime composition gains a stable seam. Tests can use structural fakes without inheriting a production base. Production cannot silently choose among simultaneous failures until a later concrete-policy chunk. Attempt tracking, `FailurePolicyContext` runtime construction, and LangGraph failure routing remain separate deferred concerns.
+
+---
