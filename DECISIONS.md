@@ -764,3 +764,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - LangGraph remains `START → workflow_entry → END` and does not import or inject the context port. The executor, `FailurePolicyPort`, and `create_app()` remain unwired.
   - A future context implementation and any graph-node wiring remain separately reviewed chunks. This ADR does not define missing-plan behavior, retry, fallback, or degraded semantics.
 - **Consequences:** A later graph node can use workflow identity plus this typed port instead of stuffing Phase 2 payloads into `WorkflowState`. Concrete context storage, LangGraph Phase 2 join, and Chief Orchestrator remain future work.
+
+---
+
+## ADR-050 — Phase 2 workflow execution is composed in a framework-neutral application step
+
+- **Status:** Accepted
+- **Context:** Chunks 35–39 published `ParallelIngestionPlan`, `ParallelIngestionExecutionPort`, `ConcurrentParallelIngestionExecutor`, `ParallelIngestionSuccess`, and `ParallelIngestionWorkflowContextPort`. Callers still had to sequence resolve → execute → record themselves. Putting that composition into LangGraph, or mutating `WorkflowState` phase/status as part of the first composition, would freeze graph topology and routing policy before they are reviewed.
+- **Decision:**
+  - Application owns concrete `ParallelIngestionWorkflowStep`. It is a small application service, not a LangGraph node, not a generic workflow-step framework, and not the Chief Orchestrator.
+  - Constructor dependencies are exactly `ParallelIngestionWorkflowContextPort` and `ParallelIngestionExecutionPort`. The five ingestion agents, `ConcurrentParallelIngestionExecutor`, `FailurePolicyPort`, LangGraph, Redis, PostgreSQL, and API objects are not injected.
+  - The only public operation is `async run(self, state: WorkflowState) -> WorkflowState`. Successful execution is exactly `resolve_plan(state.workflow_id)` → `execute(plan)` → `record_success(state.workflow_id, success)`.
+  - The original `WorkflowState` object is returned unchanged by identity. Phase, status, diagnostics, and all other fields are not mutated. A replacement snapshot is not constructed.
+  - Failures from resolve, execute, or record propagate naturally. Remaining operations do not run after an earlier failure. There is no retry, fallback, degraded continuation, diagnostics append, or `FailurePolicyPort` consultation.
+  - LangGraph remains `START → workflow_entry → END` and does not import or invoke the step. Graph integration, phase/status transition, concrete context storage, and Chief Orchestrator remain separately reviewed chunks.
+- **Consequences:** Application callers can run one typed Phase 2 workflow step without a graph runtime. Orchestrator wiring and control-state transitions remain future work.

@@ -1,5 +1,5 @@
 """Application orchestration contracts, concurrent ingestion executor,
-workflow context port, and LangGraph skeleton.
+workflow context port, workflow step, and LangGraph skeleton.
 """
 
 from energy_trading.application.orchestration.failure_policy import (
@@ -19,6 +19,9 @@ from energy_trading.application.orchestration.parallel_ingestion_context import 
 from energy_trading.application.orchestration.parallel_ingestion_executor import (
     ConcurrentParallelIngestionExecutor,
 )
+from energy_trading.application.orchestration.parallel_ingestion_workflow import (
+    ParallelIngestionWorkflowStep,
+)
 from energy_trading.application.orchestration.state import (
     WorkflowPhase,
     WorkflowState,
@@ -34,6 +37,7 @@ __all__ = [
     "ParallelIngestionPlan",
     "ParallelIngestionSuccess",
     "ParallelIngestionWorkflowContextPort",
+    "ParallelIngestionWorkflowStep",
     "WorkflowPhase",
     "WorkflowState",
     "WorkflowStatus",

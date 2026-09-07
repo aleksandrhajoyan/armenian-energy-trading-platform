@@ -185,11 +185,13 @@ def test_graph_module_uses_only_workflow_state_contract() -> None:
     assert "ParallelIngestionSuccess" not in names
     assert "ParallelIngestionExecutionPort" not in names
     assert "ParallelIngestionWorkflowContextPort" not in names
+    assert "ParallelIngestionWorkflowStep" not in names
     assert "ConcurrentParallelIngestionExecutor" not in names
     modules = imported_modules(GRAPH_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_context" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_executor" not in modules
+    assert "energy_trading.application.orchestration.parallel_ingestion_workflow" not in modules
 
 
 def test_graph_module_excludes_forbidden_runtime_features() -> None:
