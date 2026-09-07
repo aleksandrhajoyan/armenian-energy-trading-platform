@@ -267,6 +267,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
         "ParallelIngestionExecutionPort",
         "ParallelIngestionWorkflowContextPort",
         "ConcurrentParallelIngestionExecutor",
+        "ParallelIngestionFailureDecisionService",
         "ParallelIngestionWorkflowStep",
         "WorkflowPhase",
         "WorkflowStatus",

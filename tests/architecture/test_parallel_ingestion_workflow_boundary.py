@@ -363,6 +363,13 @@ def test_executor_and_failure_policy_remain_unwired_to_the_workflow_step() -> No
     assert "ParallelIngestionWorkflowStep" in graph_names
     graph_modules = imported_modules(GRAPH_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion_workflow" in graph_modules
+    workflow_names = imported_names(WORKFLOW_MODULE)
+    assert "ParallelIngestionFailureDecisionService" not in workflow_names
+    workflow_modules = imported_modules(WORKFLOW_MODULE)
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_decision"
+        not in workflow_modules
+    )
 
 
 def test_api_composition_does_not_import_or_construct_workflow_step() -> None:

@@ -256,6 +256,7 @@ def test_failure_transition_does_not_import_outer_layers_or_vendors() -> None:
     assert "AdapterDiagnostic" not in names
     assert "FailurePolicyPort" not in names
     assert "advance_after_parallel_ingestion" not in names
+    assert "ParallelIngestionFailureDecisionService" not in names
 
 
 def test_failure_transition_module_exposes_exactly_one_public_function() -> None:
@@ -421,6 +422,7 @@ def test_graph_does_not_import_or_call_the_failure_transition() -> None:
     names = imported_names(GRAPH_MODULE)
     assert "fail_parallel_ingestion" not in names
     assert "advance_after_parallel_ingestion" in names
+    assert "ParallelIngestionFailureDecisionService" not in names
     modules = imported_modules(GRAPH_MODULE)
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_failure_transition"
