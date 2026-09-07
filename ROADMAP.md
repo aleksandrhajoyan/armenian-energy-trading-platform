@@ -65,6 +65,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 - [ ] Generation Availability Agent
   - [x] **Chunk 32** — Generation Availability Agent Application Boundary and First Concrete Generation Agent
 - [ ] News Intelligence Agent
+  - [x] **Chunk 33** — News Intelligence Agent Application Boundary and First Concrete News Agent
 - [ ] Market Monitoring Agent
 - [ ] Parallel Phase 2 join in the orchestrator
 
@@ -120,5 +121,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 32
-- **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, or Generation Availability agent capabilities complete. Do not pre-authorize another agent.
+- **Completed:** Chunk 0 through Chunk 33
+- **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, Generation Availability, or News Intelligence agent capabilities complete. Do not pre-authorize another agent.

@@ -648,3 +648,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Weather, Hydro, and Generation are not generalized into a shared ingestion-agent base class, registry, or factory.
   - Canonical identity remains the existing `AgentName.GENERATION_AVAILABILITY` display value `Generation Availability Agent`.
 - **Consequences:** The third concrete deterministic ingestion-agent boundary is proven without vendor coupling. A future infrastructure generation adapter may satisfy `GenerationAvailabilityRecordSourcePort`. Hydro/Generation composition remains future reviewed work. Partial fleet completeness must be defined explicitly later. Remaining agents continue to be added individually.
+
+---
+
+## ADR-043 — First concrete News Intelligence agent consumes canonical News records through an application-owned source port
+
+- **Status:** Accepted
+- **Context:** Chunks 30–32 established three concrete provider-neutral ingestion agents: thin application agents structurally satisfying `AgentPort`, consuming already-canonical records through application-owned source ports. News Intelligence is the next Phase 4 ingestion agent. Text and “intelligence” concepts make accidental LLM, embedding, scraper, and provider coupling particularly risky. Raw feeds, HTML, and vendor article objects must remain behind the ACL. The application must consume the already-published canonical `NewsEvent` only. Chunk 33 must not invent a new News domain schema (`NewsRecord`, `NewsArticle`, relevance, impact, URL, sentiment) and must not reconcile `AGENTS.md` narrative wording about future extractable relevance/entities with the existing typed `NewsEvent` contract.
+- **Decision:**
+  - The fourth concrete agent is News Intelligence Agent. It structurally satisfies `AgentPort[NewsIntelligenceRequest, NewsIntelligenceResult]` and does not inherit a base class.
+  - Canonical domain type remains existing `NewsEvent` (`energy_trading.domain.models.observations`). Fields remain `event_id`, `timestamp`, `headline`, `summary`, optional `category`, and optional `severity`. Provider/source identity, URL, body text, sentiment, relevance, and impact are not canonical fields and are not added.
+  - Application-owned source port is `NewsEventSourcePort` in `application/ports/news_events.py`. `fetch` is keyword-only and accepts only `horizon_start` / `horizon_end` because `NewsEvent` is temporal and not entity-scoped. It returns only already-canonical `NewsEvent` tuples.
+  - Agent-specific request/result remain frozen application DTOs. `NewsIntelligenceRequest` carries only explicit `horizon_start` / `horizon_end`. `NewsIntelligenceResult` contains only `records: tuple[NewsEvent, ...]`.
+  - Empty results are valid. Tuple order is preserved as returned by the future implementation. The port and agent do not sort, filter, deduplicate, scrape, parse HTML/RSS, summarize, classify, score, embed, vectorize, translate, fabricate missing events, or assume publication cadence.
+  - The agent does not infer sentiment, relevance, market impact, urgency, credibility, or topic. Existing canonical headline, summary, category, and severity pass through unchanged.
+  - No news provider, RSS/scraper, HTTP client, persistence, embeddings, Qdrant News indexing, graph wiring, retry/fallback execution, ML, or LLM is added. No new dependency is added. Existing document RAG/Qdrant ports are not repurposed.
+  - Weather, Hydro, Generation, and News are not generalized into a shared ingestion-agent base class, registry, or factory.
+  - Canonical identity remains the existing `AgentName.NEWS_INTELLIGENCE` display value `News Intelligence Agent`.
+- **Consequences:** The fourth concrete ingestion-agent boundary is established without vendor or LLM coupling. A future infrastructure news adapter may satisfy `NewsEventSourcePort` only after ACL normalization to `NewsEvent`. Future LLM summarization, sentiment/relevance inference, or vector indexing requires separately reviewed ports and implementation. Remaining Phase 4 agents continue to be added individually.
