@@ -90,6 +90,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
   - [x] **Chunk 53** — Parallel Ingestion Tuple Failure-Fact Classification Composition — Application-only, LangGraph-free
   - [x] **Chunk 54** — Parallel Ingestion Failure-Fact Selection Contract — Application-only, LangGraph-free
   - [x] **Chunk 55** — Parallel Ingestion Attempt-Number Source Contract — Application-only, LangGraph-free
+  - [x] **Chunk 56** — Parallel Ingestion Failure-Policy Context Resolution Service — Application-only, LangGraph-free
 
 ## Phase 5 — Regulatory + pricing
 
@@ -143,5 +144,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 55
-- **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize production/durable workflow-context implementation, concrete multi-failure selection, concrete attempt-number implementation, increment/reset semantics, exception capture, retry/fallback execution, LangGraph failure-transition, decision-service, action-executor, failure-handling-composition, ExceptionGroup-extractor, sanitized-fact-classifier, tuple-classifier, selection-port, or attempt-number-port wiring, Phase 3 execution, or API/composition graph wiring.
+- **Completed:** Chunk 0 through Chunk 56
+- **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize production/durable workflow-context implementation, concrete multi-failure selection, concrete attempt-number implementation, increment/reset semantics, exception capture, retry/fallback execution, LangGraph failure-transition, decision-service, action-executor, failure-handling-composition, ExceptionGroup-extractor, sanitized-fact-classifier, tuple-classifier, selection-port, attempt-number-port, or failure-context-resolution-service wiring, Phase 3 execution, or API/composition graph wiring.

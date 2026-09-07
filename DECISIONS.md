@@ -1009,3 +1009,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Future runtime composition has an explicit seam for the attempt number. Later infrastructure may read from an appropriate store without changing application consumers. How attempts are initialized, when increment occurs, concurrency, reset, retry ownership, and durable implementation remain deferred.
 
 ---
+
+## ADR-066 — Phase 2 failure-policy context assembly is a dedicated application composition
+
+- **Status:** Accepted
+- **Context:** Runtime failure preparation now has a sanitized fact tuple, an explicit selection boundary, an explicit attempt-number boundary, and an existing context builder. Without a dedicated composition service, future LangGraph code could improperly own selection, attempt lookup, and context construction.
+- **Decision:**
+  - Application owns Phase-2-specific, LangGraph-free `ParallelIngestionFailureContextResolutionService` in `parallel_ingestion_failure_context_resolution.py`.
+  - Constructor injects exactly `ParallelIngestionFailureSelectionPort` and `ParallelIngestionAttemptNumberPort`.
+  - The only public operation is keyword-only `async resolve(*, workflow_id: str, phase: WorkflowPhase, facts: tuple[ParallelIngestionFailureFact, ...]) -> FailurePolicyContext`.
+  - The service delegates selection once, awaits attempt lookup once, delegates to existing `build_parallel_ingestion_failure_policy_context`, and returns `FailurePolicyContext`.
+  - It does not implement selection, attempt tracking, failure-policy decision, action execution, exception inspection, or LangGraph coupling.
+- **Consequences:** Future graph/runtime composition can remain thin. Concrete selector and attempt-number implementations remain independently swappable and independently reviewable. Runtime wiring remains a later chunk.
+
+---

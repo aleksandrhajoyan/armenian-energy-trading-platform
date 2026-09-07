@@ -1,11 +1,12 @@
 """Application orchestration contracts, concurrent ingestion executor,
 workflow context port, workflow step, Phase 2 success and terminal-failure
-transitions, failure-policy context construction, failure-policy decision
-service, terminal FAIL action execution, prepared failure-handling
-composition, Phase 2 agent-failure attribution, ExceptionGroup attributed-leaf
-extraction, sanitized one-leaf failure classification, tuple-level failure-fact
-classification composition, Phase 2 failure-fact selection contract, Phase 2
-attempt-number source contract, and LangGraph runtime.
+transitions, failure-policy context construction, failure-policy context
+resolution service, failure-policy decision service, terminal FAIL action
+execution, prepared failure-handling composition, Phase 2 agent-failure
+attribution, ExceptionGroup attributed-leaf extraction, sanitized one-leaf
+failure classification, tuple-level failure-fact classification composition,
+Phase 2 failure-fact selection contract, Phase 2 attempt-number source
+contract, and LangGraph runtime.
 """
 
 from energy_trading.application.orchestration.failure_policy import (
@@ -43,6 +44,9 @@ from energy_trading.application.orchestration.parallel_ingestion_failure_classif
 from energy_trading.application.orchestration.parallel_ingestion_failure_context import (
     build_parallel_ingestion_failure_policy_context,
 )
+from energy_trading.application.orchestration.parallel_ingestion_failure_context_resolution import (
+    ParallelIngestionFailureContextResolutionService,
+)
 from energy_trading.application.orchestration.parallel_ingestion_failure_decision import (
     ParallelIngestionFailureDecisionService,
 )
@@ -79,6 +83,7 @@ __all__ = [
     "ParallelIngestionAgentFailure",
     "ParallelIngestionAttemptNumberPort",
     "ParallelIngestionExecutionPort",
+    "ParallelIngestionFailureContextResolutionService",
     "ParallelIngestionFailureDecisionService",
     "ParallelIngestionFailureFact",
     "ParallelIngestionFailureHandlingService",
