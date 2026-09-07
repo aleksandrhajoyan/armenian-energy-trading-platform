@@ -218,6 +218,7 @@ def test_workflow_state_has_no_transition_or_execution_methods() -> None:
         "with_status",
         "copy_with",
         "next_phase",
+        "advance_after_parallel_ingestion",
     }
     defined_methods = {
         name

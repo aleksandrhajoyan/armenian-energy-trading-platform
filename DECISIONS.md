@@ -794,3 +794,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Failures from the step propagate from `ainvoke`. There is no retry, fallback, degraded continuation, diagnostics append, or `FailurePolicyPort` consultation.
   - Concrete context storage, API/composition wiring, Phase 2 join as phase-complete routing, and Chief Orchestrator remain separately reviewed chunks.
 - **Consequences:** Callers who can construct `ParallelIngestionWorkflowStep` can run Phase 2 through LangGraph on the all-success path. Production still has no context implementation and no `create_app()` graph wiring.
+
+---
+
+## ADR-052 — Successful Phase 2 control-state transition stays outside WorkflowState and LangGraph
+
+- **Status:** Accepted
+- **Context:** Chunks 40–41 published `ParallelIngestionWorkflowStep` and wired it into LangGraph as `START → workflow_entry → parallel_ingestion → END`. The step still returns the original `WorkflowState` unchanged. Putting `advance()` methods on the snapshot DTO would mix transition policy into a frozen identity record. Putting the first phase movement inside `graph.py` would freeze routing and graph topology before they are reviewed. A generic workflow-transition framework, registry, or state-machine library would over-abstract one Phase-2-specific replacement.
+- **Decision:**
+  - Application owns `advance_after_parallel_ingestion(state: WorkflowState) -> WorkflowState` in `parallel_ingestion_transition.py`. It is one Phase-2-specific function, not a method on `WorkflowState`, not a Protocol, not a factory, and not a generic state machine.
+  - The function is valid only when `state.phase is WorkflowPhase.INGESTION` and `state.status is WorkflowStatus.RUNNING`. Any other phase or status fails closed as existing `InvalidRequestError` with a stable sanitized message that does not include workflow identity, correlation ID, diagnostics, or exception internals.
+  - A valid call returns a **new** frozen `WorkflowState` with `phase = WorkflowPhase.FORECASTING` and `status = WorkflowStatus.RUNNING`. Replacement uses `dataclasses.replace`. The input object is not mutated. `workflow_id`, `portfolio_id`, `delivery_date`, `correlation_id`, and `diagnostics` are preserved exactly. Diagnostics are neither appended nor cleared. No Phase 3 payload is derived.
+  - `WorkflowState` remains the published seven-field snapshot and gains no `advance()` / `transition()` helpers. `WorkflowPhase` and `WorkflowStatus` members are unchanged.
+  - LangGraph remains `START → workflow_entry → parallel_ingestion → END`. `ParallelIngestionWorkflowStep` still returns the original state. Graph wiring of this transition, Phase 3 execution, general status lifecycle (pending/succeeded/failed), retry/fallback, and Chief Orchestrator remain separately reviewed chunks.
+- **Consequences:** Application callers can apply the successful Phase 2 control-state transition without a graph runtime. Production still has no LangGraph invocation of the transition and no Phase 3 routing.

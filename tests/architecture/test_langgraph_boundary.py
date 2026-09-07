@@ -190,6 +190,7 @@ def test_graph_module_depends_on_workflow_state_and_phase2_step_only() -> None:
     assert "ParallelIngestionWorkflowContextPort" not in names
     assert "ConcurrentParallelIngestionExecutor" not in names
     assert "FailurePolicyPort" not in names
+    assert "advance_after_parallel_ingestion" not in names
     assert "WeatherAndRenewableForecastAgent" not in names
     assert "HydroResourcesAgent" not in names
     assert "GenerationAvailabilityAgent" not in names
@@ -201,6 +202,7 @@ def test_graph_module_depends_on_workflow_state_and_phase2_step_only() -> None:
     assert "energy_trading.application.orchestration.parallel_ingestion_context" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_executor" not in modules
     assert "energy_trading.application.orchestration.failure_policy" not in modules
+    assert "energy_trading.application.orchestration.parallel_ingestion_transition" not in modules
     assert "energy_trading.application.agents.weather_and_renewable_forecast" not in modules
     assert "energy_trading.application.agents.hydro_resources" not in modules
     assert "energy_trading.application.agents.generation_availability" not in modules
