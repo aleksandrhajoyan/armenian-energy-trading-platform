@@ -701,3 +701,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Fan-in/result/outcome contracts are omitted. Failure-policy semantics remain unchanged. `WorkflowState` remains unchanged.
   - A future executor/join remains a separately reviewed chunk. This ADR does not define retry, fallback, degraded, or partial-success execution policy.
 - **Consequences:** A later executor can fan out from five already-typed requests without reading `WorkflowState` as a payload bag. Join, retry/fallback execution, graph wiring, and Chief Orchestrator remain future work.
+
+---
+
+## ADR-046 — Successful parallel-ingestion fan-in is a typed application contract
+
+- **Status:** Accepted
+- **Context:** Chunk 35 published `ParallelIngestionPlan` with the five existing Phase 2 request DTOs. A later executor will need a typed place to hold successful results. Naming that object `ParallelIngestionResult` / `Outcome` / `Join`, or using `Optional` branches, unions, or exception fields, would imply that failure, degraded, and partial-completion semantics already exist. Those policies are not yet defined and must not ride along with the first success aggregate.
+- **Decision:**
+  - Application owns frozen `ParallelIngestionSuccess`. It is an orchestration DTO, not a domain contract, not `WorkflowState`, and not a LangGraph type.
+  - The aggregate contains exactly the five existing strongly typed result DTOs: `WeatherAndRenewableForecastResult`, `HydroResourcesResult`, `GenerationAvailabilityResult`, `NewsIntelligenceResult`, and `MarketMonitoringResult`. Those classes are reused; they are not duplicated or shadowed.
+  - Semantics are all-five-success only. There is no `None` branch placeholder, no generic status field, no `Optional` failure slot, no error envelope, and no degraded flag.
+  - There is no generic result wrapper, registry, factory, or payload dictionary.
+  - Supplied result objects are preserved exactly. Records are not merged, sorted, deduplicated, or completeness-checked. Cross-result horizons are not equalized. Nothing is derived from `WorkflowState`.
+  - The aggregate does not execute agents. LangGraph remains `START → workflow_entry → END` and does not import or consume the plan or success aggregate.
+  - `WorkflowState` remains unchanged. Failure-policy semantics remain unchanged.
+  - A future executor and any failure/partial/degraded fan-in policy remain separately reviewed chunks. This ADR does not define those behaviors.
+- **Consequences:** A later successful join can return one typed object without collapsing five result contracts into a generic bag. Partial-failure representation, retry/fallback execution, graph wiring, and Chief Orchestrator remain future work.

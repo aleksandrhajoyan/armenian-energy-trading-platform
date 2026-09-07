@@ -1,4 +1,4 @@
-"""Parallel ingestion fan-out plan remains typed, LangGraph-free, and execution-free."""
+"""Parallel ingestion plan and success contracts stay typed and LangGraph-free."""
 
 from __future__ import annotations
 
@@ -95,13 +95,11 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "GenerationAvailabilityAgent",
         "NewsIntelligenceAgent",
         "MarketMonitoringAgent",
-        "WeatherAndRenewableForecastResult",
-        "HydroResourcesResult",
-        "GenerationAvailabilityResult",
-        "NewsIntelligenceResult",
-        "MarketMonitoringResult",
         "ParallelIngestionResult",
         "ParallelIngestionOutcome",
+        "ParallelIngestionJoin",
+        "ParallelIngestionExecution",
+        "Optional",
     }
 )
 
@@ -123,6 +121,12 @@ FORBIDDEN_FIELD_NAMES = frozenset(
         "retry_count",
         "retries",
         "degraded",
+        "status",
+        "failed",
+        "failure",
+        "errors",
+        "skipped",
+        "partial",
         "provider",
         "persistence",
         "graph",
@@ -147,6 +151,14 @@ ALLOWED_PLAN_ANNOTATIONS = {
     "generation_availability": "GenerationAvailabilityRequest",
     "news_intelligence": "NewsIntelligenceRequest",
     "market_monitoring": "MarketMonitoringRequest",
+}
+
+ALLOWED_SUCCESS_ANNOTATIONS = {
+    "weather_and_renewable_forecast": "WeatherAndRenewableForecastResult",
+    "hydro_resources": "HydroResourcesResult",
+    "generation_availability": "GenerationAvailabilityResult",
+    "news_intelligence": "NewsIntelligenceResult",
+    "market_monitoring": "MarketMonitoringResult",
 }
 
 ALLOWED_MODULE_IMPORTS = frozenset(
@@ -260,6 +272,36 @@ def test_parallel_ingestion_plan_has_exactly_five_typed_request_fields() -> None
     assert annotations == ALLOWED_PLAN_ANNOTATIONS
     leaked_types = sorted(name for name in annotations.values() if name in FORBIDDEN_TYPE_NAMES)
     assert leaked_types == []
+    result_types = {
+        "WeatherAndRenewableForecastResult",
+        "HydroResourcesResult",
+        "GenerationAvailabilityResult",
+        "NewsIntelligenceResult",
+        "MarketMonitoringResult",
+    }
+    assert result_types.isdisjoint(annotations.values())
+
+
+def test_parallel_ingestion_success_has_exactly_five_typed_result_fields() -> None:
+    class_def = _class_def(PLAN_MODULE, "ParallelIngestionSuccess")
+    assert list(class_def.type_params) == []
+    assert _base_names(class_def) == set()
+    fields = _annassign_field_names(PLAN_MODULE, "ParallelIngestionSuccess")
+    assert fields == ALLOWED_PLAN_FIELDS
+    leaked = sorted(name for name in fields if name in FORBIDDEN_FIELD_NAMES)
+    assert leaked == []
+    annotations = _annassign_field_annotations(PLAN_MODULE, "ParallelIngestionSuccess")
+    assert annotations == ALLOWED_SUCCESS_ANNOTATIONS
+    leaked_types = sorted(name for name in annotations.values() if name in FORBIDDEN_TYPE_NAMES)
+    assert leaked_types == []
+    request_types = {
+        "WeatherAndRenewableForecastRequest",
+        "HydroResourcesRequest",
+        "GenerationAvailabilityRequest",
+        "NewsIntelligenceRequest",
+        "MarketMonitoringRequest",
+    }
+    assert request_types.isdisjoint(annotations.values())
 
 
 def test_parallel_ingestion_plan_public_contract_excludes_payload_and_runtime_types() -> None:
@@ -281,21 +323,29 @@ def test_parallel_ingestion_plan_public_contract_excludes_payload_and_runtime_ty
     assert "asyncio" not in identifiers
     assert "gather" not in identifiers
     assert "TaskGroup" not in identifiers
+    assert "Optional" not in identifiers
+    assert "ParallelIngestionResult" not in identifiers
+    assert "ParallelIngestionOutcome" not in identifiers
+    assert "ParallelIngestionJoin" not in identifiers
     source = PLAN_MODULE.read_text(encoding="utf-8")
     assert "langgraph" not in source.lower()
     assert "langchain" not in source.lower()
 
 
-def test_parallel_ingestion_plan_module_exposes_only_the_plan_dto() -> None:
-    assert _module_class_names(PLAN_MODULE) == ["ParallelIngestionPlan"]
-    class_def = _class_def(PLAN_MODULE, "ParallelIngestionPlan")
-    defined = [
-        node.name
-        for node in class_def.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+def test_parallel_ingestion_module_exposes_only_plan_and_success_dtos() -> None:
+    assert _module_class_names(PLAN_MODULE) == [
+        "ParallelIngestionPlan",
+        "ParallelIngestionSuccess",
     ]
-    assert defined == ["__post_init__"]
-    assert not any(isinstance(node, ast.AsyncFunctionDef) for node in ast.walk(class_def))
+    for class_name in ("ParallelIngestionPlan", "ParallelIngestionSuccess"):
+        class_def = _class_def(PLAN_MODULE, class_name)
+        defined = [
+            node.name
+            for node in class_def.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        assert defined == ["__post_init__"]
+        assert not any(isinstance(node, ast.AsyncFunctionDef) for node in ast.walk(class_def))
 
 
 def test_workflow_state_shape_is_unchanged_by_the_plan() -> None:
@@ -305,6 +355,7 @@ def test_workflow_state_shape_is_unchanged_by_the_plan() -> None:
     assert leaked == []
     names = imported_names(STATE_MODULE)
     assert "ParallelIngestionPlan" not in names
+    assert "ParallelIngestionSuccess" not in names
     modules = imported_modules(STATE_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion" not in modules
 
@@ -313,10 +364,12 @@ def test_graph_and_failure_policy_remain_unwired_to_the_plan() -> None:
     for path in (GRAPH_MODULE, FAILURE_POLICY_MODULE):
         names = imported_names(path)
         assert "ParallelIngestionPlan" not in names
+        assert "ParallelIngestionSuccess" not in names
         modules = imported_modules(path)
         assert "energy_trading.application.orchestration.parallel_ingestion" not in modules
         source = path.read_text(encoding="utf-8")
         assert "ParallelIngestionPlan" not in source
+        assert "ParallelIngestionSuccess" not in source
         assert "asyncio.gather" not in source
         assert "TaskGroup" not in source
 
@@ -330,6 +383,8 @@ def test_api_composition_does_not_import_or_construct_parallel_ingestion_plan() 
     for path in sorted(API_ROOT.rglob("*.py")):
         names = imported_names(path)
         assert "ParallelIngestionPlan" not in names
+        assert "ParallelIngestionSuccess" not in names
     app_source = API_APP.read_text(encoding="utf-8").lower()
     assert "parallelingestionplan" not in app_source
+    assert "parallelingestionsuccess" not in app_source
     assert "parallel_ingestion" not in app_source
