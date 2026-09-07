@@ -24,6 +24,7 @@ from energy_trading.application.ports.generation_availability_records import (
     GenerationAvailabilityRecordSourcePort,
 )
 from energy_trading.application.ports.hydro_records import HydroRecordSourcePort
+from energy_trading.application.ports.market_price_records import MarketPriceRecordSourcePort
 from energy_trading.application.ports.news_events import NewsEventSourcePort
 from energy_trading.application.ports.structured_ingestion import (
     StructuredIngestionPort,
@@ -46,6 +47,7 @@ __all__ = [
     "ExtractedDocumentChunk",
     "GenerationAvailabilityRecordSourcePort",
     "HydroRecordSourcePort",
+    "MarketPriceRecordSourcePort",
     "NewsEventSourcePort",
     "StructuredIngestionPort",
     "StructuredIngestionResult",

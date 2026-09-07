@@ -1,7 +1,7 @@
 """Application agents.
 
 Shared invocation contract plus concrete Weather, Hydro, Generation
-Availability, and News Intelligence agents.
+Availability, News Intelligence, and Market Monitoring agents.
 """
 
 from energy_trading.application.agents.base import AgentName, AgentPort

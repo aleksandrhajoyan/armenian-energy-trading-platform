@@ -67,6 +67,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 - [ ] News Intelligence Agent
   - [x] **Chunk 33** — News Intelligence Agent Application Boundary and First Concrete News Agent
 - [ ] Market Monitoring Agent
+  - [x] **Chunk 34** — Market Monitoring Agent Application Boundary and First Concrete Market Agent
 - [ ] Parallel Phase 2 join in the orchestrator
 
 ## Phase 5 — Regulatory + pricing
@@ -121,5 +122,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 33
-- **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, Generation Availability, or News Intelligence agent capabilities complete. Do not pre-authorize another agent.
+- **Completed:** Chunk 0 through Chunk 34
+- **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not pre-authorize the parallel Phase 2 join.

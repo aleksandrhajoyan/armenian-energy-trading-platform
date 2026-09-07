@@ -666,3 +666,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Weather, Hydro, Generation, and News are not generalized into a shared ingestion-agent base class, registry, or factory.
   - Canonical identity remains the existing `AgentName.NEWS_INTELLIGENCE` display value `News Intelligence Agent`.
 - **Consequences:** The fourth concrete ingestion-agent boundary is established without vendor or LLM coupling. A future infrastructure news adapter may satisfy `NewsEventSourcePort` only after ACL normalization to `NewsEvent`. Future LLM summarization, sentiment/relevance inference, or vector indexing requires separately reviewed ports and implementation. Remaining Phase 4 agents continue to be added individually.
+
+---
+
+## ADR-044 — First concrete Market Monitoring agent consumes canonical MarketPriceRecord values through an application-owned source port
+
+- **Status:** Accepted
+- **Context:** Chunks 30–33 established provider-neutral application boundaries for the other Phase 4 ingestion agents: thin application agents structurally satisfying `AgentPort`, consuming already-canonical records through application-owned source ports. Market Monitoring is the fifth ingestion agent. Canonical `MarketPriceRecord` already represents official/historical market observations, not forecasts. Market interval, currency, operator, and DAM product rules are intentionally not hardcoded. Forecasting belongs to DAM Price Forecast Agent. Market clearing belongs elsewhere. Raw operator reports and vendor schemas must remain behind the ACL.
+- **Decision:**
+  - The fifth concrete agent is Market Monitoring Agent. It structurally satisfies `AgentPort[MarketMonitoringRequest, MarketMonitoringResult]` and does not inherit a base class.
+  - Canonical domain type remains existing `MarketPriceRecord` (`energy_trading.domain.models.observations`). Fields remain `market_id`, `timestamp`, `price` (`EnergyPrice`), and optional `volume_mwh`. Currency is explicit on `EnergyPrice`. Interval duration is not part of the contract. AMD is not implied. No market-status, tick, or DAM-price replacement schema is added.
+  - Application-owned source port is `MarketPriceRecordSourcePort` in `application/ports/market_price_records.py`. `fetch` is keyword-only and accepts opaque `market_id` plus explicit `horizon_start` / `horizon_end`. It returns only already-canonical `MarketPriceRecord` tuples.
+  - Agent-specific request/result remain frozen application DTOs. `MarketMonitoringRequest` carries only `market_id` plus an explicit horizon. `MarketMonitoringResult` contains only `records: tuple[MarketPriceRecord, ...]`.
+  - Empty results are valid. Tuple order is preserved as returned by the future implementation. The port and agent do not sort, interpolate, aggregate, resolve duplicates, fill missing hours, infer cadence or interval duration, convert currency, default a currency, forecast prices, clear the market, infer market status, or fabricate missing prices.
+  - Canonical `EnergyPrice` objects pass through unchanged, including explicit currency. Optional `volume_mwh` passes through unchanged; missing volume stays missing.
+  - No market provider, operator SDK, HTTP client, CSV/Excel adapter, persistence, graph wiring, retry/fallback execution, ML, or LLM is added. No new dependency is added. `PriceForecastPoint` is not constructed.
+  - Weather, Hydro, Generation, News, and Market are not generalized into a shared ingestion-agent base class, registry, or factory.
+  - Canonical identity remains the existing `AgentName.MARKET_MONITORING` display value `Market Monitoring Agent`.
+- **Consequences:** All five Phase 4 ingestion-agent application boundaries now have first concrete slices. Live source acquisition and ACL remain separate. Market Monitoring can later be wired to a verified official source without application-layer vendor coupling. Phase 2 parallel orchestration remains a separately reviewed future chunk. Remaining concrete agents continue to be added individually.
