@@ -684,3 +684,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Weather, Hydro, Generation, News, and Market are not generalized into a shared ingestion-agent base class, registry, or factory.
   - Canonical identity remains the existing `AgentName.MARKET_MONITORING` display value `Market Monitoring Agent`.
 - **Consequences:** All five Phase 4 ingestion-agent application boundaries now have first concrete slices. Live source acquisition and ACL remain separate. Market Monitoring can later be wired to a verified official source without application-layer vendor coupling. Phase 2 parallel orchestration remains a separately reviewed future chunk. Remaining concrete agents continue to be added individually.
+
+---
+
+## ADR-045 — Parallel ingestion fan-out planning is typed and framework-neutral
+
+- **Status:** Accepted
+- **Context:** Chunks 30–34 published five concrete Phase 2 ingestion-agent request DTOs. Chunks 27–29 published `WorkflowState`, a no-op LangGraph skeleton, and a failure-policy decision hook. Letting a future executor derive agent-specific scope from `WorkflowState.portfolio_id`, or packing the five requests into a generic payload/registry, would collapse distinct request contracts into an untyped bag and couple planning to graph runtime. Fan-in/result semantics, retry/fallback execution, and degraded-mode policy are not yet defined and must not ride along with the first planning contract.
+- **Decision:**
+  - Application owns frozen `ParallelIngestionPlan`. It is an orchestration DTO, not a domain contract, not `WorkflowState`, and not a LangGraph type.
+  - The plan contains exactly the five existing strongly typed request DTOs: `WeatherAndRenewableForecastRequest`, `HydroResourcesRequest`, `GenerationAvailabilityRequest`, `NewsIntelligenceRequest`, and `MarketMonitoringRequest`. Those classes are reused; they are not duplicated or shadowed.
+  - There is no generic payload dictionary, `Any`, `Mapping`, agent registry, factory, or `(AgentName, request)` collection helper.
+  - The plan preserves supplied request objects exactly. It does not derive `location_id`, `resource_id`, `asset_id`, or `market_id` from `portfolio_id`, and it does not invent a portfolio-to-source-scope mapping.
+  - Horizons are not required to be equal. Chunk 35 does not invent cross-request horizon policy.
+  - The plan does not execute agents. LangGraph remains `START → workflow_entry → END` and does not import or consume the plan.
+  - Fan-in/result/outcome contracts are omitted. Failure-policy semantics remain unchanged. `WorkflowState` remains unchanged.
+  - A future executor/join remains a separately reviewed chunk. This ADR does not define retry, fallback, degraded, or partial-success execution policy.
+- **Consequences:** A later executor can fan out from five already-typed requests without reading `WorkflowState` as a payload bag. Join, retry/fallback execution, graph wiring, and Chief Orchestrator remain future work.
