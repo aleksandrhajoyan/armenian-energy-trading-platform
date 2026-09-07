@@ -718,3 +718,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - `WorkflowState` remains unchanged. Failure-policy semantics remain unchanged.
   - A future executor and any failure/partial/degraded fan-in policy remain separately reviewed chunks. This ADR does not define those behaviors.
 - **Consequences:** A later successful join can return one typed object without collapsing five result contracts into a generic bag. Partial-failure representation, retry/fallback execution, graph wiring, and Chief Orchestrator remain future work.
+
+---
+
+## ADR-047 — Parallel ingestion execution is application-owned behind a specific Protocol
+
+- **Status:** Accepted
+- **Context:** Chunks 35–36 published typed `ParallelIngestionPlan` and `ParallelIngestionSuccess`. A future runtime will need an application seam between those contracts. Encoding concurrency (`asyncio.gather` vs `TaskGroup`), retries, cancellation, or partial-failure unions on that first seam would freeze implementation policy before it is reviewed. A generic `ParallelIngestionExecutionPort[TPlan, TResult]` would also collapse the Phase 2 contract into an unconstrained payload.
+- **Decision:**
+  - Application owns non-generic `ParallelIngestionExecutionPort`, a `typing.Protocol` with exactly one public operation: `async execute(self, plan: ParallelIngestionPlan) -> ParallelIngestionSuccess`.
+  - There is no ABC, registry, factory, or concrete production executor in this chunk.
+  - The port does not encode sequential vs parallel execution, `asyncio.gather`, `TaskGroup`, retries, cancellation, timeout, fallback, degraded mode, or partial success.
+  - LangGraph remains `START → workflow_entry → END` and does not import or inject the port. `WorkflowState` remains unchanged. `FailurePolicyPort` remains unconnected. `AgentPort` remains unchanged.
+  - A future concrete implementation and any failure/partial/degraded fan-in policy remain separately reviewed chunks. This ADR does not pick an execution strategy.
+- **Consequences:** A later executor can implement the already-specific plan-to-success boundary without a generic payload bag. Graph wiring, Chief Orchestrator, and concurrency choice remain future work.

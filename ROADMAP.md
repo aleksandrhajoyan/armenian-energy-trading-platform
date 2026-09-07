@@ -71,6 +71,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 - [ ] Parallel Phase 2 join in the orchestrator
   - [x] **Chunk 35** — Parallel Ingestion Fan-Out Plan Contract — LangGraph-free
   - [x] **Chunk 36** — Parallel Ingestion Successful Fan-In Contract — LangGraph-free
+  - [x] **Chunk 37** — Parallel Ingestion Execution Boundary — LangGraph-free
 
 ## Phase 5 — Regulatory + pricing
 
@@ -124,5 +125,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 36
+- **Completed:** Chunk 0 through Chunk 37
 - **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize the actual parallel execution/join.

@@ -1,4 +1,4 @@
-"""Parallel ingestion plan and success contracts stay typed and LangGraph-free."""
+"""Parallel ingestion plan, execution port, and success stay typed and LangGraph-free."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 from tests.architecture.import_inspection import (
     SRC_ROOT,
     annotation_type_names,
+    async_function_arg_names,
     collect_import_violations,
     imported_modules,
     imported_names,
@@ -99,6 +100,7 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "ParallelIngestionOutcome",
         "ParallelIngestionJoin",
         "ParallelIngestionExecution",
+        "ParallelIngestionExecutor",
         "Optional",
     }
 )
@@ -164,6 +166,7 @@ ALLOWED_SUCCESS_ANNOTATIONS = {
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
         "dataclasses",
+        "typing",
         "energy_trading.application.agents.generation_availability",
         "energy_trading.application.agents.hydro_resources",
         "energy_trading.application.agents.market_monitoring",
@@ -327,15 +330,21 @@ def test_parallel_ingestion_plan_public_contract_excludes_payload_and_runtime_ty
     assert "ParallelIngestionResult" not in identifiers
     assert "ParallelIngestionOutcome" not in identifiers
     assert "ParallelIngestionJoin" not in identifiers
+    assert "ParallelIngestionExecutor" not in identifiers
+    assert "create_task" not in identifiers
     source = PLAN_MODULE.read_text(encoding="utf-8")
     assert "langgraph" not in source.lower()
     assert "langchain" not in source.lower()
+    assert "asyncio.gather" not in source
+    assert "TaskGroup" not in source
+    assert ".run(" not in source
 
 
-def test_parallel_ingestion_module_exposes_only_plan_and_success_dtos() -> None:
+def test_parallel_ingestion_module_exposes_plan_success_and_execution_port() -> None:
     assert _module_class_names(PLAN_MODULE) == [
         "ParallelIngestionPlan",
         "ParallelIngestionSuccess",
+        "ParallelIngestionExecutionPort",
     ]
     for class_name in ("ParallelIngestionPlan", "ParallelIngestionSuccess"):
         class_def = _class_def(PLAN_MODULE, class_name)
@@ -348,6 +357,59 @@ def test_parallel_ingestion_module_exposes_only_plan_and_success_dtos() -> None:
         assert not any(isinstance(node, ast.AsyncFunctionDef) for node in ast.walk(class_def))
 
 
+def test_parallel_ingestion_execution_port_is_nongeneric_protocol_with_async_execute() -> None:
+    class_def = _class_def(PLAN_MODULE, "ParallelIngestionExecutionPort")
+    bases = _base_names(class_def)
+    assert "Protocol" in bases
+    assert "ABC" not in bases
+    assert list(class_def.type_params) == []
+    source = PLAN_MODULE.read_text(encoding="utf-8")
+    assert "abstractmethod" not in source
+    defined = [
+        node.name
+        for node in class_def.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+    assert defined == ["execute"]
+    execute_fn = next(
+        node
+        for node in class_def.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "execute"
+    )
+    assert tuple(arg.arg for arg in execute_fn.args.args) == ("self", "plan")
+    assert execute_fn.args.vararg is None
+    assert execute_fn.args.kwarg is None
+    assert execute_fn.args.kwonlyargs == []
+    assert async_function_arg_names(PLAN_MODULE, "execute") == ("self", "plan")
+    assert execute_fn.args.args[1].annotation is not None
+    assert execute_fn.returns is not None
+    assert ast.unparse(execute_fn.args.args[1].annotation) == "ParallelIngestionPlan"
+    assert ast.unparse(execute_fn.returns) == "ParallelIngestionSuccess"
+
+
+def test_parallel_ingestion_module_has_no_concrete_executor() -> None:
+    production_executor_classes: list[str] = []
+    forbidden_implementation_names = {
+        "ParallelIngestionExecutor",
+        "ConcurrentParallelIngestionExecutor",
+        "SequentialParallelIngestionExecutor",
+        "ParallelIngestionRunner",
+    }
+    for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef):
+                continue
+            if node.name in forbidden_implementation_names:
+                production_executor_classes.append(node.name)
+            bases = _base_names(node)
+            if "ParallelIngestionExecutionPort" in bases and node.name != (
+                "ParallelIngestionExecutionPort"
+            ):
+                production_executor_classes.append(node.name)
+    assert production_executor_classes == []
+
+
 def test_workflow_state_shape_is_unchanged_by_the_plan() -> None:
     fields = _annassign_field_names(STATE_MODULE, "WorkflowState")
     assert fields == WORKFLOW_STATE_FIELDS
@@ -356,6 +418,7 @@ def test_workflow_state_shape_is_unchanged_by_the_plan() -> None:
     names = imported_names(STATE_MODULE)
     assert "ParallelIngestionPlan" not in names
     assert "ParallelIngestionSuccess" not in names
+    assert "ParallelIngestionExecutionPort" not in names
     modules = imported_modules(STATE_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion" not in modules
 
@@ -365,11 +428,13 @@ def test_graph_and_failure_policy_remain_unwired_to_the_plan() -> None:
         names = imported_names(path)
         assert "ParallelIngestionPlan" not in names
         assert "ParallelIngestionSuccess" not in names
+        assert "ParallelIngestionExecutionPort" not in names
         modules = imported_modules(path)
         assert "energy_trading.application.orchestration.parallel_ingestion" not in modules
         source = path.read_text(encoding="utf-8")
         assert "ParallelIngestionPlan" not in source
         assert "ParallelIngestionSuccess" not in source
+        assert "ParallelIngestionExecutionPort" not in source
         assert "asyncio.gather" not in source
         assert "TaskGroup" not in source
 
@@ -384,7 +449,9 @@ def test_api_composition_does_not_import_or_construct_parallel_ingestion_plan() 
         names = imported_names(path)
         assert "ParallelIngestionPlan" not in names
         assert "ParallelIngestionSuccess" not in names
+        assert "ParallelIngestionExecutionPort" not in names
     app_source = API_APP.read_text(encoding="utf-8").lower()
     assert "parallelingestionplan" not in app_source
     assert "parallelingestionsuccess" not in app_source
+    assert "parallelingestionexecutionport" not in app_source
     assert "parallel_ingestion" not in app_source

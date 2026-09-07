@@ -1,31 +1,33 @@
-"""Application-owned parallel Phase 2 ingestion plan and successful fan-in.
+"""Application-owned parallel Phase 2 ingestion plan, execution boundary, and success.
 
-This module defines two typed composition objects:
+This module defines the three-part typed contract:
 
 * ``ParallelIngestionPlan`` carries the five already-published Phase 2
   ingestion-agent request DTOs.
+* ``ParallelIngestionExecutionPort`` is the application abstraction that
+  accepts one prepared plan and returns the all-five-success aggregate.
 * ``ParallelIngestionSuccess`` carries the five already-published Phase 2
   ingestion-agent result DTOs for the unambiguous all-branches-succeeded
   case.
 
-A future executor may consume the plan and later produce the success
-aggregate without deriving agent-specific scope from ``WorkflowState``
-and without a generic payload bag.
-
 Ownership:
 
-* Application: owns ``ParallelIngestionPlan`` and ``ParallelIngestionSuccess``.
+* Application: owns ``ParallelIngestionPlan``, ``ParallelIngestionSuccess``,
+  and ``ParallelIngestionExecutionPort``.
 * Existing agent request/result DTOs: reused as-is. This module does not
   shadow or replace them.
-* Future execution: a separately reviewed chunk may fan out from the plan
-  and join successful results. This module does not execute agents.
+* Future execution: a separately reviewed chunk may implement the port.
+  This module does not execute agents and does not choose a concurrency
+  strategy.
 
 Neither DTO equalizes horizons, derives ``location_id`` / ``resource_id`` /
 ``asset_id`` / ``market_id`` from ``portfolio_id``, or defines
-partial/failure/degraded fan-in semantics.
+partial/failure/degraded fan-in semantics. The port does not encode how
+execution occurs.
 """
 
 from dataclasses import dataclass
+from typing import Protocol
 
 from energy_trading.application.agents.generation_availability import (
     GenerationAvailabilityRequest,
@@ -112,6 +114,22 @@ class ParallelIngestionSuccess:
         )
         _require_type("news_intelligence", self.news_intelligence, NewsIntelligenceResult)
         _require_type("market_monitoring", self.market_monitoring, MarketMonitoringResult)
+
+
+class ParallelIngestionExecutionPort(Protocol):
+    """Framework-neutral parallel-ingestion execution contract.
+
+    Implementations satisfy this protocol structurally. There is no
+    application base class and no concrete production executor.
+
+    ``execute`` accepts only a prepared ``ParallelIngestionPlan`` and
+    returns only ``ParallelIngestionSuccess``. It does not encode
+    concurrency, retry, fallback, degraded, or partial-success semantics.
+    """
+
+    async def execute(self, plan: ParallelIngestionPlan) -> ParallelIngestionSuccess:
+        """Execute one prepared plan and return the all-five-success aggregate."""
+        ...
 
 
 def _require_type(field_name: str, value: object, expected: type[object]) -> None:

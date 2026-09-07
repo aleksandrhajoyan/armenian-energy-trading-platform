@@ -7,6 +7,7 @@ from energy_trading.application.orchestration.failure_policy import (
 )
 from energy_trading.application.orchestration.graph import build_workflow_graph
 from energy_trading.application.orchestration.parallel_ingestion import (
+    ParallelIngestionExecutionPort,
     ParallelIngestionPlan,
     ParallelIngestionSuccess,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "FailureAction",
     "FailurePolicyContext",
     "FailurePolicyPort",
+    "ParallelIngestionExecutionPort",
     "ParallelIngestionPlan",
     "ParallelIngestionSuccess",
     "WorkflowPhase",

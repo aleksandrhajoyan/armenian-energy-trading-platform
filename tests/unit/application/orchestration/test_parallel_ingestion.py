@@ -1,7 +1,8 @@
-"""Application-owned parallel ingestion plan and successful fan-in contracts."""
+"""Application-owned parallel ingestion plan, execution port, and success contracts."""
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import MISSING, FrozenInstanceError, fields
 from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
@@ -29,6 +30,7 @@ from energy_trading.application.agents.weather_and_renewable_forecast import (
     WeatherAndRenewableForecastResult,
 )
 from energy_trading.application.orchestration import (
+    ParallelIngestionExecutionPort,
     ParallelIngestionPlan,
     ParallelIngestionSuccess,
 )
@@ -518,3 +520,118 @@ def test_success_construction_does_not_invoke_agents_or_graph() -> None:
     assert "run" not in vars(ParallelIngestionSuccess)
     assert not hasattr(ParallelIngestionSuccess, "build_workflow_graph")
     assert not hasattr(success, "_source")
+
+
+class _StructuralParallelIngestionExecutionFake:
+    """Test-only fake that structurally satisfies ``ParallelIngestionExecutionPort``.
+
+    Not a production executor. Does not inherit a production base class.
+    """
+
+    def __init__(self, success: ParallelIngestionSuccess) -> None:
+        self._success = success
+        self.received: ParallelIngestionPlan | None = None
+
+    async def execute(self, plan: ParallelIngestionPlan) -> ParallelIngestionSuccess:
+        self.received = plan
+        return self._success
+
+
+def _as_execution_port(
+    fake: _StructuralParallelIngestionExecutionFake,
+) -> ParallelIngestionExecutionPort:
+    """Application-shaped call site: the port type is the only accepted argument."""
+
+    return fake
+
+
+def test_execution_fake_does_not_inherit_production_base() -> None:
+    assert ParallelIngestionExecutionPort not in _StructuralParallelIngestionExecutionFake.__mro__
+    assert not any(
+        base.__name__ in {"ParallelIngestionExecutionPort", "Protocol"}
+        for base in _StructuralParallelIngestionExecutionFake.__bases__
+    )
+
+
+async def test_execution_fake_satisfies_port_with_real_plan_and_success() -> None:
+    plan = _plan()
+    success = _success()
+    fake = _StructuralParallelIngestionExecutionFake(success)
+    port = _as_execution_port(fake)
+    execute_parameters = inspect.signature(ParallelIngestionExecutionPort.execute).parameters
+    assert tuple(execute_parameters) == ("self", "plan")
+    assert inspect.iscoroutinefunction(ParallelIngestionExecutionPort.execute)
+    assert inspect.iscoroutinefunction(port.execute)
+    result = await port.execute(plan)
+    assert result is success
+    assert fake.received is plan
+    assert isinstance(result, ParallelIngestionSuccess)
+    assert isinstance(plan, ParallelIngestionPlan)
+
+
+async def test_execution_fake_allows_empty_record_tuples_to_flow_through() -> None:
+    plan = _plan()
+    success = _success()
+    result = await _as_execution_port(_StructuralParallelIngestionExecutionFake(success)).execute(
+        plan
+    )
+    assert result is success
+    assert result.weather_and_renewable_forecast.records == ()
+    assert result.hydro_resources.records == ()
+    assert result.generation_availability.records == ()
+    assert result.news_intelligence.records == ()
+    assert result.market_monitoring.records == ()
+
+
+def test_execution_port_exposes_only_async_execute() -> None:
+    defined_methods = {
+        name
+        for name, value in vars(ParallelIngestionExecutionPort).items()
+        if callable(value) and not name.startswith("_")
+    }
+    assert defined_methods == {"execute"}
+    execute = ParallelIngestionExecutionPort.execute
+    assert inspect.iscoroutinefunction(execute)
+    forbidden = {
+        "run",
+        "fan_out",
+        "fan_in",
+        "gather",
+        "join",
+        "invoke",
+        "dispatch",
+        "retry",
+        "fallback",
+        "cancel",
+        "close",
+        "start",
+        "stop",
+    }
+    assert forbidden.isdisjoint(dir(ParallelIngestionExecutionPort))
+
+
+async def test_execution_fake_returns_supplied_success_without_transformation() -> None:
+    weather = _weather_result()
+    hydro = _hydro_result()
+    generation = _generation_result()
+    news = _news_result()
+    market = _market_result()
+    success = ParallelIngestionSuccess(
+        weather_and_renewable_forecast=weather,
+        hydro_resources=hydro,
+        generation_availability=generation,
+        news_intelligence=news,
+        market_monitoring=market,
+    )
+    plan = _plan()
+    result = await _as_execution_port(_StructuralParallelIngestionExecutionFake(success)).execute(
+        plan
+    )
+    assert result is success
+    assert result.weather_and_renewable_forecast is weather
+    assert result.hydro_resources is hydro
+    assert result.generation_availability is generation
+    assert result.news_intelligence is news
+    assert result.market_monitoring is market
+    assert result.weather_and_renewable_forecast.records == weather.records
+    assert result.hydro_resources.records == hydro.records

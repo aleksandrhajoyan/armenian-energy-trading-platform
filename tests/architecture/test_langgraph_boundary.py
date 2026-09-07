@@ -183,6 +183,7 @@ def test_graph_module_uses_only_workflow_state_contract() -> None:
     assert "AgentName" not in names
     assert "ParallelIngestionPlan" not in names
     assert "ParallelIngestionSuccess" not in names
+    assert "ParallelIngestionExecutionPort" not in names
     modules = imported_modules(GRAPH_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion" not in modules
 
