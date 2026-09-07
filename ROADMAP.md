@@ -87,6 +87,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
   - [x] **Chunk 50** — Parallel Ingestion Agent Failure Attribution — Application-only, LangGraph-free
   - [x] **Chunk 51** — Parallel Ingestion ExceptionGroup Attribution Extraction — Application-only, LangGraph-free
   - [x] **Chunk 52** — Parallel Ingestion Sanitized Failure Fact Classification — Application-only, LangGraph-free
+  - [x] **Chunk 53** — Parallel Ingestion Tuple Failure-Fact Classification Composition — Application-only, LangGraph-free
 
 ## Phase 5 — Regulatory + pricing
 
@@ -140,5 +141,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 52
-- **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize production/durable workflow-context implementation, multi-failure selection, attempt tracking, exception capture, retry/fallback execution, LangGraph failure-transition, decision-service, action-executor, failure-handling-composition, ExceptionGroup-extractor, or sanitized-fact-classifier wiring, Phase 3 execution, or API/composition graph wiring.
+- **Completed:** Chunk 0 through Chunk 53
+- **Next:** next Phase 4 implementation slice TBD after Architect review. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize production/durable workflow-context implementation, multi-failure selection, attempt tracking, exception capture, retry/fallback execution, LangGraph failure-transition, decision-service, action-executor, failure-handling-composition, ExceptionGroup-extractor, sanitized-fact-classifier, or tuple-classifier wiring, Phase 3 execution, or API/composition graph wiring.

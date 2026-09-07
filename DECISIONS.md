@@ -966,3 +966,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Callers can turn one attributed Phase 2 leaf into a sanitized `AgentName` + `error_code` fact without selecting among failures or invoking policy. Production still has no multi-failure selection policy, no attempt tracking, no exception-capture composition into `FailurePolicyContext`, no retry/fallback mechanics, no LangGraph failure routing, and no complete failure-handling workflow.
 
 ---
+
+## ADR-063 — Tuple-level Phase 2 failure classification is a pure composition over one-leaf facts
+
+- **Status:** Accepted
+- **Context:** Chunk 50 attributes ordinary Phase 2 agent failures as `ParallelIngestionAgentFailure`. Chunk 51 extracts those already-attributed leaves from a possibly nested exception group. Chunk 52 classifies exactly one extracted leaf into sanitized `ParallelIngestionFailureFact`. Downstream multi-failure policy, if later approved, needs a sanitized fact tuple rather than raw exceptions. Folding tuple composition together with primary-failure selection, ranking, aggregation, attempt tracking, `FailurePolicyContext` construction, or LangGraph catch/conditional routing would freeze independently reviewable concerns.
+- **Decision:**
+  - Application owns synchronous `classify_parallel_ingestion_agent_failures(failures: tuple[ParallelIngestionAgentFailure, ...]) -> tuple[ParallelIngestionFailureFact, ...]` in `parallel_ingestion_failure_classification.py`. This is one Phase-2-specific composition helper, not a policy service, registry, factory, or generic exception framework.
+  - Chunk 50 remains the owner of task→agent attribution. Chunk 51 remains the owner of ExceptionGroup attributed-leaf extraction. Chunk 52 remains the owner of one-leaf error-code classification. Chunk 53 owns only tuple-level composition of already-extracted attributed failures.
+  - Each input element is classified by delegating to the existing `classify_parallel_ingestion_agent_failure`. Encounter order, cardinality, and duplicate agent identities are preserved. There is no sorting, deduplication, grouping, ranking, or aggregation.
+  - An empty input tuple is valid and returns an empty output tuple. No failure is fabricated.
+  - The composer does not inspect `__cause__`, exception messages, class names, or tracebacks, and does not maintain a second error-code mapping.
+  - Primary-failure selection, multi-failure policy, attempt tracking, `FailurePolicyContext` construction, policy decision, action execution, diagnostics mutation, and LangGraph routing remain deferred. A later explicitly reviewed multi-failure policy may operate on this sanitized tuple boundary; this ADR does not invent that policy.
+- **Consequences:** Callers can turn an attributed Phase 2 failure tuple into a sanitized fact tuple without selecting among failures or invoking policy. Production still has no multi-failure selection policy, no attempt tracking, no exception-capture composition into `FailurePolicyContext`, no retry/fallback mechanics, no LangGraph failure routing, and no complete failure-handling workflow.
+
+---
