@@ -125,7 +125,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
     }
 )
 
-FORBIDDEN_IMPLEMENTATION_NAMES = frozenset(
+APPLICATION_IMPLEMENTATION_NAMES = frozenset(
     {
         "InMemoryParallelIngestionWorkflowContext",
         "RedisParallelIngestionWorkflowContext",
@@ -137,6 +137,19 @@ FORBIDDEN_IMPLEMENTATION_NAMES = frozenset(
         "LangGraphParallelIngestionWorkflowContext",
     }
 )
+
+DURABLE_IMPLEMENTATION_NAMES = frozenset(
+    {
+        "RedisParallelIngestionWorkflowContext",
+        "PostgresParallelIngestionWorkflowContext",
+        "FilesystemParallelIngestionWorkflowContext",
+        "WorkflowContextStore",
+        "ParallelIngestionContextRepository",
+        "LangGraphParallelIngestionWorkflowContext",
+    }
+)
+
+APPLICATION_ROOT = PRODUCTION_ROOT / "application"
 
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
@@ -309,22 +322,37 @@ def test_context_public_contract_excludes_generic_storage_and_runtime_types() ->
     assert "psycopg" not in source.lower()
 
 
-def test_context_module_has_no_concrete_implementation() -> None:
+def test_application_context_module_has_no_concrete_implementation() -> None:
     assert _module_class_names(CONTEXT_MODULE) == ["ParallelIngestionWorkflowContextPort"]
-    production_implementations: list[str] = []
+    application_implementations: list[str] = []
+    for path in sorted(APPLICATION_ROOT.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef):
+                continue
+            if node.name in APPLICATION_IMPLEMENTATION_NAMES:
+                application_implementations.append(
+                    f"{path.relative_to(SRC_ROOT).as_posix()}:{node.name}"
+                )
+            bases = _base_names(node)
+            if "ParallelIngestionWorkflowContextPort" in bases and node.name != (
+                "ParallelIngestionWorkflowContextPort"
+            ):
+                application_implementations.append(
+                    f"{path.relative_to(SRC_ROOT).as_posix()}:{node.name}"
+                )
+    assert application_implementations == []
+    durable_implementations: list[str] = []
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in tree.body:
             if not isinstance(node, ast.ClassDef):
                 continue
-            if node.name in FORBIDDEN_IMPLEMENTATION_NAMES:
-                production_implementations.append(node.name)
-            bases = _base_names(node)
-            if "ParallelIngestionWorkflowContextPort" in bases and node.name != (
-                "ParallelIngestionWorkflowContextPort"
-            ):
-                production_implementations.append(node.name)
-    assert production_implementations == []
+            if node.name in DURABLE_IMPLEMENTATION_NAMES:
+                durable_implementations.append(
+                    f"{path.relative_to(SRC_ROOT).as_posix()}:{node.name}"
+                )
+    assert durable_implementations == []
 
 
 def test_workflow_state_shape_is_unchanged_by_the_context_port() -> None:

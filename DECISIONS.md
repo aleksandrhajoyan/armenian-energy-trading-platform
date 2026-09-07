@@ -823,3 +823,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - If `ParallelIngestionWorkflowStep.run` raises, the transition node does not run. The exception propagates without retry, fallback, catch, or status mutation. An invalid state reaching the transition still raises the published `InvalidRequestError`.
   - Conditional edges, five-phase routing, retry/degraded fan-in, checkpointer/store, Chief Orchestrator, and API/composition wiring remain separately reviewed chunks.
 - **Consequences:** Callers who can construct `ParallelIngestionWorkflowStep` can run the all-success Phase 2 path through LangGraph and receive a `forecasting`/`running` snapshot. Production still has no concrete context implementation and no Phase 3 agents.
+
+---
+
+## ADR-054 — Process-local in-memory workflow context is local/dev reference infrastructure
+
+- **Status:** Accepted
+- **Context:** Chunk 39 published `ParallelIngestionWorkflowContextPort` without choosing storage. Fixture-driven workflow execution and offline orchestration tests need a deterministic adapter before Redis or PostgreSQL is reviewed. Putting that adapter in application would mix a storage choice into the port owner. Wiring it into LangGraph or `create_app()` would freeze composition before a production store is chosen.
+- **Decision:**
+  - Infrastructure owns `InMemoryParallelIngestionWorkflowContext` in `infrastructure/orchestration/parallel_ingestion_context.py`. It structurally implements the published port and does not inherit it, an ABC, or a generic repository/UoW.
+  - The constructor accepts `plans: Mapping[str, ParallelIngestionPlan]`, copies that mapping, and keeps the supplied plan objects by identity. Plans are not derived from `portfolio_id`, delivery date, environment, or providers.
+  - `resolve_plan` returns the stored plan for a known workflow ID. An unknown identity fails closed as existing `ResourceNotFoundError` with a stable sanitized message that does not echo workflow identity or plan contents. No default plan is invented.
+  - `record_success` stores the first `ParallelIngestionSuccess` for a workflow ID. Equal retries, compared by value, are idempotent no-ops and retain the originally stored object. A different success for the same identity is existing `ConflictError` with a stable sanitized message. There is no last-write-win and no merge.
+  - An infrastructure-local `asyncio.Lock` serializes check-and-write inside one process. This is not threading, multiprocessing, Redis locking, or database CAS. There is no durability or cross-process guarantee.
+  - Public operations remain only `resolve_plan` and `record_success`. Redis, PostgreSQL, CachePort, filesystem, graph wiring, and API/composition wiring remain separately reviewed chunks.
+- **Consequences:** Local/dev and offline tests can resolve prepared plans and record all-five-success output without a database. Production still has no durable workflow-context implementation and no Chief Orchestrator composition root.
