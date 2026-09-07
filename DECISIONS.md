@@ -950,3 +950,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Callers can recover the attributed Phase 2 leaves from a nested exception group without classifying them. Production still has no error-code mapping, no multi-failure selection policy, no retry/fallback mechanics, no LangGraph failure routing, and no complete failure-handling workflow.
 
 ---
+
+## ADR-062 — Phase 2 failure classification produces sanitized facts before policy selection
+
+- **Status:** Accepted
+- **Context:** Chunk 50 attributes ordinary Phase 2 agent failures as `ParallelIngestionAgentFailure` with canonical `AgentName` before TaskGroup aggregation. Chunk 51 extracts those already-attributed leaves from a possibly nested exception group. Downstream `FailurePolicyContext` requires a stable sanitized `error_code` plus that agent identity, but exception text, class names, and tracebacks must never become policy facts. Folding one-leaf classification together with multi-failure selection, attempt tracking, `FailurePolicyContext` construction, or LangGraph catch/conditional routing would freeze independently reviewable concerns.
+- **Decision:**
+  - Application owns frozen `ParallelIngestionFailureFact` and synchronous `classify_parallel_ingestion_agent_failure(failure: ParallelIngestionAgentFailure) -> ParallelIngestionFailureFact` in `parallel_ingestion_failure_fact.py`. This is one Phase-2-specific DTO plus one classifier, not a generic exception framework, registry, factory, or policy service.
+  - Chunk 50 remains the owner of task→agent attribution. Chunk 51 remains the owner of ExceptionGroup attributed-leaf extraction. Chunk 52 owns only sanitized classification of exactly one already-extracted leaf.
+  - The fact fields are exactly canonical `AgentName` and a stable `error_code`. There is no exception object, message, traceback, attempt number, workflow state, diagnostic, retryable flag, severity, timestamp, or provider/vendor field.
+  - When `failure.__cause__` is an `ApplicationError`, the published application error `code` is reused unchanged. There is no second mapping table for existing application errors.
+  - Non-application causes and a missing `__cause__` collapse to one stable sanitized code: `parallel_ingestion_unexpected_failure`. Codes are never derived from Python exception class names, module names, messages, repr, traceback, or vendor type names.
+  - The classifier inspects only `failure.__cause__`. It does not mutate the attribution wrapper or the chained cause. Exception text never appears on the fact.
+  - Multi-failure selection, attempt tracking, `FailurePolicyContext` construction, policy decision, action execution, diagnostics mutation, and LangGraph routing remain deferred.
+- **Consequences:** Callers can turn one attributed Phase 2 leaf into a sanitized `AgentName` + `error_code` fact without selecting among failures or invoking policy. Production still has no multi-failure selection policy, no attempt tracking, no exception-capture composition into `FailurePolicyContext`, no retry/fallback mechanics, no LangGraph failure routing, and no complete failure-handling workflow.
+
+---

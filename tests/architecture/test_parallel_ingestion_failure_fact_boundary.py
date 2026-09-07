@@ -1,4 +1,4 @@
-"""Parallel-ingestion ExceptionGroup extraction stays application-owned."""
+"""Parallel-ingestion sanitized failure-fact classification stays application-owned."""
 
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ from tests.architecture.import_inspection import (
 
 PRODUCTION_ROOT = SRC_ROOT / "energy_trading"
 ORCHESTRATION_ROOT = PRODUCTION_ROOT / "application" / "orchestration"
-EXTRACTION_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_exception_group.py"
-AGENT_FAILURE_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_agent_failure.py"
 FACT_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_failure_fact.py"
+AGENT_FAILURE_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_agent_failure.py"
+EXTRACTION_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_exception_group.py"
 EXECUTOR_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_executor.py"
 FAILURE_POLICY_MODULE = ORCHESTRATION_ROOT / "failure_policy.py"
 DECISION_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_failure_decision.py"
@@ -89,6 +89,9 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "Optional",
         "Protocol",
         "ABC",
+        "ExceptionGroup",
+        "BaseExceptionGroup",
+        "TracebackType",
         "WorkflowState",
         "FailurePolicyContext",
         "FailurePolicyPort",
@@ -110,7 +113,6 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "CompiledStateGraph",
         "Send",
         "RetryPolicy",
-        "TracebackType",
         "AdapterDiagnostic",
     }
 )
@@ -126,6 +128,10 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "ABC",
         "traceback",
         "exc_info",
+        "format_exc",
+        "format_tb",
+        "extract_tb",
+        "print_exc",
         "WorkflowState",
         "FailurePolicyContext",
         "FailurePolicyPort",
@@ -136,13 +142,12 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "ParallelIngestionFailureHandlingService",
         "fail_parallel_ingestion",
         "advance_after_parallel_ingestion",
+        "extract_parallel_ingestion_agent_failures",
         "ConcurrentParallelIngestionExecutor",
         "ParallelIngestionWorkflowStep",
         "registry",
         "factory",
         "visitor",
-        "parser",
-        "aggregator",
         "tenacity",
         "backoff",
         "asyncio",
@@ -150,19 +155,37 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "sleep",
         "retry",
         "fallback",
-        "error_code",
         "attempt_number",
         "split",
         "subgroup",
         "derive",
-        "__cause__",
+        "__name__",
         "__context__",
         "__traceback__",
     }
 )
 
+FORBIDDEN_FACT_FIELDS = frozenset(
+    {
+        "exception",
+        "cause",
+        "message",
+        "traceback",
+        "attempt_number",
+        "workflow_state",
+        "diagnostics",
+        "retryable",
+        "severity",
+        "timestamp",
+        "provider",
+        "vendor",
+    }
+)
+
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
+        "dataclasses",
+        "energy_trading.application.agents.base",
         "energy_trading.application.errors",
         "energy_trading.application.orchestration.parallel_ingestion_agent_failure",
     }
@@ -172,6 +195,7 @@ UNWIRED_MODULES = (
     GRAPH_MODULE,
     WORKFLOW_MODULE,
     EXECUTOR_MODULE,
+    EXTRACTION_MODULE,
     FAILURE_POLICY_MODULE,
     DECISION_MODULE,
     CONTEXT_BUILDER_MODULE,
@@ -179,8 +203,16 @@ UNWIRED_MODULES = (
     HANDLING_MODULE,
     STATE_MODULE,
     AGENT_FAILURE_MODULE,
-    FACT_MODULE,
 )
+
+
+def _class_def(path: Path, class_name: str) -> ast.ClassDef:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            return node
+    msg = f"class {class_name!r} not found in {path}"
+    raise AssertionError(msg)
 
 
 def _module_class_names(path: Path) -> list[str]:
@@ -195,6 +227,24 @@ def _public_function_defs(path: Path) -> list[ast.FunctionDef]:
         for node in tree.body
         if isinstance(node, ast.FunctionDef) and not node.name.startswith("_")
     ]
+
+
+def _annassign_field_names(path: Path, class_name: str) -> tuple[str, ...]:
+    class_def = _class_def(path, class_name)
+    return tuple(
+        item.target.id
+        for item in class_def.body
+        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name)
+    )
+
+
+def _annassign_field_annotations(path: Path, class_name: str) -> dict[str, str]:
+    class_def = _class_def(path, class_name)
+    annotations: dict[str, str] = {}
+    for item in class_def.body:
+        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+            annotations[item.target.id] = ast.unparse(item.annotation)
+    return annotations
 
 
 def _identifier_names(path: Path) -> set[str]:
@@ -226,23 +276,38 @@ def _call_names(function: ast.FunctionDef) -> set[str]:
     return names
 
 
-def test_extraction_module_belongs_to_application_orchestration() -> None:
-    assert EXTRACTION_MODULE.parent == ORCHESTRATION_ROOT
-    assert EXTRACTION_MODULE.exists()
+def _dataclass_keywords(class_def: ast.ClassDef) -> dict[str, object]:
+    for decorator in class_def.decorator_list:
+        if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name):
+            if decorator.func.id != "dataclass":
+                continue
+            return {
+                keyword.arg: keyword.value.value
+                for keyword in decorator.keywords
+                if keyword.arg is not None and isinstance(keyword.value, ast.Constant)
+            }
+    return {}
 
 
-def test_extraction_module_does_not_import_outer_layers_or_vendors() -> None:
+def test_classification_module_belongs_to_application_orchestration() -> None:
+    assert FACT_MODULE.parent == ORCHESTRATION_ROOT
+    assert FACT_MODULE.exists()
+
+
+def test_classification_module_does_not_import_outer_layers_or_vendors() -> None:
     leaked = sorted(
         module
-        for module in imported_modules(EXTRACTION_MODULE)
+        for module in imported_modules(FACT_MODULE)
         if is_forbidden(module, FORBIDDEN_PREFIXES)
     )
     assert leaked == []
-    extras = imported_modules(EXTRACTION_MODULE) - ALLOWED_MODULE_IMPORTS
+    extras = imported_modules(FACT_MODULE) - ALLOWED_MODULE_IMPORTS
     assert extras == set()
-    names = imported_names(EXTRACTION_MODULE)
-    assert "InvalidRequestError" in names
+    names = imported_names(FACT_MODULE)
+    assert "AgentName" in names
+    assert "ApplicationError" in names
     assert "ParallelIngestionAgentFailure" in names
+    assert "dataclass" in names
     assert "WorkflowState" not in names
     assert "FailurePolicyContext" not in names
     assert "FailurePolicyPort" not in names
@@ -251,15 +316,25 @@ def test_extraction_module_does_not_import_outer_layers_or_vendors() -> None:
     assert "ParallelIngestionFailureHandlingService" not in names
     assert "build_parallel_ingestion_failure_policy_context" not in names
     assert "execute_parallel_ingestion_failure_action" not in names
+    assert "extract_parallel_ingestion_agent_failures" not in names
     leaked_names = sorted(name for name in names if name in FORBIDDEN_TYPE_NAMES)
     assert leaked_names == []
 
 
-def test_extraction_module_exposes_exactly_one_public_function() -> None:
-    public_functions = _public_function_defs(EXTRACTION_MODULE)
-    assert [node.name for node in public_functions] == ["extract_parallel_ingestion_agent_failures"]
-    assert _module_class_names(EXTRACTION_MODULE) == []
-    tree = ast.parse(EXTRACTION_MODULE.read_text(encoding="utf-8"), filename=str(EXTRACTION_MODULE))
+def test_classification_module_exposes_exactly_one_dto_and_one_function() -> None:
+    public_functions = _public_function_defs(FACT_MODULE)
+    assert [node.name for node in public_functions] == ["classify_parallel_ingestion_agent_failure"]
+    assert _module_class_names(FACT_MODULE) == ["ParallelIngestionFailureFact"]
+    production_classes: list[str] = []
+    for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
+        parsed = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in parsed.body:
+            if isinstance(node, ast.ClassDef) and node.name == "ParallelIngestionFailureFact":
+                production_classes.append(path.relative_to(SRC_ROOT).as_posix())
+    assert production_classes == [
+        "energy_trading/application/orchestration/parallel_ingestion_failure_fact.py"
+    ]
+    tree = ast.parse(FACT_MODULE.read_text(encoding="utf-8"), filename=str(FACT_MODULE))
     async_functions = [node.name for node in tree.body if isinstance(node, ast.AsyncFunctionDef)]
     assert async_functions == []
     protocols = [
@@ -275,83 +350,136 @@ def test_extraction_module_exposes_exactly_one_public_function() -> None:
     assert protocols == []
 
 
-def test_extractor_signature_is_exception_group_to_attributed_tuple() -> None:
-    extractor = _public_function_defs(EXTRACTION_MODULE)[0]
-    assert tuple(arg.arg for arg in extractor.args.args) == ("failure",)
-    assert extractor.args.posonlyargs == []
-    assert extractor.args.kwonlyargs == []
-    assert extractor.args.vararg is None
-    assert extractor.args.kwarg is None
-    parameter_annotation = ast.unparse(extractor.args.args[0].annotation)
-    assert "ExceptionGroup" in parameter_annotation
-    assert ast.unparse(extractor.returns) == "tuple[ParallelIngestionAgentFailure, ...]"
+def test_failure_fact_is_frozen_with_exact_two_fields() -> None:
+    class_def = _class_def(FACT_MODULE, "ParallelIngestionFailureFact")
+    keywords = _dataclass_keywords(class_def)
+    assert keywords.get("frozen") is True
+    assert keywords.get("slots") is True
+    fields = _annassign_field_names(FACT_MODULE, "ParallelIngestionFailureFact")
+    assert fields == ("agent_name", "error_code")
+    leaked = sorted(name for name in fields if name in FORBIDDEN_FACT_FIELDS)
+    assert leaked == []
+    annotations = _annassign_field_annotations(FACT_MODULE, "ParallelIngestionFailureFact")
+    assert annotations == {
+        "agent_name": "AgentName",
+        "error_code": "str",
+    }
+    defined = [
+        node.name
+        for node in class_def.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+    assert defined == ["__post_init__"]
 
 
-def test_extractor_traverses_groups_without_rebuilding_or_inspecting_text() -> None:
-    extractor = _public_function_defs(EXTRACTION_MODULE)[0]
-    try_nodes = [node for node in ast.walk(extractor) if isinstance(node, ast.Try)]
-    assert try_nodes == []
-    except_handlers = [node for node in ast.walk(extractor) if isinstance(node, ast.ExceptHandler)]
-    assert except_handlers == []
-    for_nodes = [node for node in ast.walk(extractor) if isinstance(node, ast.For)]
-    assert len(for_nodes) == 1
-    assert ast.unparse(for_nodes[0].iter) == "failure.exceptions"
-    call_names = _call_names(extractor)
+def test_classifier_signature_is_one_attributed_failure_to_fact() -> None:
+    classifier = _public_function_defs(FACT_MODULE)[0]
+    assert classifier.name == "classify_parallel_ingestion_agent_failure"
+    assert tuple(arg.arg for arg in classifier.args.args) == ("failure",)
+    assert classifier.args.posonlyargs == []
+    assert classifier.args.kwonlyargs == []
+    assert classifier.args.vararg is None
+    assert classifier.args.kwarg is None
+    assert ast.unparse(classifier.args.args[0].annotation) == "ParallelIngestionAgentFailure"
+    assert ast.unparse(classifier.returns) == "ParallelIngestionFailureFact"
+
+
+def test_classifier_reuses_application_error_code_without_text_or_class_names() -> None:
+    classifier = _public_function_defs(FACT_MODULE)[0]
+    call_names = _call_names(classifier)
     assert "isinstance" in call_names
-    assert "InvalidRequestError" in call_names
-    assert "extract_parallel_ingestion_agent_failures" in call_names
-    assert "split" not in call_names
-    assert "subgroup" not in call_names
-    assert "derive" not in call_names
-    assert "ExceptionGroup" not in call_names
-    identifiers = _identifier_names(EXTRACTION_MODULE)
+    assert "ParallelIngestionFailureFact" in call_names
+    assert "str" not in call_names
+    assert "repr" not in call_names
+    assert "type" not in call_names
+    assert "format_exc" not in call_names
+    isinstance_checks = [
+        ast.unparse(node)
+        for node in ast.walk(classifier)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "isinstance"
+    ]
+    assert "isinstance(cause, ApplicationError)" in isinstance_checks
+    code_reads = [
+        ast.unparse(node)
+        for node in ast.walk(classifier)
+        if isinstance(node, ast.Attribute) and node.attr == "code"
+    ]
+    assert "cause.code" in code_reads
+    cause_reads = [
+        ast.unparse(node)
+        for node in ast.walk(classifier)
+        if isinstance(node, ast.Attribute) and node.attr == "__cause__"
+    ]
+    assert "failure.__cause__" in cause_reads
+    constructed = [
+        node
+        for node in ast.walk(classifier)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "ParallelIngestionFailureFact"
+    ]
+    assert len(constructed) == 1
+    call = constructed[0]
+    keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in call.keywords}
+    assert keywords == {
+        "agent_name": "failure.agent_name",
+        "error_code": "error_code",
+    }
+    identifiers = _identifier_names(FACT_MODULE)
     leaked = sorted(name for name in identifiers if name in FORBIDDEN_IDENTIFIERS)
     assert leaked == []
-    names = annotation_type_names(EXTRACTION_MODULE)
+    names = annotation_type_names(FACT_MODULE)
     leaked_types = sorted(name for name in names if name in FORBIDDEN_TYPE_NAMES)
     assert leaked_types == []
-    source = EXTRACTION_MODULE.read_text(encoding="utf-8")
+    source = FACT_MODULE.read_text(encoding="utf-8")
     lowered = source.lower()
     assert "langgraph" not in lowered
     assert "langchain" not in lowered
     assert "traceback" not in lowered
-    assert "__cause__" not in source
+    assert "__cause__" in source
     assert "__context__" not in source
     assert "__traceback__" not in source
-    assert ".split(" not in source
-    assert ".subgroup(" not in source
-    assert ".derive(" not in source
-    assert "error_code" not in source
+    assert "__name__" not in source
+    assert "str(" not in source
+    assert "repr(" not in source
+    assert "parallel_ingestion_unexpected_failure" in source
     assert "time.sleep" not in lowered
     assert "asyncio.sleep" not in lowered
-    assert "str(" not in source
+    assert "FailurePolicyContext" not in source
+    assert "extract_parallel_ingestion_agent_failures" not in source
 
 
-def test_graph_policy_and_executor_remain_unwired_to_extraction() -> None:
+def test_graph_policy_extractor_and_executor_remain_unwired_to_classification() -> None:
     for path in UNWIRED_MODULES:
         names = imported_names(path)
-        assert "extract_parallel_ingestion_agent_failures" not in names
+        assert "classify_parallel_ingestion_agent_failure" not in names
+        assert "ParallelIngestionFailureFact" not in names
         modules = imported_modules(path)
         assert (
-            "energy_trading.application.orchestration.parallel_ingestion_exception_group"
+            "energy_trading.application.orchestration.parallel_ingestion_failure_fact"
             not in modules
         )
         source = path.read_text(encoding="utf-8")
-        assert "extract_parallel_ingestion_agent_failures" not in source
-        assert "parallel_ingestion_exception_group" not in source
+        assert "classify_parallel_ingestion_agent_failure" not in source
+        assert "ParallelIngestionFailureFact" not in source
+        assert "parallel_ingestion_failure_fact" not in source
     graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
     assert "add_conditional_edges" not in graph_source
 
 
-def test_api_composition_does_not_import_or_construct_the_extractor() -> None:
+def test_api_composition_does_not_import_or_construct_classification() -> None:
     forbidden_wiring = (
         "energy_trading.application.orchestration",
-        "energy_trading.application.orchestration.parallel_ingestion_exception_group",
+        "energy_trading.application.orchestration.parallel_ingestion_failure_fact",
     )
     assert collect_import_violations(API_ROOT, forbidden_wiring) == []
     for path in sorted(API_ROOT.rglob("*.py")):
         names = imported_names(path)
-        assert "extract_parallel_ingestion_agent_failures" not in names
+        assert "classify_parallel_ingestion_agent_failure" not in names
+        assert "ParallelIngestionFailureFact" not in names
     app_source = API_APP.read_text(encoding="utf-8").lower()
-    assert "extract_parallel_ingestion_agent_failures" not in app_source
-    assert "parallel_ingestion_exception_group" not in app_source
+    assert "classify_parallel_ingestion_agent_failure" not in app_source
+    assert "parallelingestionfailurefact" not in app_source
+    assert "parallel_ingestion_failure_fact" not in app_source

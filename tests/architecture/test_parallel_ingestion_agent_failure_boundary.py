@@ -18,6 +18,7 @@ PRODUCTION_ROOT = SRC_ROOT / "energy_trading"
 ORCHESTRATION_ROOT = PRODUCTION_ROOT / "application" / "orchestration"
 FAILURE_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_agent_failure.py"
 EXCEPTION_GROUP_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_exception_group.py"
+FACT_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_failure_fact.py"
 EXECUTOR_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_executor.py"
 FAILURE_POLICY_MODULE = ORCHESTRATION_ROOT / "failure_policy.py"
 DECISION_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_failure_decision.py"
@@ -288,6 +289,12 @@ def test_policy_graph_and_handling_remain_unwired_to_attribution() -> None:
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_agent_failure"
         in extractor_modules
+    )
+    fact_names = imported_names(FACT_MODULE)
+    assert "ParallelIngestionAgentFailure" in fact_names
+    fact_modules = imported_modules(FACT_MODULE)
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_agent_failure" in fact_modules
     )
 
 
