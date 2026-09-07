@@ -359,6 +359,8 @@ def test_failure_policy_contract_remains_unchanged_and_unwired_to_the_service() 
     source = FAILURE_POLICY_MODULE.read_text(encoding="utf-8")
     assert "ParallelIngestionFailureDecisionService" not in source
     assert "parallel_ingestion_failure_decision" not in source
+    assert "build_parallel_ingestion_failure_policy_context" not in source
+    assert "parallel_ingestion_failure_context" not in source
 
 
 def test_graph_workflow_and_transitions_remain_unwired_to_the_decision_service() -> None:
@@ -374,14 +376,20 @@ def test_graph_workflow_and_transitions_remain_unwired_to_the_decision_service()
     ):
         names = imported_names(path)
         assert "ParallelIngestionFailureDecisionService" not in names
+        assert "build_parallel_ingestion_failure_policy_context" not in names
         modules = imported_modules(path)
         assert (
             "energy_trading.application.orchestration.parallel_ingestion_failure_decision"
             not in modules
         )
+        assert (
+            "energy_trading.application.orchestration.parallel_ingestion_failure_context"
+            not in modules
+        )
         source = path.read_text(encoding="utf-8")
         assert "ParallelIngestionFailureDecisionService" not in source
         assert "parallel_ingestion_failure_decision" not in source
+        assert "build_parallel_ingestion_failure_policy_context" not in source
     graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
     assert "add_conditional_edges" not in graph_source
 

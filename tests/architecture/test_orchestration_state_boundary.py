@@ -232,12 +232,16 @@ def test_workflow_state_has_only_construction_validation() -> None:
     names = imported_names(STATE_MODULE)
     assert "fail_parallel_ingestion" not in names
     assert "advance_after_parallel_ingestion" not in names
+    assert "build_parallel_ingestion_failure_policy_context" not in names
     modules = imported_modules(STATE_MODULE)
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_failure_transition"
         not in modules
     )
     assert "energy_trading.application.orchestration.parallel_ingestion_transition" not in modules
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_context" not in modules
+    )
 
 
 def test_orchestration_package_does_not_introduce_concrete_agents() -> None:

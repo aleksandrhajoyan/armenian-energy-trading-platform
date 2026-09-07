@@ -870,3 +870,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - `fail_parallel_ingestion` remains a separate Chunk 45 operation. A future action-execution chunk may apply it only after this service returns `FailureAction.FAIL`.
   - LangGraph remains `START → workflow_entry → parallel_ingestion → parallel_ingestion_success_transition → END`. This service is not imported or called by `graph.py`, `parallel_ingestion_workflow.py`, or the terminal-failure transition. Runtime Phase 2 exceptions still propagate. Exception-to-context mapping, action execution, retry/fallback, degraded fan-in, concrete policy, and Chief Orchestrator remain separately reviewed chunks.
 - **Consequences:** Application callers can obtain a Phase 2 failure-policy decision from a prepared context without executing that decision. Production still has no exception-to-context mapping, no action execution, no LangGraph failure routing, and no concrete policy.
+
+---
+
+## ADR-057 — Phase 2 failure-policy context construction stays separate from exception capture and policy decision
+
+- **Status:** Accepted
+- **Context:** Chunk 29 published `FailurePolicyContext` as a frozen sanitized DTO. Chunk 46 published `ParallelIngestionFailureDecisionService`, which requires an already-constructed context. Folding raw exception inspection, agent-identity guessing, `WorkflowState` extraction, and policy decision into one mapper would freeze independently reviewable concerns: how a runtime failure becomes sanitized typed facts, how those facts become `FailurePolicyContext`, and which `FailureAction` the policy chooses. Parallel Phase 2 fan-out also has no verified rule for which of the five agents failed; inventing `"parallel_ingestion"` or defaulting to Chief Orchestrator would fabricate identity. Graph exception capture remains unspecified.
+- **Decision:**
+  - Application owns `build_parallel_ingestion_failure_policy_context` in `parallel_ingestion_failure_context.py`. It is one synchronous Phase-2-specific function, not a service class, Protocol, factory, registry, or generic mapper.
+  - Keyword-only parameters are a one-for-one source for the published `FailurePolicyContext` fields: `phase: WorkflowPhase`, `error_code: str`, `attempt_number: int`, and `agent_name: AgentName | None = None`. The published optional default for `agent_name` is preserved; omitting it yields `None` rather than a fabricated identity.
+  - The function calls the published `FailurePolicyContext(...)` constructor once and returns that object. Existing `__post_init__` validation runs unchanged. The builder does not duplicate strip/type/range checks, increment attempt counters, or infer `FailureAction`.
+  - The function does not accept `Exception`, `BaseException`, traceback, `ExceptionGroup`, or raw messages. It does not inspect exception class, `repr`, cause chains, or stack traces. The caller supplies the already-sanitized `error_code`.
+  - The function does not accept `WorkflowState`. Control facts required by the published context are passed explicitly. Parallel-ingestion failing-branch identification remains a separately reviewed concern.
+  - `FailureAction`, `FailurePolicyContext`, and `FailurePolicyPort` remain unchanged. Chunk 46 still decides; Chunk 45 still owns the terminal transition. This function does not call either.
+  - LangGraph remains `START → workflow_entry → parallel_ingestion → parallel_ingestion_success_transition → END`. Exception capture, graph wiring, action execution, retry/fallback, degraded fan-in, concrete policy, and Chief Orchestrator remain separately reviewed chunks.
+- **Consequences:** Application callers can construct a published Phase 2 failure-policy context from typed facts without inspecting exceptions or executing policy. Production still has no graph failure capture, no exception-to-facts mapping, and no action execution.

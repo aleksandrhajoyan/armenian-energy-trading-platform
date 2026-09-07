@@ -257,6 +257,7 @@ def test_failure_transition_does_not_import_outer_layers_or_vendors() -> None:
     assert "FailurePolicyPort" not in names
     assert "advance_after_parallel_ingestion" not in names
     assert "ParallelIngestionFailureDecisionService" not in names
+    assert "build_parallel_ingestion_failure_policy_context" not in names
 
 
 def test_failure_transition_module_exposes_exactly_one_public_function() -> None:
@@ -412,6 +413,7 @@ def test_workflow_step_policy_and_lower_deps_remain_unwired_to_the_failure_trans
         source = path.read_text(encoding="utf-8")
         assert "fail_parallel_ingestion" not in source
         assert "parallel_ingestion_failure_transition" not in source
+        assert "build_parallel_ingestion_failure_policy_context" not in source
     policy_source = FAILURE_POLICY_MODULE.read_text(encoding="utf-8")
     assert "fail_parallel_ingestion" not in policy_source
     workflow_source = WORKFLOW_MODULE.read_text(encoding="utf-8").lower()
@@ -423,6 +425,7 @@ def test_graph_does_not_import_or_call_the_failure_transition() -> None:
     assert "fail_parallel_ingestion" not in names
     assert "advance_after_parallel_ingestion" in names
     assert "ParallelIngestionFailureDecisionService" not in names
+    assert "build_parallel_ingestion_failure_policy_context" not in names
     modules = imported_modules(GRAPH_MODULE)
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_failure_transition"
