@@ -118,6 +118,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "BaseException",
         "WorkflowState",
         "fail_parallel_ingestion",
+        "execute_parallel_ingestion_failure_action",
         "advance_after_parallel_ingestion",
         "ParallelIngestionPlan",
         "ParallelIngestionSuccess",
@@ -242,6 +243,7 @@ def test_decision_service_does_not_import_outer_layers_or_vendors() -> None:
     assert "FailurePolicyPort" in names
     assert "WorkflowState" not in names
     assert "fail_parallel_ingestion" not in names
+    assert "execute_parallel_ingestion_failure_action" not in names
     assert "advance_after_parallel_ingestion" not in names
 
 
@@ -343,6 +345,7 @@ def test_decide_delegates_once_without_branching_or_execution() -> None:
     assert "langgraph" not in lowered
     assert "langchain" not in lowered
     assert "fail_parallel_ingestion" not in source
+    assert "execute_parallel_ingestion_failure_action" not in source
     assert "tenacity" not in lowered
     assert "time.sleep" not in lowered
     assert "asyncio.sleep" not in lowered
@@ -361,6 +364,8 @@ def test_failure_policy_contract_remains_unchanged_and_unwired_to_the_service() 
     assert "parallel_ingestion_failure_decision" not in source
     assert "build_parallel_ingestion_failure_policy_context" not in source
     assert "parallel_ingestion_failure_context" not in source
+    assert "execute_parallel_ingestion_failure_action" not in source
+    assert "parallel_ingestion_failure_action" not in source
 
 
 def test_graph_workflow_and_transitions_remain_unwired_to_the_decision_service() -> None:
@@ -386,10 +391,15 @@ def test_graph_workflow_and_transitions_remain_unwired_to_the_decision_service()
             "energy_trading.application.orchestration.parallel_ingestion_failure_context"
             not in modules
         )
+        assert (
+            "energy_trading.application.orchestration.parallel_ingestion_failure_action"
+            not in modules
+        )
         source = path.read_text(encoding="utf-8")
         assert "ParallelIngestionFailureDecisionService" not in source
         assert "parallel_ingestion_failure_decision" not in source
         assert "build_parallel_ingestion_failure_policy_context" not in source
+        assert "execute_parallel_ingestion_failure_action" not in source
     graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
     assert "add_conditional_edges" not in graph_source
 

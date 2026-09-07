@@ -366,6 +366,7 @@ def test_executor_and_failure_policy_remain_unwired_to_the_workflow_step() -> No
     workflow_names = imported_names(WORKFLOW_MODULE)
     assert "ParallelIngestionFailureDecisionService" not in workflow_names
     assert "build_parallel_ingestion_failure_policy_context" not in workflow_names
+    assert "execute_parallel_ingestion_failure_action" not in workflow_names
     workflow_modules = imported_modules(WORKFLOW_MODULE)
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_failure_decision"
@@ -373,6 +374,10 @@ def test_executor_and_failure_policy_remain_unwired_to_the_workflow_step() -> No
     )
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_failure_context"
+        not in workflow_modules
+    )
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_action"
         not in workflow_modules
     )
 

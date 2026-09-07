@@ -138,6 +138,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "retry",
         "fallback",
         "except",
+        "execute_parallel_ingestion_failure_action",
     }
 )
 
@@ -258,6 +259,7 @@ def test_failure_transition_does_not_import_outer_layers_or_vendors() -> None:
     assert "advance_after_parallel_ingestion" not in names
     assert "ParallelIngestionFailureDecisionService" not in names
     assert "build_parallel_ingestion_failure_policy_context" not in names
+    assert "execute_parallel_ingestion_failure_action" not in names
 
 
 def test_failure_transition_module_exposes_exactly_one_public_function() -> None:
@@ -414,6 +416,7 @@ def test_workflow_step_policy_and_lower_deps_remain_unwired_to_the_failure_trans
         assert "fail_parallel_ingestion" not in source
         assert "parallel_ingestion_failure_transition" not in source
         assert "build_parallel_ingestion_failure_policy_context" not in source
+        assert "execute_parallel_ingestion_failure_action" not in source
     policy_source = FAILURE_POLICY_MODULE.read_text(encoding="utf-8")
     assert "fail_parallel_ingestion" not in policy_source
     workflow_source = WORKFLOW_MODULE.read_text(encoding="utf-8").lower()
@@ -426,6 +429,7 @@ def test_graph_does_not_import_or_call_the_failure_transition() -> None:
     assert "advance_after_parallel_ingestion" in names
     assert "ParallelIngestionFailureDecisionService" not in names
     assert "build_parallel_ingestion_failure_policy_context" not in names
+    assert "execute_parallel_ingestion_failure_action" not in names
     modules = imported_modules(GRAPH_MODULE)
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_failure_transition"
@@ -470,10 +474,12 @@ def test_graph_does_not_import_or_call_the_failure_transition() -> None:
     assert failure_calls == 0
     assert "add_conditional_edges" not in graph_source
     assert "fail_parallel_ingestion" not in graph_source
+    assert "execute_parallel_ingestion_failure_action" not in graph_source
     identifiers = _identifier_names(GRAPH_MODULE)
     assert "replace" not in identifiers
     assert "WorkflowPhase" not in identifiers
     assert "WorkflowStatus" not in identifiers
+    assert "execute_parallel_ingestion_failure_action" not in identifiers
     transition_source = FAILURE_TRANSITION_MODULE.read_text(encoding="utf-8").lower()
     assert "langgraph" not in transition_source
 

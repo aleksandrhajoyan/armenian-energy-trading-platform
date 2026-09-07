@@ -132,6 +132,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "FailureAction",
         "FailurePolicyPort",
         "fail_parallel_ingestion",
+        "execute_parallel_ingestion_failure_action",
         "advance_after_parallel_ingestion",
         "ParallelIngestionFailureDecisionService",
         "ParallelIngestionPlan",
@@ -302,6 +303,7 @@ def test_builder_constructs_published_context_once_without_branching() -> None:
     assert "traceback" not in lowered
     assert "exceptiongroup" not in lowered
     assert "fail_parallel_ingestion" not in source
+    assert "execute_parallel_ingestion_failure_action" not in source
     assert "ParallelIngestionFailureDecisionService" not in source
     assert "time.sleep" not in lowered
     assert "asyncio.sleep" not in lowered
@@ -359,6 +361,8 @@ def test_graph_workflow_and_transitions_remain_unwired_to_the_builder() -> None:
         source = path.read_text(encoding="utf-8")
         assert "build_parallel_ingestion_failure_policy_context" not in source
         assert "parallel_ingestion_failure_context" not in source
+        assert "execute_parallel_ingestion_failure_action" not in source
+        assert "parallel_ingestion_failure_action" not in source
     graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
     assert "add_conditional_edges" not in graph_source
 

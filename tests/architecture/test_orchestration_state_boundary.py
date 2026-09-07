@@ -233,6 +233,7 @@ def test_workflow_state_has_only_construction_validation() -> None:
     assert "fail_parallel_ingestion" not in names
     assert "advance_after_parallel_ingestion" not in names
     assert "build_parallel_ingestion_failure_policy_context" not in names
+    assert "execute_parallel_ingestion_failure_action" not in names
     modules = imported_modules(STATE_MODULE)
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_failure_transition"
@@ -241,6 +242,9 @@ def test_workflow_state_has_only_construction_validation() -> None:
     assert "energy_trading.application.orchestration.parallel_ingestion_transition" not in modules
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_failure_context" not in modules
+    )
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_action" not in modules
     )
 
 

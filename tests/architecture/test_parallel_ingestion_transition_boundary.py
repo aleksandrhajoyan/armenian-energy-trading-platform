@@ -174,6 +174,7 @@ FORBIDDEN_STATE_METHODS = frozenset(
         "advance_after_parallel_ingestion",
         "fail",
         "fail_parallel_ingestion",
+        "execute_parallel_ingestion_failure_action",
     }
 )
 
@@ -328,6 +329,7 @@ def test_workflow_state_remains_transition_free() -> None:
     names = imported_names(STATE_MODULE)
     assert "advance_after_parallel_ingestion" not in names
     assert "fail_parallel_ingestion" not in names
+    assert "execute_parallel_ingestion_failure_action" not in names
     modules = imported_modules(STATE_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion_transition" not in modules
     assert (
