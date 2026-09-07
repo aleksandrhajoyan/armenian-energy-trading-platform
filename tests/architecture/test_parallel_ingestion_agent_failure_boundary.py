@@ -17,6 +17,7 @@ from tests.architecture.import_inspection import (
 PRODUCTION_ROOT = SRC_ROOT / "energy_trading"
 ORCHESTRATION_ROOT = PRODUCTION_ROOT / "application" / "orchestration"
 FAILURE_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_agent_failure.py"
+EXCEPTION_GROUP_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_exception_group.py"
 EXECUTOR_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_executor.py"
 FAILURE_POLICY_MODULE = ORCHESTRATION_ROOT / "failure_policy.py"
 DECISION_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_failure_decision.py"
@@ -280,6 +281,13 @@ def test_policy_graph_and_handling_remain_unwired_to_attribution() -> None:
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_agent_failure"
         in executor_modules
+    )
+    extractor_names = imported_names(EXCEPTION_GROUP_MODULE)
+    assert "ParallelIngestionAgentFailure" in extractor_names
+    extractor_modules = imported_modules(EXCEPTION_GROUP_MODULE)
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_agent_failure"
+        in extractor_modules
     )
 
 

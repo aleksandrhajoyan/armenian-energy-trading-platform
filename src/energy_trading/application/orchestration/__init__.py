@@ -2,7 +2,8 @@
 workflow context port, workflow step, Phase 2 success and terminal-failure
 transitions, failure-policy context construction, failure-policy decision
 service, terminal FAIL action execution, prepared failure-handling
-composition, Phase 2 agent-failure attribution, and LangGraph runtime.
+composition, Phase 2 agent-failure attribution, ExceptionGroup attributed-leaf
+extraction, and LangGraph runtime.
 """
 
 from energy_trading.application.orchestration.failure_policy import (
@@ -21,6 +22,9 @@ from energy_trading.application.orchestration.parallel_ingestion_agent_failure i
 )
 from energy_trading.application.orchestration.parallel_ingestion_context import (
     ParallelIngestionWorkflowContextPort,
+)
+from energy_trading.application.orchestration.parallel_ingestion_exception_group import (
+    extract_parallel_ingestion_agent_failures,
 )
 from energy_trading.application.orchestration.parallel_ingestion_executor import (
     ConcurrentParallelIngestionExecutor,
@@ -72,5 +76,6 @@ __all__ = [
     "build_parallel_ingestion_failure_policy_context",
     "build_workflow_graph",
     "execute_parallel_ingestion_failure_action",
+    "extract_parallel_ingestion_agent_failures",
     "fail_parallel_ingestion",
 ]

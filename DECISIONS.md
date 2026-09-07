@@ -932,3 +932,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - `ParallelIngestionExecutionPort.execute` remains an all-success contract returning `ParallelIngestionSuccess`. Failure still propagates. This slice does not flatten or interpret `ExceptionGroup`, does not derive `error_code`, does not construct `FailurePolicyContext`, and does not invoke Chunk 46–49 policy/handling surfaces.
   - LangGraph remains `START → workflow_entry → parallel_ingestion → parallel_ingestion_success_transition → END`. Runtime Phase 2 exceptions still propagate from the graph.
 - **Consequences:** Callers can recover which Phase 2 agent failed from an attributed leaf while TaskGroup aggregation remains native. Production still has no ExceptionGroup interpretation, no error-code mapping, no policy routing, no LangGraph failure catching, and no complete failure-handling workflow.
+
+---
+
+## ADR-061 — Attributed Phase 2 failures are extracted before classification
+
+- **Status:** Accepted
+- **Context:** Chunk 50 attributes ordinary Phase 2 agent failures as `ParallelIngestionAgentFailure` before `asyncio.TaskGroup` aggregates them. Native aggregation yields a possibly nested `ExceptionGroup` / `BaseExceptionGroup`. Folding leaf extraction together with error-code classification, primary-failure selection, attempt tracking, or LangGraph catch/conditional routing would freeze independently reviewable concerns. TaskGroup aggregation and failure classification are separate.
+- **Decision:**
+  - Application owns `extract_parallel_ingestion_agent_failures(failure: BaseExceptionGroup) -> tuple[ParallelIngestionAgentFailure, ...]` in `parallel_ingestion_exception_group.py`. It is one synchronous Phase-2-specific function, not a DTO, service class, Protocol, visitor, registry, or generic exception framework.
+  - Chunk 50 remains the owner of task→agent attribution. Chunk 51 owns only deterministic extraction of already-attributed leaves from an already-created exception group.
+  - Traversal is recursive over nested groups, depth-first and left-to-right, preserving native leaf encounter order. Exact original `ParallelIngestionAgentFailure` objects are returned. `__cause__` is not inspected or rewritten.
+  - Multiple real failures are preserved. Two attributed leaves with the same `AgentName` are not collapsed, grouped, or sorted.
+  - Any non-group leaf that is not `ParallelIngestionAgentFailure` fails closed as existing `InvalidRequestError` with a stable sanitized message. Unattributed leaves are not skipped and do not produce a partial tuple. A cancellation leaf supplied directly is unattributed; this does not redefine native TaskGroup sibling-cancellation behavior.
+  - The function does not call `.split()`, `.subgroup()`, or `.derive()`, and does not rebuild exception groups.
+  - Exception→`error_code` mapping, selection among multiple failures, attempt tracking, `FailurePolicyContext` construction, policy decision, action execution, diagnostics mutation, and LangGraph routing remain deferred.
+- **Consequences:** Callers can recover the attributed Phase 2 leaves from a nested exception group without classifying them. Production still has no error-code mapping, no multi-failure selection policy, no retry/fallback mechanics, no LangGraph failure routing, and no complete failure-handling workflow.
+
+---
