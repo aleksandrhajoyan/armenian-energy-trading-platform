@@ -20,6 +20,7 @@ PRODUCTION_ROOT = SRC_ROOT / "energy_trading"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 HEALTH_ROUTER = API_ROOT / "routers" / "health.py"
+REGULATORY_ROUTER = API_ROOT / "routers" / "regulatory_intelligence.py"
 SCHEMA_MODULE = API_ROOT / "schemas" / "regulatory_intelligence.py"
 SCHEMA_PACKAGE_INIT = API_ROOT / "schemas" / "__init__.py"
 ACCESSOR_MODULE = API_ROOT / "dependencies" / "regulatory_intelligence.py"
@@ -268,6 +269,8 @@ def test_app_health_accessor_and_routers_remain_unwired_to_the_schema() -> None:
         assert "RegulatoryIntelligenceQueryRequest" not in source
         assert "energy_trading.api.schemas" not in source
     for path in sorted((API_ROOT / "routers").rglob("*.py")):
+        if path.resolve() == REGULATORY_ROUTER.resolve():
+            continue
         source = path.read_text(encoding="utf-8")
         assert "RegulatoryIntelligenceQueryRequest" not in source
         assert "RegulatoryIntelligenceQueryResponse" not in source

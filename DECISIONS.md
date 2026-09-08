@@ -1413,3 +1413,16 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Future HTTP handlers can bind JSON to these DTOs without inventing business fields. Mapping orchestration, route installation, and query execution remain deferred.
 
 ---
+
+## ADR-091 — Regulatory HTTP query route is a thin API boundary not installed in create_app()
+
+- **Status:** Accepted
+- **Context:** Chunk 80 published HTTP request/response DTOs and Chunk 79 published a typed request-time accessor for the lifespan-scoped query-execution service. HTTP still lacked a handler that binds those DTOs, resolves the service through FastAPI `Depends`, and projects canonical `RegulatoryConstraint` values. Installing that router in production `create_app()` in the same slice would expose an incomplete RAG surface before a separately authorized production-installation chunk. A generic mapper, route factory, service registry, or handler-local exception translation would invent abstractions this repository does not own.
+- **Decision:**
+  - API owns a dedicated `APIRouter` in `api/routers/regulatory_intelligence.py` with prefix `/regulatory-intelligence` and POST `/query`.
+  - The handler accepts exactly `RegulatoryIntelligenceQueryRequest`, obtains `RegulatoryIntelligenceQueryExecutionService` through `Depends(get_regulatory_intelligence_query_execution_service)`, awaits `execute(query_text=request.query_text, limit=request.limit)` exactly once, and returns `RegulatoryIntelligenceQueryResponse`.
+  - Canonical constraint fields are projected explicitly into existing `RegulatoryConstraintResponse`. Query text is not stripped. There is no handler-local `try`/`except`, provider logic, or reusable mapping abstraction.
+  - Production `create_app()` does not import or `include_router` this router. Tests may install it on a test-only FastAPI application. Existing centralized API exception mapping remains the only HTTP translation path.
+- **Consequences:** Isolated HTTP query behavior is proven. Production HTTP exposure remains incomplete. PDF/OCR, document indexing runtime, verified Armenian DAM rules, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.
+
+---

@@ -19,6 +19,7 @@ from tests.architecture.import_inspection import (
 PRODUCTION_ROOT = SRC_ROOT / "energy_trading"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
+REGULATORY_ROUTER = API_ROOT / "routers" / "regulatory_intelligence.py"
 COMPOSITION_ROOT = API_ROOT / "composition"
 BUILDER_MODULE = COMPOSITION_ROOT / "regulatory_intelligence_lifespan.py"
 LOADED_RUNTIME_MODULE = COMPOSITION_ROOT / "regulatory_intelligence_loaded_runtime.py"
@@ -461,7 +462,11 @@ def test_state_mutation_is_confined_to_the_lifespan_module() -> None:
     offenders: list[str] = []
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
         resolved = path.resolve()
-        if resolved == writer or resolved.is_relative_to(dependencies_root):
+        if (
+            resolved == writer
+            or resolved.is_relative_to(dependencies_root)
+            or resolved == REGULATORY_ROUTER.resolve()
+        ):
             continue
         source = path.read_text(encoding="utf-8")
         if attribute in source or "app.state" in source:
@@ -497,8 +502,10 @@ def test_state_mutation_is_confined_to_the_lifespan_module() -> None:
     assert "delattr" not in call_names
     for path in sorted((API_ROOT / "routers").rglob("*.py")):
         source = path.read_text(encoding="utf-8")
-        assert attribute not in source
         assert "app.state" not in source
+        if path.resolve() == REGULATORY_ROUTER.resolve():
+            continue
+        assert attribute not in source
 
 
 def test_provider_sdk_allowlist_remains_the_existing_two_modules() -> None:
@@ -565,6 +572,8 @@ def test_http_routes_remain_unwired_to_chunk_75_and_provider_sdks() -> None:
         source = path.read_text(encoding="utf-8")
         assert "build_regulatory_intelligence_lifespan" not in source
         assert "loaded_regulatory_intelligence_runtime" not in source
+        if path.resolve() == REGULATORY_ROUTER.resolve():
+            continue
         assert "regulatory_intelligence_query_execution_service" not in source
 
 
