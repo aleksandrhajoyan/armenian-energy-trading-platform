@@ -41,6 +41,9 @@ INITIAL_ATTEMPT_NUMBER_SOURCE_MODULE = (
     ORCHESTRATION_ROOT / "parallel_ingestion_initial_attempt_number_source.py"
 )
 INITIAL_FAILURE_POLICY_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_initial_failure_policy.py"
+FAILURE_RUNTIME_HANDLING_MODULE = (
+    ORCHESTRATION_ROOT / "parallel_ingestion_failure_runtime_handling.py"
+)
 AGENTS_ROOT = PRODUCTION_ROOT / "application" / "agents"
 AGENT_BASE = AGENTS_ROOT / "base.py"
 PORTS_ROOT = PRODUCTION_ROOT / "application" / "ports"
@@ -333,6 +336,17 @@ def test_initial_failure_policy_module_remains_langgraph_free() -> None:
     )
 
 
+def test_failure_runtime_handling_module_remains_langgraph_free() -> None:
+    names = imported_names(FAILURE_RUNTIME_HANDLING_MODULE)
+    assert "langgraph" not in names
+    assert "langchain" not in names
+    assert "langchain_core" not in names
+    modules = imported_modules(FAILURE_RUNTIME_HANDLING_MODULE)
+    assert not any(
+        is_forbidden(module, ("langgraph", "langchain", "langchain_core")) for module in modules
+    )
+
+
 def test_agent_base_remains_langgraph_free() -> None:
     assert (
         collect_import_violations(AGENTS_ROOT, ("langgraph", "langchain", "langchain_core")) == []
@@ -398,6 +412,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "StrictSingleParallelIngestionFailureSelector" not in names
     assert "InitialParallelIngestionAttemptNumberSource" not in names
     assert "InitialParallelIngestionFailurePolicy" not in names
+    assert "ParallelIngestionFailureRuntimeHandlingService" not in names
     assert "WeatherAndRenewableForecastAgent" not in names
     assert "HydroResourcesAgent" not in names
     assert "GenerationAvailabilityAgent" not in names
@@ -464,6 +479,10 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     )
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_initial_failure_policy"
+        not in modules
+    )
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_runtime_handling"
         not in modules
     )
     assert "energy_trading.application.agents.weather_and_renewable_forecast" not in modules
@@ -598,6 +617,8 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "parallel_ingestion_initial_attempt_number_source" not in source
     assert "InitialParallelIngestionFailurePolicy" not in source
     assert "parallel_ingestion_initial_failure_policy" not in source
+    assert "ParallelIngestionFailureRuntimeHandlingService" not in source
+    assert "parallel_ingestion_failure_runtime_handling" not in source
     assert "add_conditional_edges" not in source
     identifiers = _identifier_names(GRAPH_MODULE)
     assert "replace" not in identifiers

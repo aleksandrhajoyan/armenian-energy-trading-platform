@@ -261,6 +261,11 @@ def test_workflow_state_has_only_construction_validation() -> None:
         "energy_trading.application.orchestration.parallel_ingestion_failure_handling"
         not in modules
     )
+    assert "ParallelIngestionFailureRuntimeHandlingService" not in names
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_runtime_handling"
+        not in modules
+    )
     assert "ParallelIngestionFailureContextResolutionService" not in names
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_failure_context_resolution"
@@ -312,6 +317,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
         "ParallelIngestionFailureDecisionService",
         "ParallelIngestionFailureFact",
         "ParallelIngestionFailureHandlingService",
+        "ParallelIngestionFailureRuntimeHandlingService",
         "ParallelIngestionFailureSelectionPort",
         "InitialParallelIngestionAttemptNumberSource",
         "InitialParallelIngestionFailurePolicy",

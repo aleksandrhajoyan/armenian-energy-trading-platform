@@ -1079,3 +1079,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** The current single-failure application path now has a concrete, honest policy decision. The system does not silently pretend retries or fallback are supported. Future RETRY/FALLBACK behavior requires separate architectural review and supporting runtime mechanisms.
 
 ---
+
+## ADR-071 — Phase 2 application failure handling is composed before LangGraph routing
+
+- **Status:** Accepted
+- **Context:** All current single-failure application components now exist independently: context preparation, a concrete initial policy, and existing handling/action execution. Without an outer application composition service, future graph code would have to orchestrate application internals itself.
+- **Decision:**
+  - Application owns LangGraph-free `ParallelIngestionFailureRuntimeHandlingService` in `parallel_ingestion_failure_runtime_handling.py`.
+  - Constructor injects the published `ParallelIngestionFailureContextPreparationService` and `ParallelIngestionFailureHandlingService`.
+  - Keyword-only `async handle(*, state: WorkflowState, failure_group: BaseExceptionGroup) -> WorkflowState` accepts the current snapshot and one exception group.
+  - The service delegates context preparation, then existing failure handling, and returns the resulting `WorkflowState`.
+  - It does not inspect exceptions, select failures, resolve attempts, decide actions directly, or depend on LangGraph.
+- **Consequences:** The single-failure terminal path is executable entirely inside application code. Future LangGraph wiring can remain thin. Multi-failure selection and retry/fallback behavior remain separate concerns.
+
+---
