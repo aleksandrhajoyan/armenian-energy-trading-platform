@@ -293,6 +293,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
         "hydro_resources.py",
         "market_monitoring.py",
         "news_intelligence.py",
+        "regulatory_intelligence.py",
         "weather_and_renewable_forecast.py",
     ]
     orchestration_classes: list[str] = []

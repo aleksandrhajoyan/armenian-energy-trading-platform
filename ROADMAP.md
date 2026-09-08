@@ -101,6 +101,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 ## Phase 5 — Regulatory + pricing
 
 - [ ] Regulatory Intelligence Agent (retrieval against Qdrant when ready)
+  - [x] **Chunk 63** — Regulatory Intelligence Agent Application Boundary and First Concrete Regulatory Agent
 - [ ] Pricing & Sales Agent
 - [ ] Contract-phase graph slice
 
@@ -150,5 +151,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 62
-- **Next:** next Phase 4 implementation slice TBD after Chunk 62 Architect review. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.
+- **Completed:** Chunk 0 through Chunk 63
+- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 63 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales complete. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize concrete LLM/inference implementation, query-text embedding, Qdrant/API composition, PDF/OCR, actual RAG workflow, verified Armenian DAM rule extraction, Regulatory graph/API wiring, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.

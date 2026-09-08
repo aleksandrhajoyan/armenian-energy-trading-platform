@@ -26,6 +26,9 @@ from energy_trading.application.ports.generation_availability_records import (
 from energy_trading.application.ports.hydro_records import HydroRecordSourcePort
 from energy_trading.application.ports.market_price_records import MarketPriceRecordSourcePort
 from energy_trading.application.ports.news_events import NewsEventSourcePort
+from energy_trading.application.ports.regulatory_constraint_inference import (
+    RegulatoryConstraintInferencePort,
+)
 from energy_trading.application.ports.structured_ingestion import (
     StructuredIngestionPort,
     StructuredIngestionResult,
@@ -49,6 +52,7 @@ __all__ = [
     "HydroRecordSourcePort",
     "MarketPriceRecordSourcePort",
     "NewsEventSourcePort",
+    "RegulatoryConstraintInferencePort",
     "StructuredIngestionPort",
     "StructuredIngestionResult",
     "WeatherRecordSourcePort",

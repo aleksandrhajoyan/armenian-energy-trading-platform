@@ -1109,3 +1109,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** The currently supported one-attributed-failure path can terminate at `INGESTION` / `FAILED` through LangGraph without expanding `WorkflowState` or adding a checkpointer, store, retry/fallback execution, multi-failure selector, diagnostics mapping, or Phase 3. Direct non-group failures retain existing propagation. Multi-failure selection and retry/fallback remain deferred.
 
 ---
+
+## ADR-073 — Regulatory Intelligence composes canonical document retrieval with an agent-specific inference port
+
+- **Status:** Accepted
+- **Context:** Chunks 30–34 established five provider-neutral Phase 2 ingestion agents. Chunk 21 already published `DocumentVectorSearchPort` over already-embedded `DocumentVectorSearchQuery` values returning ranked `ExtractedDocumentChunk` tuples. Phase 5 now needs the first Regulatory Intelligence application slice. Introducing a Qdrant type, a generic `LLMPort`, query-text embedding, or hardcoded Armenian DAM rules on this first slice would couple the agent to a vendor, collapse distinct retrieval and interpretation seams, or invent unverified market constraints. Empty retrieval must not become fabricated enforceable limits.
+- **Decision:**
+  - The sixth concrete agent is Regulatory Intelligence Agent. It structurally satisfies `AgentPort[RegulatoryIntelligenceRequest, RegulatoryIntelligenceResult]` and does not inherit a base class.
+  - Agent-specific request/result remain frozen application DTOs. `RegulatoryIntelligenceRequest` carries only `search_query: DocumentVectorSearchQuery`. `RegulatoryIntelligenceResult` contains only `constraints: tuple[RegulatoryConstraint, ...]`. Canonical domain type remains existing `RegulatoryConstraint`; it is not shadowed or wrapped.
+  - Existing `DocumentVectorSearchPort` is reused. No Qdrant client, collection, score, point ID, or payload type enters the agent. Query-text embedding remains outside this chunk; the caller supplies an already-constructed search query.
+  - `RegulatoryConstraintInferencePort` is a narrow application-owned, agent-specific Protocol. `infer` is keyword-only and accepts only `chunks: tuple[ExtractedDocumentChunk, ...]`, returning canonical `RegulatoryConstraint` tuples. It is not a generic `LLMPort`, prompt catalog, or provider hierarchy.
+  - Empty retrieval is fail-safe: `search` returning `()` yields `constraints=()` and does not invoke inference. The agent never constructs `RegulatoryConstraint` values itself, does not invent fallback constraints, and does not hardcode Armenian DAM gate times, bid envelopes, price caps, currencies, or license limits.
+  - Existing application exceptions from retrieval or inference propagate unchanged. There is no new exception taxonomy and no silent empty-success conversion of inference failure.
+  - No concrete inference provider, PDF/OCR, Qdrant composition, graph wiring, API wiring, persistence, retry/fallback execution, or verified Armenian rule extraction is added. No new dependency is added.
+  - Weather, Hydro, Generation, News, Market, and Regulatory are not generalized into a shared agent base class, registry, factory, or RAG framework.
+  - Canonical identity remains the existing `AgentName.REGULATORY_INTELLIGENCE` display value `Regulatory Intelligence Agent`.
+- **Consequences:** The first Regulatory Intelligence application boundary is proven without vendor, LLM-SDK, or hardcoded-rule coupling. A future infrastructure/LLM adapter may satisfy `RegulatoryConstraintInferencePort` only after receiving already-normalized retrieved chunks. Actual RAG runtime, query-text embedding, and contract-phase graph wiring remain separately reviewed work.
+
+---
