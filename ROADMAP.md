@@ -103,6 +103,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 - [ ] Regulatory Intelligence Agent (retrieval against Qdrant when ready)
   - [x] **Chunk 63** — Regulatory Intelligence Agent Application Boundary and First Concrete Regulatory Agent
   - [x] **Chunk 64** — Document Query Embedding Application Boundary
+  - [x] **Chunk 65** — Document Vector Search Query Preparation Service — Application-only
 - [ ] Pricing & Sales Agent
 - [ ] Contract-phase graph slice
 
@@ -152,5 +153,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 64
-- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 64 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize a concrete query-text embedding provider, query-preparation composition, concrete LLM/inference implementation, Qdrant/API composition, PDF/OCR, actual RAG workflow, verified Armenian DAM rule extraction, Regulatory graph/API wiring, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.
+- **Completed:** Chunk 0 through Chunk 65
+- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 65 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize a concrete query-text embedding provider, Regulatory wiring of query preparation, concrete LLM/inference implementation, Qdrant/API composition, PDF/OCR, actual RAG workflow, verified Armenian DAM rule extraction, Regulatory graph/API wiring, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.

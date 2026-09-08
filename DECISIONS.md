@@ -1140,6 +1140,23 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - A generic embedding framework (`EmbeddingPort[T]`, `LLMPort`, `AIProviderPort`) is rejected.
   - Existing vector DTOs were inspected and not reused: `DocumentChunkEmbedding` is document-identity-specific; `DocumentVectorSearchQuery` is a search request (`vector` plus `limit`), not an embedding result. There was no provider-neutral finite-vector-only application value. Chunk 64 therefore introduces minimal frozen `DocumentQueryEmbedding` with exactly `vector: tuple[float, ...]`, using the already-published finite-tuple validation semantics.
   - Query-preparation composition (`DocumentQueryEmbedding` → `DocumentVectorSearchQuery`) remains deferred. Regulatory Intelligence still receives an already-built search query and is not injected with this port.
-- **Consequences:** Callers can later compose query text → query embedding → search query without changing document-chunk embedding, vector search, or Regulatory Intelligence in this chunk. A future provider adapter may satisfy `DocumentQueryEmbeddingPort` structurally. No live embedding provider, RAG orchestration, or graph/API wiring is authorized here.
+- **Consequences:** Callers can later compose query text → query embedding → search query without changing document-chunk embedding, vector search, or Regulatory Intelligence in this chunk. A future provider adapter may satisfy `DocumentQueryEmbeddingPort` structurally. No live embedding provider, RAG orchestration, or graph/API wiring is authorized here. Chunk 65 added `DocumentVectorSearchQueryPreparationService` as that composition; it is not wired into Regulatory Intelligence.
+
+---
+
+## ADR-075 — Vector-search query construction is a narrow application composition over query embedding
+
+- **Status:** Accepted
+- **Context:** Chunk 64 published `DocumentQueryEmbeddingPort.embed_query(query_text) -> DocumentQueryEmbedding`. Chunk 63 Regulatory Intelligence still requires an already-constructed `DocumentVectorSearchQuery` (`vector` plus positive `limit`). Folding that construction into the Regulatory agent would make the agent accept raw query text, inject embedding, and stop being a retrieval-plus-inference composition. Invoking `DocumentVectorSearchPort` here would collapse query construction with retrieval. Inventing a new prepared-query DTO, default limit, query rewriting, or a generic RAG/embedding framework would add policy this repository does not own.
+- **Decision:**
+  - Query preparation is a narrow application-owned service: `DocumentVectorSearchQueryPreparationService`.
+  - Constructor injects exactly `DocumentQueryEmbeddingPort`. The service does not inject vector search, Regulatory Intelligence, Qdrant, an LLM, cache, or a generic embedding abstraction.
+  - Public operation is keyword-only `async prepare(*, query_text: str, limit: int) -> DocumentVectorSearchQuery`.
+  - Sequence is fixed: await `embed_query(query_text)` exactly once, then construct existing `DocumentVectorSearchQuery(vector=embedding.vector, limit=limit)`. Query text is forwarded unchanged. Limit validation stays with the existing query contract. The service does not prevalidate, clamp, or default the limit.
+  - The returned object remains existing `DocumentVectorSearchQuery`. No new prepared-query DTO, wrapper, provider/model/prompt/metadata, collection, score, filter, or correlation fields.
+  - Search is not invoked. Regulatory Intelligence remains unchanged and still consumes a prebuilt `DocumentVectorSearchQuery`. This service is not injected into that agent.
+  - Existing embedding and query-contract failures propagate unchanged. There is no fallback vector or fallback query.
+  - Query rewriting, query expansion, tokenization, hybrid lexical/vector retrieval, default search limits, caching, retries, embedding providers, Qdrant wiring, and generic RAG machinery remain deferred.
+- **Consequences:** Application callers can compose query text → query embedding → `DocumentVectorSearchQuery` without changing Chunk 63–64 contracts. Regulatory RAG is still not operational: no embedding provider, no search invocation, no agent/graph/API wiring.
 
 ---
