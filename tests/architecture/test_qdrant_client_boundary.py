@@ -6,10 +6,12 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
+    REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
     REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
     SRC_ROOT,
     collect_import_violations,
     imported_names,
+    is_regulatory_managed_runtime_module,
     is_regulatory_provider_composition_module,
     is_regulatory_provider_runtime_module,
 )
@@ -125,8 +127,16 @@ def test_inner_layers_do_not_import_qdrant() -> None:
     assert (
         collect_import_violations(
             API_ROOT,
-            FORBIDDEN_INNER_QDRANT,
+            ("qdrant_client",),
             exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+        )
+        == []
+    )
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            ("energy_trading.infrastructure.vector_store.qdrant",),
+            exclude_relative_prefixes=REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
         )
         == []
     )
@@ -164,17 +174,23 @@ def test_qdrant_client_foundation_does_not_import_application_document_contracts
 
 
 def test_create_app_does_not_wire_qdrant() -> None:
-    forbidden_wiring = (
-        "qdrant_client",
-        "energy_trading.infrastructure.vector_store",
-        "energy_trading.infrastructure.vector_store.qdrant",
-        "energy_trading.shared.config.qdrant",
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            ("qdrant_client",),
+            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+        )
+        == []
     )
     assert (
         collect_import_violations(
             API_ROOT,
-            forbidden_wiring,
-            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+            (
+                "energy_trading.infrastructure.vector_store",
+                "energy_trading.infrastructure.vector_store.qdrant",
+                "energy_trading.shared.config.qdrant",
+            ),
+            exclude_relative_prefixes=REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
         )
         == []
     )
@@ -191,6 +207,15 @@ def test_create_app_does_not_wire_qdrant() -> None:
                 assert "QdrantDocumentVectorSearch" in names
             else:
                 assert "QdrantDocumentVectorSearch" not in names
+            continue
+        if is_regulatory_managed_runtime_module(path):
+            assert "AsyncQdrantClient" not in names
+            assert "QdrantDocumentVectorConfig" not in names
+            assert "QdrantSettings" in names
+            assert "create_qdrant_client" in names
+            assert "load_qdrant_settings" not in names
+            assert "QdrantDocumentVectorIndex" not in names
+            assert "QdrantDocumentVectorSearch" not in names
             continue
         assert "AsyncQdrantClient" not in names
         assert "QdrantSettings" not in names

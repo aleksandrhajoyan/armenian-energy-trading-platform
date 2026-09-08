@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
+    REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
     REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
     SRC_ROOT,
     annotation_type_names,
@@ -201,20 +202,26 @@ def test_embedding_dto_has_only_identity_and_vector_fields() -> None:
 
 
 def test_api_composition_does_not_import_or_construct_document_embedding() -> None:
-    forbidden_wiring = (
-        "energy_trading.application.ports.document_embedding",
-        "energy_trading.infrastructure.vector_store",
-        "qdrant_client",
-        "qdrant",
-        "sentence_transformers",
-        "transformers",
-        "openai",
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            (
+                "energy_trading.application.ports.document_embedding",
+                "qdrant_client",
+                "qdrant",
+                "sentence_transformers",
+                "transformers",
+                "openai",
+            ),
+            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+        )
+        == []
     )
     assert (
         collect_import_violations(
             API_ROOT,
-            forbidden_wiring,
-            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+            ("energy_trading.infrastructure.vector_store",),
+            exclude_relative_prefixes=REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
         )
         == []
     )

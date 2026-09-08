@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
+    REGULATORY_MANAGED_RUNTIME_RELATIVE,
     REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
     SRC_ROOT,
     annotation_type_names,
@@ -207,8 +208,20 @@ def test_inner_layers_do_not_import_openai() -> None:
     assert (
         collect_import_violations(
             API_ROOT,
-            FORBIDDEN_INNER_OPENAI,
+            (
+                "openai",
+                "energy_trading.infrastructure.embeddings",
+                "energy_trading.infrastructure.regulatory",
+            ),
             exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+        )
+        == []
+    )
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            ("energy_trading.infrastructure.openai",),
+            exclude_relative_prefixes=(REGULATORY_MANAGED_RUNTIME_RELATIVE,),
         )
         == []
     )

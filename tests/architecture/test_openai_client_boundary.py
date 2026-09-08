@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
+    REGULATORY_MANAGED_RUNTIME_RELATIVE,
     REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
     SRC_ROOT,
     annotation_type_names,
@@ -13,6 +14,7 @@ from tests.architecture.import_inspection import (
     imported_modules,
     imported_names,
     is_forbidden,
+    is_regulatory_managed_runtime_module,
     is_regulatory_provider_composition_module,
 )
 
@@ -32,6 +34,7 @@ PROVIDER_RUNTIME_MODULE = API_ROOT / "composition" / "regulatory_intelligence_ru
 CONFIGURED_RUNTIME_MODULE = (
     API_ROOT / "composition" / "regulatory_intelligence_configured_runtime.py"
 )
+MANAGED_RUNTIME_MODULE = API_ROOT / "composition" / "regulatory_intelligence_managed_runtime.py"
 QUERY_EMBEDDING_ADAPTER = (
     PRODUCTION_ROOT / "infrastructure" / "embeddings" / "openai_query_embedding.py"
 )
@@ -180,10 +183,12 @@ def test_openai_sdk_imports_exist_only_in_approved_modules() -> None:
             if is_forbidden(module, ("openai",)):
                 leaked.append(f"{path.relative_to(SRC_ROOT)} imports {module}")
     assert leaked == []
+    assert MANAGED_RUNTIME_MODULE.resolve() not in ALLOWED_OPENAI_SDK_MODULES
     assert "openai" in imported_modules(CLIENT_MODULE)
     assert "openai" not in imported_modules(OPENAI_SETTINGS)
     assert "openai" in imported_modules(PROVIDER_RUNTIME_MODULE)
     assert "openai" in imported_modules(CONFIGURED_RUNTIME_MODULE)
+    assert "openai" not in imported_modules(MANAGED_RUNTIME_MODULE)
 
 
 def test_inner_layers_do_not_import_openai() -> None:
@@ -192,8 +197,20 @@ def test_inner_layers_do_not_import_openai() -> None:
     assert (
         collect_import_violations(
             API_ROOT,
-            FORBIDDEN_INNER_OPENAI,
+            (
+                "openai",
+                "energy_trading.infrastructure.embeddings",
+                "energy_trading.infrastructure.regulatory",
+            ),
             exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+        )
+        == []
+    )
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            ("energy_trading.infrastructure.openai",),
+            exclude_relative_prefixes=(REGULATORY_MANAGED_RUNTIME_RELATIVE,),
         )
         == []
     )
@@ -333,17 +350,23 @@ def test_no_global_async_openai_client() -> None:
 
 
 def test_create_app_and_composition_do_not_construct_openai_client() -> None:
-    forbidden_wiring = (
-        "openai",
-        "energy_trading.infrastructure.openai",
-        "energy_trading.infrastructure.openai.client",
-        "energy_trading.shared.config.openai",
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            ("openai",),
+            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+        )
+        == []
     )
     assert (
         collect_import_violations(
             API_ROOT,
-            forbidden_wiring,
-            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+            (
+                "energy_trading.infrastructure.openai",
+                "energy_trading.infrastructure.openai.client",
+                "energy_trading.shared.config.openai",
+            ),
+            exclude_relative_prefixes=(REGULATORY_MANAGED_RUNTIME_RELATIVE,),
         )
         == []
     )
@@ -353,6 +376,12 @@ def test_create_app_and_composition_do_not_construct_openai_client() -> None:
             assert "AsyncOpenAI" in names
             assert "OpenAISettings" not in names
             assert "create_openai_client" not in names
+            assert "load_openai_settings" not in names
+            continue
+        if is_regulatory_managed_runtime_module(path):
+            assert "AsyncOpenAI" not in names
+            assert "OpenAISettings" in names
+            assert "create_openai_client" in names
             assert "load_openai_settings" not in names
             continue
         assert "AsyncOpenAI" not in names

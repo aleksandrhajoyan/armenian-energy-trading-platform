@@ -6,7 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
-    REGULATORY_CONFIGURED_RUNTIME_RELATIVE,
+    REGULATORY_RUNTIME_SETTINGS_CONSUMER_RELATIVES,
     SRC_ROOT,
     annotation_type_names,
     collect_import_violations,
@@ -259,7 +259,7 @@ def test_inner_layers_do_not_import_regulatory_runtime_settings() -> None:
         collect_import_violations(
             API_ROOT,
             forbidden,
-            exclude_relative_prefixes=(REGULATORY_CONFIGURED_RUNTIME_RELATIVE,),
+            exclude_relative_prefixes=REGULATORY_RUNTIME_SETTINGS_CONSUMER_RELATIVES,
         )
         == []
     )

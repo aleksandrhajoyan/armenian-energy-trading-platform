@@ -6,6 +6,9 @@ from energy_trading.api.composition.regulatory_intelligence import (
 from energy_trading.api.composition.regulatory_intelligence_configured_runtime import (
     build_regulatory_intelligence_configured_runtime,
 )
+from energy_trading.api.composition.regulatory_intelligence_managed_runtime import (
+    managed_regulatory_intelligence_runtime,
+)
 from energy_trading.api.composition.regulatory_intelligence_runtime import (
     build_regulatory_intelligence_provider_runtime,
 )
@@ -14,4 +17,5 @@ __all__ = [
     "build_regulatory_intelligence_configured_runtime",
     "build_regulatory_intelligence_provider_runtime",
     "build_regulatory_intelligence_query_execution",
+    "managed_regulatory_intelligence_runtime",
 ]

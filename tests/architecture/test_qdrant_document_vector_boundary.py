@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
+    REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
     REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
     SRC_ROOT,
     collect_import_violations,
@@ -111,8 +112,16 @@ def test_inner_layers_do_not_import_qdrant() -> None:
     assert (
         collect_import_violations(
             API_ROOT,
-            FORBIDDEN_INNER_QDRANT,
+            ("qdrant_client",),
             exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+        )
+        == []
+    )
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            ("energy_trading.infrastructure.vector_store.qdrant",),
+            exclude_relative_prefixes=REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
         )
         == []
     )
@@ -200,17 +209,25 @@ def test_production_qdrant_package_has_no_inference() -> None:
 
 
 def test_create_app_does_not_wire_document_vector_adapters() -> None:
-    forbidden_wiring = (
-        "qdrant_client",
-        "energy_trading.infrastructure.vector_store",
-        "energy_trading.infrastructure.vector_store.qdrant",
-        "energy_trading.infrastructure.vector_store.qdrant.document_vector",
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            (
+                "qdrant_client",
+                "energy_trading.infrastructure.vector_store.qdrant.document_vector",
+            ),
+            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+        )
+        == []
     )
     assert (
         collect_import_violations(
             API_ROOT,
-            forbidden_wiring,
-            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+            (
+                "energy_trading.infrastructure.vector_store",
+                "energy_trading.infrastructure.vector_store.qdrant",
+            ),
+            exclude_relative_prefixes=REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
         )
         == []
     )

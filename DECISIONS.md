@@ -1300,6 +1300,25 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Construction performs no provider I/O and owns no client lifecycle, FastAPI lifespan, or LangGraph wiring. `create_app()` remains unwired.
   - The API provider-composition exception is exactly two modules: `regulatory_intelligence_runtime.py` and `regulatory_intelligence_configured_runtime.py`. It is not broadened to all `api/composition`. HTTP routes remain provider-SDK-free.
   - Generic runtime abstractions, provider registries, and DI containers are rejected.
-- **Consequences:** Callers can supply injected clients plus typed Regulatory settings and receive a wired `RegulatoryIntelligenceQueryExecutionService`. Settings loading, client construction, client lifecycle, HTTP invocation, and operational RAG remain absent.
+- **Consequences:** Callers can supply injected clients plus typed Regulatory settings and receive a wired `RegulatoryIntelligenceQueryExecutionService`. Settings loading, client construction, client lifecycle, HTTP invocation, and operational RAG remain absent. Chunk 74 owns client lifetime separately from this adaptation seam.
+
+---
+
+## ADR-084 — Regulatory provider clients are owned by a narrow async managed-runtime boundary
+
+- **Status:** Accepted
+- **Context:** Chunk 73 can assemble a Regulatory query-execution service from already-created provider clients plus already-constructed `RegulatoryIntelligenceRuntimeSettings`, but callers still had to construct and close those clients themselves. Folding environment loading into that seam would mix configuration discovery with object composition. Folding FastAPI lifespan into the same function would couple a reusable resource owner to one HTTP framework. A generic DI container, resource registry, provider registry, or `ManagedRuntime[T]` would invent an abstraction this repository does not own. Direct `AsyncOpenAI` / `AsyncQdrantClient` construction in API composition would widen the provider-SDK allowlist beyond the two approved modules.
+- **Decision:**
+  - Resource lifetime lives in a separate Regulatory-specific API composition module: `managed_regulatory_intelligence_runtime` in `energy_trading.api.composition.regulatory_intelligence_managed_runtime`.
+  - The callable is an async context manager (`contextlib.asynccontextmanager`) and is keyword-only. It receives already-loaded `OpenAISettings`, `QdrantSettings`, and `RegulatoryIntelligenceRuntimeSettings`.
+  - It does not load environment values, accept an `env_file`, accept caller-supplied clients, or accept loose model/Qdrant arguments.
+  - Clients are created through existing `create_openai_client` and `create_qdrant_client`. Direct SDK client constructors are not used. Direct OpenAI/Qdrant SDK type imports are not added to this module.
+  - Cleanup is registered immediately after each successful client creation via `AsyncExitStack.push_async_callback(...close)` because both pinned clients expose async `close()`.
+  - Service construction delegates exactly once to `build_regulatory_intelligence_configured_runtime`. Chunks 67, 71, and 73 retain object-composition responsibilities.
+  - Expected cleanup order is LIFO: Qdrant then OpenAI, provided both were created. If Qdrant construction fails, the OpenAI client is still closed. If Chunk 73 fails, both created clients are closed. Consumer exceptions still close both clients and then propagate. If one cleanup raises, the other registered cleanup is still attempted and the cleanup exception is not suppressed.
+  - Entering the context performs no provider I/O. The yielded service is constructed, not executed.
+  - FastAPI lifespan, `create_app()`, HTTP routes, app state, and LangGraph remain unwired.
+  - Generic lifecycle managers, DI containers, resource registries, and provider registries are rejected.
+- **Consequences:** Callers can supply already-loaded typed settings and receive a lifecycle-owned `RegulatoryIntelligenceQueryExecutionService`. Settings loading, FastAPI integration, HTTP invocation, and operational RAG remain absent. Direct provider SDK API-composition imports remain limited to the existing two approved modules.
 
 ---
