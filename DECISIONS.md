@@ -1174,6 +1174,22 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - The service does not call `embed_query`, `.search(...)`, or inference. Those remain owned by query preparation and the agent.
   - Existing preparation and agent errors propagate unchanged. Preparation failure does not invoke the agent. Empty `constraints=()` remains legitimate success.
   - Embedding providers, inference providers, Qdrant/API composition, Phase 1 graph wiring, prompt catalogs, and generic RAG machinery remain deferred.
-- **Consequences:** Application callers can compose query text + limit through real published services and the unchanged agent when dependencies are injected. This is application composition, not production RAG readiness.
+- **Consequences:** Application callers can compose query text + limit through real published services and the unchanged agent when dependencies are injected. This is application composition, not production RAG readiness. Chunk 67 added API-owned `build_regulatory_intelligence_query_execution` as the explicit object-construction root over the three published application ports.
+
+---
+
+## ADR-077 — Regulatory runtime wiring uses one explicit outer composition root instead of a generic DI framework
+
+- **Status:** Accepted
+- **Context:** Chunks 63–66 published the provider-neutral Regulatory path as separately constructed application objects. Tests already assembled that path by hand. Folding construction into the agent or query-execution service would mix object wiring with retrieval/inference policy. A generic container, registry, factory, or decorator DI framework would invent a composition product this repository does not own. Constructing embedding, search, or inference adapters inside the builder would couple the composition root to deferred providers.
+- **Decision:**
+  - Object construction belongs in the API composition root: `build_regulatory_intelligence_query_execution` in `energy_trading.api.composition`.
+  - The builder is a narrow synchronous function. It accepts exactly the three already-published application ports and returns `RegulatoryIntelligenceQueryExecutionService`.
+  - Provider instances are injected, not constructed. The builder does not read settings, environment variables, API keys, model names, or endpoints, and it performs no I/O.
+  - Construction sequence is fixed: `DocumentVectorSearchQueryPreparationService`, then `RegulatoryIntelligenceAgent`, then `RegulatoryIntelligenceQueryExecutionService`. The builder does not call `.prepare`, `.run`, `.execute`, `.search`, `.infer`, or `.embed_query`.
+  - Application does not import the outer builder. `create_app()` does not invoke it. `graph.py` remains unwired.
+  - Generic containers, registries, factories, service locators, plugin discovery, and RAG/executor frameworks are rejected.
+  - Concrete embedding providers, inference providers, Qdrant/API provider wiring, HTTP routes, and Phase 1 LangGraph nodes remain deferred.
+- **Consequences:** Callers can assemble the published Regulatory application stack consistently from three port implementations. This is object composition, not production RAG deployment.
 
 ---

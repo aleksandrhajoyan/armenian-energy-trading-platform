@@ -8,7 +8,9 @@ from pathlib import Path
 from tests.architecture.import_inspection import (
     SRC_ROOT,
     annotation_type_names,
+    collect_http_api_import_violations,
     collect_import_violations,
+    http_transport_api_paths,
     imported_modules,
     imported_names,
     is_forbidden,
@@ -339,8 +341,8 @@ def test_api_composition_does_not_import_or_construct_orchestration_state() -> N
         "langgraph",
         "langchain",
     )
-    assert collect_import_violations(API_ROOT, forbidden_wiring) == []
-    for path in sorted(API_ROOT.rglob("*.py")):
+    assert collect_http_api_import_violations(API_ROOT, forbidden_wiring) == []
+    for path in http_transport_api_paths(API_ROOT):
         names = imported_names(path)
         assert "WorkflowState" not in names
         assert "WorkflowPhase" not in names

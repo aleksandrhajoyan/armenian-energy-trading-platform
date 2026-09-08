@@ -9,7 +9,9 @@ from tests.architecture.import_inspection import (
     SRC_ROOT,
     annotation_type_names,
     async_function_arg_names,
+    collect_http_api_import_violations,
     collect_import_violations,
+    http_transport_api_paths,
     imported_modules,
     imported_names,
     is_forbidden,
@@ -212,8 +214,8 @@ def test_api_composition_does_not_import_or_construct_agents() -> None:
         "energy_trading.application.agents",
         "energy_trading.application.agents.base",
     )
-    assert collect_import_violations(API_ROOT, forbidden_wiring) == []
-    for path in sorted(API_ROOT.rglob("*.py")):
+    assert collect_http_api_import_violations(API_ROOT, forbidden_wiring) == []
+    for path in http_transport_api_paths(API_ROOT):
         names = imported_names(path)
         assert "AgentPort" not in names
         assert "AgentName" not in names

@@ -40,13 +40,48 @@ def is_forbidden(module: str, prefixes: tuple[str, ...]) -> bool:
     return any(module == prefix or module.startswith(f"{prefix}.") for prefix in prefixes)
 
 
-def collect_import_violations(root: Path, prefixes: tuple[str, ...]) -> list[str]:
+API_COMPOSITION_RELATIVE_PREFIX = "energy_trading/api/composition/"
+
+
+def is_api_composition_module(path: Path) -> bool:
+    return path.relative_to(SRC_ROOT).as_posix().startswith(API_COMPOSITION_RELATIVE_PREFIX)
+
+
+def http_transport_api_paths(api_root: Path) -> list[Path]:
+    """Return API Python files excluding the object-composition package."""
+
+    return [path for path in sorted(api_root.rglob("*.py")) if not is_api_composition_module(path)]
+
+
+def collect_import_violations(
+    root: Path,
+    prefixes: tuple[str, ...],
+    *,
+    exclude_relative_prefixes: tuple[str, ...] = (),
+) -> list[str]:
     violations: list[str] = []
     for path in sorted(root.rglob("*.py")):
+        relative = path.relative_to(SRC_ROOT).as_posix()
+        if any(
+            relative == prefix.rstrip("/")
+            or relative.startswith(prefix if prefix.endswith("/") else f"{prefix}/")
+            for prefix in exclude_relative_prefixes
+        ):
+            continue
         for module in sorted(imported_modules(path)):
             if is_forbidden(module, prefixes):
                 violations.append(f"{path.relative_to(SRC_ROOT)} imports {module}")
     return violations
+
+
+def collect_http_api_import_violations(api_root: Path, prefixes: tuple[str, ...]) -> list[str]:
+    """Inspect HTTP transport API modules, excluding object-composition."""
+
+    return collect_import_violations(
+        api_root,
+        prefixes,
+        exclude_relative_prefixes=(API_COMPOSITION_RELATIVE_PREFIX,),
+    )
 
 
 def imported_names(path: Path) -> set[str]:

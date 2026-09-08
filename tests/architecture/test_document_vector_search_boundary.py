@@ -9,7 +9,9 @@ from tests.architecture.import_inspection import (
     SRC_ROOT,
     annotation_type_names,
     async_function_arg_names,
+    collect_http_api_import_violations,
     collect_import_violations,
+    http_transport_api_paths,
     imported_names,
 )
 
@@ -270,8 +272,8 @@ def test_api_composition_does_not_import_or_construct_document_vector_search() -
         "sentence_transformers",
         "openai",
     )
-    assert collect_import_violations(API_ROOT, forbidden_wiring) == []
-    for path in sorted(API_ROOT.rglob("*.py")):
+    assert collect_http_api_import_violations(API_ROOT, forbidden_wiring) == []
+    for path in http_transport_api_paths(API_ROOT):
         names = imported_names(path)
         assert "DocumentVectorSearchPort" not in names
         assert "DocumentVectorSearchQuery" not in names

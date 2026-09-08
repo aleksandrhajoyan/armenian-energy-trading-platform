@@ -7,6 +7,7 @@ from pathlib import Path
 
 from tests.architecture.import_inspection import (
     SRC_ROOT,
+    collect_http_api_import_violations,
     collect_import_violations,
     imported_modules,
     imported_names,
@@ -680,7 +681,7 @@ def test_api_composition_does_not_import_or_construct_graph() -> None:
         "langgraph",
         "langchain",
     )
-    assert collect_import_violations(API_ROOT, forbidden_wiring) == []
+    assert collect_http_api_import_violations(API_ROOT, forbidden_wiring) == []
     app_source = API_APP.read_text(encoding="utf-8").lower()
     assert "build_workflow_graph" not in app_source
     assert "langgraph" not in app_source
