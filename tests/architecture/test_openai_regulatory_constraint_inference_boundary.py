@@ -29,12 +29,14 @@ ADAPTER_MODULE = (
 QUERY_EMBEDDING_ADAPTER_MODULE = (
     PRODUCTION_ROOT / "infrastructure" / "embeddings" / "openai_query_embedding.py"
 )
+CLIENT_FACTORY_MODULE = PRODUCTION_ROOT / "infrastructure" / "openai" / "client.py"
 COMPOSITION_MODULE = API_ROOT / "composition" / "regulatory_intelligence.py"
 
 ALLOWED_OPENAI_ADAPTER_MODULES = frozenset(
     {
         ADAPTER_MODULE.resolve(),
         QUERY_EMBEDDING_ADAPTER_MODULE.resolve(),
+        CLIENT_FACTORY_MODULE.resolve(),
     }
 )
 
@@ -90,6 +92,7 @@ FORBIDDEN_INNER_OPENAI = (
     "openai",
     "energy_trading.infrastructure.embeddings",
     "energy_trading.infrastructure.regulatory",
+    "energy_trading.infrastructure.openai",
 )
 
 ALLOWED_ADAPTER_IMPORTS = {
@@ -208,6 +211,7 @@ def test_openai_sdk_imports_exist_only_in_approved_openai_adapters() -> None:
     assert leaked == []
     assert "openai" in imported_modules(ADAPTER_MODULE)
     assert "openai" in imported_modules(QUERY_EMBEDDING_ADAPTER_MODULE)
+    assert "openai" in imported_modules(CLIENT_FACTORY_MODULE)
 
 
 def test_inner_layers_do_not_import_openai() -> None:

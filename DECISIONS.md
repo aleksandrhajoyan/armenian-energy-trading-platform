@@ -1228,3 +1228,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application remains OpenAI-independent and still depends only on `RegulatoryConstraintInferencePort`. Callers can inject the adapter when they own client lifecycle. This is not production RAG deployment and does not claim verified Armenian rule extraction.
 
 ---
+
+## ADR-080 — OpenAI client construction uses standalone typed settings and outer-layer lazy factory
+
+- **Status:** Accepted
+- **Context:** Chunks 68 and 69 published OpenAI adapters that inject an already-constructed `AsyncOpenAI` client. Folding client construction, API-key loading, or model selection into those adapters, `AppSettings`, `create_app()`, or the Chunk 67 Regulatory builder would mix secrets, provider lifecycle, and Anti-Corruption conversion. A generic LLM/provider registry or DI container would invent an abstraction this repository does not own. The pinned OpenAI SDK enables automatic retries by default; a second hidden retry policy inside provider plumbing would compete with application/orchestration retry ownership.
+- **Decision:**
+  - Typed `OpenAISettings` lives with the other service-specific settings in `energy_trading.shared.config`. The only field is required `api_key: SecretStr` (`ENERGY_OPENAI_`). There is no production default. Blank and whitespace-only values fail. Nonblank secrets are preserved. The value remains masked in `repr` / `str`.
+  - `OpenAISettings` is separate from `AppSettings`. Process health and `create_app()` do not load it. Tests isolate local `.env` with `env_file=None`.
+  - The settings module does not import the OpenAI SDK and holds no runtime client object.
+  - Infrastructure `create_openai_client(settings: OpenAISettings) -> AsyncOpenAI` is a provider-specific lazy factory. It obtains the key only via `settings.api_key.get_secret_value()`, constructs `AsyncOpenAI(api_key=..., max_retries=0)`, and returns the client. Construction performs no network request and selects no model.
+  - There is no global/module-level client. The factory does not own adapter or FastAPI lifecycle. Callers that construct a client must close it.
+  - Provider adapters still do not construct the client, load environment variables, or read settings.
+  - Model selection, base URL, organization, timeout, and retry/fallback mechanics remain outside this settings object and factory.
+  - Implicit SDK retries are disabled (`max_retries=0`) so application orchestration retains retry ownership. This is not an implementation of retry logic.
+  - `create_app()`, LangGraph, and `build_regulatory_intelligence_query_execution` remain unwired to OpenAI settings and the factory.
+- **Consequences:** Client construction capability exists offline. Production OpenAI runtime injection, adapter composition, and Regulatory RAG remain absent. Domain, application, API, and ML remain OpenAI-SDK-free. The approved production OpenAI SDK allowlist is exactly the two published adapters plus this client-factory module.
+
+---
