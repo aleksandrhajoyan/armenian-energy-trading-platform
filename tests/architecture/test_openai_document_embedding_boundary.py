@@ -1,4 +1,4 @@
-"""Chunk 69 OpenAI regulatory-constraint inference adapter stays infrastructure-only."""
+"""Chunk 83 OpenAI document-chunk embedding adapter stays infrastructure-only."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from tests.architecture.import_inspection import (
     imported_names,
     is_forbidden,
     is_regulatory_provider_composition_module,
-    is_regulatory_provider_runtime_module,
 )
 
 PRODUCTION_ROOT = SRC_ROOT / "energy_trading"
@@ -26,28 +25,26 @@ API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 ML_ROOT = PRODUCTION_ROOT / "ml"
 GRAPH_MODULE = APPLICATION_ROOT / "orchestration" / "graph.py"
-INFERENCE_PORT = APPLICATION_ROOT / "ports" / "regulatory_constraint_inference.py"
-ADAPTER_MODULE = (
-    PRODUCTION_ROOT / "infrastructure" / "regulatory" / "openai_constraint_inference.py"
-)
+EMBEDDING_PORT = APPLICATION_ROOT / "ports" / "document_embedding.py"
+ADAPTER_MODULE = PRODUCTION_ROOT / "infrastructure" / "embeddings" / "openai_document_embedding.py"
 QUERY_EMBEDDING_ADAPTER_MODULE = (
     PRODUCTION_ROOT / "infrastructure" / "embeddings" / "openai_query_embedding.py"
 )
-DOCUMENT_EMBEDDING_ADAPTER_MODULE = (
-    PRODUCTION_ROOT / "infrastructure" / "embeddings" / "openai_document_embedding.py"
+INFERENCE_ADAPTER_MODULE = (
+    PRODUCTION_ROOT / "infrastructure" / "regulatory" / "openai_constraint_inference.py"
 )
 CLIENT_FACTORY_MODULE = PRODUCTION_ROOT / "infrastructure" / "openai" / "client.py"
-COMPOSITION_MODULE = API_ROOT / "composition" / "regulatory_intelligence.py"
 PROVIDER_RUNTIME_MODULE = API_ROOT / "composition" / "regulatory_intelligence_runtime.py"
 CONFIGURED_RUNTIME_MODULE = (
     API_ROOT / "composition" / "regulatory_intelligence_configured_runtime.py"
 )
+COMPOSITION_MODULE = API_ROOT / "composition" / "regulatory_intelligence.py"
 
 ALLOWED_OPENAI_ADAPTER_MODULES = frozenset(
     {
         ADAPTER_MODULE.resolve(),
         QUERY_EMBEDDING_ADAPTER_MODULE.resolve(),
-        DOCUMENT_EMBEDDING_ADAPTER_MODULE.resolve(),
+        INFERENCE_ADAPTER_MODULE.resolve(),
         CLIENT_FACTORY_MODULE.resolve(),
         PROVIDER_RUNTIME_MODULE.resolve(),
         CONFIGURED_RUNTIME_MODULE.resolve(),
@@ -59,14 +56,13 @@ FORBIDDEN_ADAPTER_PREFIXES = (
     "energy_trading.ml",
     "energy_trading.application.agents",
     "energy_trading.application.orchestration",
-    "energy_trading.application.ports.document_embedding",
     "energy_trading.application.ports.document_query_embedding",
     "energy_trading.application.ports.document_vector_search",
     "energy_trading.application.ports.document_vector_index",
     "energy_trading.infrastructure.vector_store",
     "energy_trading.infrastructure.cache",
     "energy_trading.infrastructure.persistence",
-    "energy_trading.infrastructure.embeddings",
+    "energy_trading.infrastructure.openai",
     "energy_trading.shared.config",
     "fastapi",
     "starlette",
@@ -100,6 +96,13 @@ FORBIDDEN_ADAPTER_PREFIXES = (
     "n8n",
     "os",
     "sys",
+    "pypdf",
+    "PyPDF2",
+    "pdfplumber",
+    "fitz",
+    "pymupdf",
+    "pytesseract",
+    "pathlib",
 )
 
 FORBIDDEN_INNER_OPENAI = (
@@ -111,10 +114,9 @@ FORBIDDEN_INNER_OPENAI = (
 
 ALLOWED_ADAPTER_IMPORTS = {
     "openai",
-    "pydantic",
     "energy_trading.application.errors",
+    "energy_trading.application.ports.document_embedding",
     "energy_trading.application.ports.document_extraction",
-    "energy_trading.domain.models.regulatory",
 }
 
 FORBIDDEN_TYPE_NAMES = frozenset(
@@ -125,12 +127,14 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "dict",
         "Dict",
         "Mapping",
-        "ParsedResponse",
-        "Response",
-        "ChatCompletion",
+        "CreateEmbeddingResponse",
+        "Embedding",
         "LLMPort",
         "EmbeddingPort",
+        "EmbeddingProvider",
         "ndarray",
+        "Path",
+        "bytes",
     }
 )
 
@@ -138,13 +142,17 @@ GENERIC_FRAMEWORK_NAMES = frozenset(
     {
         "LLMPort",
         "EmbeddingPort",
+        "EmbeddingProvider",
         "ProviderRegistry",
         "ServiceRegistry",
         "AgentFactory",
         "Container",
         "LiteLLM",
         "RAGPort",
-        "VectorStore",
+        "EmbeddingFactory",
+        "EmbeddingRegistry",
+        "BaseOpenAIEmbeddingAdapter",
+        "GenericEmbeddingAdapter",
     }
 )
 
@@ -155,21 +163,8 @@ RUNTIME_FORBIDDEN_CALLS = frozenset(
         "OpenAI",
         "getenv",
         "load_settings",
-    }
-)
-
-DAM_RULE_IDENTIFIERS = frozenset(
-    {
-        "AMD",
-        "HOURLY",
-        "INTERVAL",
-        "GATE_CLOSURE",
-        "LOT_SIZE",
-        "PRICE_CAP",
-        "PRICE_FLOOR",
-        "NOMINATION",
-        "BALANCING",
-        "PENALTY",
+        "create_openai_client",
+        "load_openai_settings",
     }
 )
 
@@ -225,7 +220,7 @@ def test_openai_sdk_imports_exist_only_in_approved_openai_adapters() -> None:
     assert leaked == []
     assert "openai" in imported_modules(ADAPTER_MODULE)
     assert "openai" in imported_modules(QUERY_EMBEDDING_ADAPTER_MODULE)
-    assert "openai" in imported_modules(DOCUMENT_EMBEDDING_ADAPTER_MODULE)
+    assert "openai" in imported_modules(INFERENCE_ADAPTER_MODULE)
     assert "openai" in imported_modules(CLIENT_FACTORY_MODULE)
     assert "openai" in imported_modules(PROVIDER_RUNTIME_MODULE)
     assert "openai" in imported_modules(CONFIGURED_RUNTIME_MODULE)
@@ -258,16 +253,16 @@ def test_inner_layers_do_not_import_openai() -> None:
         assert collect_import_violations(ML_ROOT, FORBIDDEN_INNER_OPENAI) == []
 
 
-def test_application_inference_port_is_unchanged() -> None:
-    args = async_function_arg_names(INFERENCE_PORT, "infer")
-    assert args == ("self",)
-    names = imported_names(INFERENCE_PORT)
+def test_application_document_embedding_port_is_unchanged() -> None:
+    args = async_function_arg_names(EMBEDDING_PORT, "embed")
+    assert args == ("self", "chunks")
+    names = imported_names(EMBEDDING_PORT)
     assert "openai" not in names
     assert "AsyncOpenAI" not in names
-    assert "OpenAIRegulatoryConstraintInferenceAdapter" not in names
-    source = INFERENCE_PORT.read_text(encoding="utf-8")
+    assert "OpenAIDocumentEmbeddingAdapter" not in names
+    source = EMBEDDING_PORT.read_text(encoding="utf-8")
     assert "OpenAI" not in source
-    assert "gpt-" not in source
+    assert "text-embedding" not in source
 
 
 def test_adapter_depends_inward_and_avoids_forbidden_frameworks() -> None:
@@ -278,76 +273,75 @@ def test_adapter_depends_inward_and_avoids_forbidden_frameworks() -> None:
     )
     assert leaked == []
     extras = imported_modules(ADAPTER_MODULE) - ALLOWED_ADAPTER_IMPORTS
-    stdlib_ok = {"__future__", "collections.abc", "datetime", "typing"}
+    stdlib_ok = {"__future__", "collections.abc", "typing"}
     assert extras <= stdlib_ok
     names = imported_names(ADAPTER_MODULE)
+    assert "DocumentChunkEmbedding" in names
     assert "ExtractedDocumentChunk" in names
-    assert "RegulatoryConstraint" in names
-    assert "RegulatoryConstraintInferencePort" not in names
+    assert "DocumentEmbeddingPort" not in names
     assert "AsyncOpenAI" in names
     assert "OpenAIError" in names
+    assert "create_openai_client" not in names
+    assert "OpenAISettings" not in names
     leaked_types = sorted(name for name in names if name in FORBIDDEN_TYPE_NAMES)
     assert leaked_types == []
 
 
-def test_adapter_public_surface_is_infer_returning_canonical_constraints() -> None:
+def test_adapter_public_surface_is_embed_returning_canonical_dtos() -> None:
     classes = _module_class_defs(ADAPTER_MODULE)
-    public_classes = [node.name for node in classes if not node.name.startswith("_")]
-    assert public_classes == ["OpenAIRegulatoryConstraintInferenceAdapter"]
-    adapter = next(
-        node for node in classes if node.name == "OpenAIRegulatoryConstraintInferenceAdapter"
-    )
+    assert [node.name for node in classes] == ["OpenAIDocumentEmbeddingAdapter"]
+    adapter = classes[0]
     assert adapter.bases == []
     public = _public_methods(adapter)
-    assert [node.name for node in public] == ["__init__", "infer"]
+    assert [node.name for node in public] == ["__init__", "embed"]
     init = next(node for node in public if node.name == "__init__")
     assert isinstance(init, ast.FunctionDef)
     assert tuple(arg.arg for arg in init.args.kwonlyargs) == ("client", "model")
     assert [arg.arg for arg in init.args.args] == ["self"]
-    infer = next(node for node in public if node.name == "infer")
-    assert isinstance(infer, ast.AsyncFunctionDef)
-    assert [arg.arg for arg in infer.args.args] == ["self"]
-    assert tuple(arg.arg for arg in infer.args.kwonlyargs) == ("chunks",)
-    assert ast.unparse(infer.returns) == "tuple[RegulatoryConstraint, ...]"
+    embed = next(node for node in public if node.name == "embed")
+    assert isinstance(embed, ast.AsyncFunctionDef)
+    assert [arg.arg for arg in embed.args.args] == ["self", "chunks"]
+    assert ast.unparse(embed.returns) == "tuple[DocumentChunkEmbedding, ...]"
     annotations = annotation_type_names(ADAPTER_MODULE)
     leaked = sorted(name for name in annotations if name in FORBIDDEN_TYPE_NAMES)
     assert leaked == []
-    assert "ParsedResponse" not in annotations
-    assert "Response" not in annotations
+    assert "CreateEmbeddingResponse" not in annotations
+    assert "Embedding" not in annotations
 
 
-def test_adapter_calls_responses_parse_with_private_text_format() -> None:
+def test_adapter_calls_only_embeddings_create_with_float_encoding() -> None:
     tree = ast.parse(ADAPTER_MODULE.read_text(encoding="utf-8"), filename=str(ADAPTER_MODULE))
     adapter = next(
         node
         for node in tree.body
-        if isinstance(node, ast.ClassDef)
-        and node.name == "OpenAIRegulatoryConstraintInferenceAdapter"
+        if isinstance(node, ast.ClassDef) and node.name == "OpenAIDocumentEmbeddingAdapter"
     )
-    infer = next(
+    embed = next(
         node
         for node in adapter.body
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "infer"
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "embed"
     )
-    calls = [node for node in ast.walk(infer) if isinstance(node, ast.Call)]
+    calls = [node for node in ast.walk(embed) if isinstance(node, ast.Call)]
     named = [_call_name(node) for node in calls]
-    assert "parse" in named
-    assert "create" not in named
+    assert "create" in named
     assert "chat" not in named
     assert "completions" not in named
-    assert "embeddings" not in named
-    parse_keywords: list[dict[str, str]] = []
+    assert "responses" not in named
+    assert "parse" not in named
+    encoding: list[str] = []
     for node in calls:
-        if _call_name(node) != "parse":
+        if _call_name(node) != "create":
             continue
-        keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in node.keywords}
+        keywords = {
+            keyword.arg: ast.unparse(keyword.value)
+            for keyword in node.keywords
+            if keyword.arg is not None
+        }
         assert keywords["model"] == "self._model"
-        assert "text_format" in keywords
-        assert keywords["text_format"] == "_ProviderInferenceEnvelope"
-        assert "instructions" in keywords
-        assert "tools" not in keywords
-        parse_keywords.append(keywords)
-    assert len(parse_keywords) == 1
+        assert keywords["input"] == "texts"
+        assert keywords["encoding_format"] == "'float'"
+        encoding.append(keywords["encoding_format"])
+    assert encoding == ["'float'"]
 
 
 def test_adapter_has_no_retry_client_construction_or_env_access() -> None:
@@ -366,24 +360,19 @@ def test_adapter_has_no_retry_client_construction_or_env_access() -> None:
     assert "backoff" not in source
     assert "except BaseException" not in source
     assert "except Exception" not in source
+    assert "create_openai_client" not in source
+    assert "load_openai_settings" not in source
     identifiers = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
     leaked_frameworks = sorted(name for name in identifiers if name in GENERIC_FRAMEWORK_NAMES)
     assert leaked_frameworks == []
-    assigned = {
-        target.id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Assign)
-        for target in node.targets
-        if isinstance(target, ast.Name)
-    }
-    leaked_dam = sorted(name for name in assigned | identifiers if name in DAM_RULE_IDENTIFIERS)
-    assert leaked_dam == []
-    assert "PSRC" not in source
-    assert "Armenian" not in source
+    assert "chunk.text.strip(" not in source
+    assert ".replace(" not in source
+    assert "truncate" not in source.lower()
 
 
 def test_errors_do_not_interpolate_chunk_or_provider_text() -> None:
     source = ADAPTER_MODULE.read_text(encoding="utf-8")
+    assert "InvalidRequestError(_MSG_INVALID_CHUNKS)" in source
     assert "DependencyUnavailableError(_MSG_UNAVAILABLE)" in source
     tree = ast.parse(source, filename=str(ADAPTER_MODULE))
     for node in ast.walk(tree):
@@ -391,14 +380,13 @@ def test_errors_do_not_interpolate_chunk_or_provider_text() -> None:
             for arg in (*node.exc.args, *(kw.value for kw in node.exc.keywords)):
                 assert not isinstance(arg, ast.JoinedStr)
                 if isinstance(arg, ast.Name):
-                    assert arg.id not in {"chunks", "candidate", "response", "parsed"}
+                    assert arg.id not in {"chunks", "chunk", "texts", "response", "embedding"}
 
 
-def test_create_app_and_composition_do_not_construct_openai_inference() -> None:
+def test_create_app_and_composition_do_not_construct_document_embedding() -> None:
     forbidden_wiring = (
         "openai",
-        "energy_trading.infrastructure.regulatory",
-        "energy_trading.infrastructure.regulatory.openai_constraint_inference",
+        "energy_trading.infrastructure.embeddings.openai_document_embedding",
     )
     assert (
         collect_import_violations(
@@ -411,31 +399,27 @@ def test_create_app_and_composition_do_not_construct_openai_inference() -> None:
     for path in sorted(API_ROOT.rglob("*.py")):
         names = imported_names(path)
         if is_regulatory_provider_composition_module(path):
-            assert "AsyncOpenAI" in names
-            if is_regulatory_provider_runtime_module(path):
-                assert "OpenAIRegulatoryConstraintInferenceAdapter" in names
-            else:
-                assert "OpenAIRegulatoryConstraintInferenceAdapter" not in names
+            assert "OpenAIDocumentEmbeddingAdapter" not in names
             continue
-        assert "OpenAIRegulatoryConstraintInferenceAdapter" not in names
-        assert "AsyncOpenAI" not in names
+        assert "OpenAIDocumentEmbeddingAdapter" not in names
     call_names = _create_app_call_names(API_APP)
-    assert "OpenAIRegulatoryConstraintInferenceAdapter" not in call_names
+    assert "OpenAIDocumentEmbeddingAdapter" not in call_names
     assert "AsyncOpenAI" not in call_names
     composition_source = COMPOSITION_MODULE.read_text(encoding="utf-8")
-    assert "openai" not in composition_source.lower()
-    assert "OpenAIRegulatoryConstraintInferenceAdapter" not in composition_source
-    assert "AsyncOpenAI" not in composition_source
-    assert "OpenAIDocumentQueryEmbeddingAdapter" not in composition_source
+    assert "OpenAIDocumentEmbeddingAdapter" not in composition_source
+    provider_source = PROVIDER_RUNTIME_MODULE.read_text(encoding="utf-8")
+    assert "OpenAIDocumentEmbeddingAdapter" not in provider_source
+    configured_source = CONFIGURED_RUNTIME_MODULE.read_text(encoding="utf-8")
+    assert "OpenAIDocumentEmbeddingAdapter" not in configured_source
 
 
-def test_graph_remains_unwired_to_openai_inference() -> None:
+def test_graph_remains_unwired_to_openai_document_embedding() -> None:
     names = imported_names(GRAPH_MODULE)
-    assert "OpenAIRegulatoryConstraintInferenceAdapter" not in names
+    assert "OpenAIDocumentEmbeddingAdapter" not in names
     assert "AsyncOpenAI" not in names
     modules = imported_modules(GRAPH_MODULE)
     assert "openai" not in modules
-    assert "energy_trading.infrastructure.regulatory" not in modules
+    assert "energy_trading.infrastructure.embeddings" not in modules
     source = GRAPH_MODULE.read_text(encoding="utf-8")
     assert "openai" not in source.lower()
-    assert "OpenAIRegulatoryConstraintInferenceAdapter" not in source
+    assert "OpenAIDocumentEmbeddingAdapter" not in source

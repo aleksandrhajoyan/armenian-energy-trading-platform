@@ -121,6 +121,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
   - [x] **Chunk 80** — Regulatory Intelligence HTTP Query Transport Contracts — Offline
   - [x] **Chunk 81** — Regulatory Intelligence HTTP Query Route Boundary — Unwired
   - [x] **Chunk 82** — Regulatory Intelligence Production Router Installation
+  - [x] **Chunk 83** — OpenAI Document Chunk Embedding Infrastructure Adapter
 - [ ] Pricing & Sales Agent
 - [ ] Contract-phase graph slice
 
@@ -170,5 +171,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 82
-- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 82 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize LangGraph wiring of Regulatory composition, PDF/OCR, actual RAG workflow, verified Armenian DAM rule extraction, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.
+- **Completed:** Chunk 0 through Chunk 83
+- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 83 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize LangGraph wiring of Regulatory composition, PDF/OCR, actual RAG workflow, verified Armenian DAM rule extraction, document indexing runtime, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.

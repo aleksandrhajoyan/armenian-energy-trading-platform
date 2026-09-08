@@ -1438,3 +1438,16 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** `POST /api/v1/regulatory-intelligence/query` is reachable through the production factory when the default prefix is `/api/v1`. Execution still depends on the lifespan-scoped service. Offline tests can inject a no-op lifespan and keep health credential-free; missing service state maps to the published 503. Operational RAG, PDF/OCR, document indexing, verified Armenian DAM rules, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.
 
 ---
+
+## ADR-093 — OpenAI document chunk embedding infrastructure adapter
+
+- **Status:** Accepted
+- **Context:** Chunk 19 published `DocumentEmbeddingPort` and `DocumentChunkEmbedding` for already-normalized `ExtractedDocumentChunk` values. Query-text embedding already has a concrete OpenAI adapter, and Qdrant already implements indexing/search, but document-chunk vectors still lacked a provider implementation. Folding this adapter into Regulatory runtime composition, `create_app()`, LangGraph, extraction, or a generic embedding hierarchy would pre-commit an indexing pipeline this slice does not own.
+- **Decision:**
+  - Infrastructure owns `OpenAIDocumentEmbeddingAdapter` in `infrastructure/embeddings/openai_document_embedding.py`.
+  - The adapter structurally implements `DocumentEmbeddingPort` without inheriting the Protocol. It injects `AsyncOpenAI` and an explicit model, calls `embeddings.create(..., encoding_format="float")`, forwards stored chunk text unchanged, copies canonical `document_id` / `chunk_id`, and returns `tuple[DocumentChunkEmbedding, ...]`.
+  - Empty input returns `()` without a provider call. Provider cardinality mismatches, invalid vectors, and inconsistent dimensions fail closed as sanitized `DependencyUnavailableError`. `OpenAIError` is translated the same way as the query-embedding adapter. There is no retry, settings loading, client construction, or client lifecycle ownership.
+  - The adapter remains unwired from `create_app()`, Regulatory runtime composition, LangGraph, document extraction, and Qdrant indexing.
+- **Consequences:** Document-chunk embeddings can be produced offline behind the published application port. Operational indexing, PDF/OCR, verified Armenian corpus, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.
+
+---

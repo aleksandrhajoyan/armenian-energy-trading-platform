@@ -41,6 +41,9 @@ LOADED_RUNTIME_MODULE = API_ROOT / "composition" / "regulatory_intelligence_load
 QUERY_EMBEDDING_ADAPTER = (
     PRODUCTION_ROOT / "infrastructure" / "embeddings" / "openai_query_embedding.py"
 )
+DOCUMENT_EMBEDDING_ADAPTER = (
+    PRODUCTION_ROOT / "infrastructure" / "embeddings" / "openai_document_embedding.py"
+)
 INFERENCE_ADAPTER = (
     PRODUCTION_ROOT / "infrastructure" / "regulatory" / "openai_constraint_inference.py"
 )
@@ -48,6 +51,7 @@ INFERENCE_ADAPTER = (
 ALLOWED_OPENAI_SDK_MODULES = frozenset(
     {
         QUERY_EMBEDDING_ADAPTER.resolve(),
+        DOCUMENT_EMBEDDING_ADAPTER.resolve(),
         INFERENCE_ADAPTER.resolve(),
         CLIENT_MODULE.resolve(),
         PROVIDER_RUNTIME_MODULE.resolve(),

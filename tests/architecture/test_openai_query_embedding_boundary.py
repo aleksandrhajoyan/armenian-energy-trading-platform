@@ -28,6 +28,9 @@ ML_ROOT = PRODUCTION_ROOT / "ml"
 GRAPH_MODULE = APPLICATION_ROOT / "orchestration" / "graph.py"
 QUERY_EMBEDDING_PORT = APPLICATION_ROOT / "ports" / "document_query_embedding.py"
 ADAPTER_MODULE = PRODUCTION_ROOT / "infrastructure" / "embeddings" / "openai_query_embedding.py"
+DOCUMENT_EMBEDDING_ADAPTER_MODULE = (
+    PRODUCTION_ROOT / "infrastructure" / "embeddings" / "openai_document_embedding.py"
+)
 INFERENCE_ADAPTER_MODULE = (
     PRODUCTION_ROOT / "infrastructure" / "regulatory" / "openai_constraint_inference.py"
 )
@@ -40,6 +43,7 @@ CONFIGURED_RUNTIME_MODULE = (
 ALLOWED_OPENAI_ADAPTER_MODULES = frozenset(
     {
         ADAPTER_MODULE.resolve(),
+        DOCUMENT_EMBEDDING_ADAPTER_MODULE.resolve(),
         INFERENCE_ADAPTER_MODULE.resolve(),
         CLIENT_FACTORY_MODULE.resolve(),
         PROVIDER_RUNTIME_MODULE.resolve(),
@@ -196,6 +200,7 @@ def test_openai_sdk_imports_exist_only_in_the_query_embedding_adapter() -> None:
     assert leaked == []
     adapter_modules = imported_modules(ADAPTER_MODULE)
     assert "openai" in adapter_modules
+    assert "openai" in imported_modules(DOCUMENT_EMBEDDING_ADAPTER_MODULE)
     assert "openai" in imported_modules(INFERENCE_ADAPTER_MODULE)
     assert "openai" in imported_modules(CLIENT_FACTORY_MODULE)
     assert "openai" in imported_modules(PROVIDER_RUNTIME_MODULE)
