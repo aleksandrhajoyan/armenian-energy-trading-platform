@@ -1065,3 +1065,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Future runtime/LangGraph failure routing can call one application-level entry point. Exception interpretation remains application-owned and testable independently of LangGraph. Multi-failure selection, retries, and graph wiring remain separate reviewed concerns.
 
 ---
+
+## ADR-070 — The current no-retry Phase 2 failure policy always terminates
+
+- **Status:** Accepted
+- **Context:** The application can now prepare a real `FailurePolicyContext`. However, retry execution does not exist, fallback execution does not exist, retry-capable attempt tracking does not exist, and retryability semantics are not approved. A concrete policy is required before runtime failure handling can be composed.
+- **Decision:**
+  - Application owns LangGraph-free `InitialParallelIngestionFailurePolicy` in `parallel_ingestion_initial_failure_policy.py`.
+  - The class satisfies existing `FailurePolicyPort` structurally and does not inherit the Protocol.
+  - The method remains async `decide(self, context: FailurePolicyContext) -> FailureAction`.
+  - The policy is stateless and returns exactly `FailureAction.FAIL` for every valid context.
+  - It does not branch on phase, error code, attempt number, or agent.
+- **Consequences:** The current single-failure application path now has a concrete, honest policy decision. The system does not silently pretend retries or fallback are supported. Future RETRY/FALLBACK behavior requires separate architectural review and supporting runtime mechanisms.
+
+---

@@ -8,7 +8,8 @@ attribution, ExceptionGroup attributed-leaf extraction, sanitized one-leaf
 failure classification, tuple-level failure-fact classification composition,
 Phase 2 failure-fact selection contract, Phase 2 strict single-failure
 selector, Phase 2 attempt-number source contract, Phase 2 initial
-attempt-number source, and LangGraph runtime.
+attempt-number source, Phase 2 initial terminal-fail failure policy, and
+LangGraph runtime.
 """
 
 from energy_trading.application.orchestration.failure_policy import (
@@ -71,6 +72,9 @@ from energy_trading.application.orchestration.parallel_ingestion_failure_transit
 from energy_trading.application.orchestration.parallel_ingestion_initial_attempt_number_source import (  # noqa: E501
     InitialParallelIngestionAttemptNumberSource,
 )
+from energy_trading.application.orchestration.parallel_ingestion_initial_failure_policy import (
+    InitialParallelIngestionFailurePolicy,
+)
 from energy_trading.application.orchestration.parallel_ingestion_strict_single_failure_selector import (  # noqa: E501
     StrictSingleParallelIngestionFailureSelector,
 )
@@ -92,6 +96,7 @@ __all__ = [
     "FailurePolicyContext",
     "FailurePolicyPort",
     "InitialParallelIngestionAttemptNumberSource",
+    "InitialParallelIngestionFailurePolicy",
     "ParallelIngestionAgentFailure",
     "ParallelIngestionAttemptNumberPort",
     "ParallelIngestionExecutionPort",
