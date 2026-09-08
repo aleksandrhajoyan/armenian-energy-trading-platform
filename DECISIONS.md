@@ -1037,3 +1037,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** The prepared failure pipeline can proceed for unambiguous single-agent failure cases. Multiple simultaneous failures remain unsupported and explicit. A future multi-failure policy requires separate architectural review and is not defined here. Attempt tracking and LangGraph failure routing remain later work.
 
 ---
+
+## ADR-068 — The no-retry Phase 2 runtime resolves the initial attempt as one
+
+- **Status:** Accepted
+- **Context:** `FailurePolicyContext` requires an attempt number. The application now has an attempt-number port, but runtime retry execution and attempt tracking do not exist. Introducing mutable or persistent tracking before retries exist would design unsupported semantics.
+- **Decision:**
+  - Application owns LangGraph-free `InitialParallelIngestionAttemptNumberSource` in `parallel_ingestion_initial_attempt_number_source.py`.
+  - The class satisfies existing `ParallelIngestionAttemptNumberPort` structurally and does not inherit the Protocol.
+  - The method remains async `get_attempt_number(self, workflow_id: str) -> int`.
+  - The source is stateless and returns exactly `1` for every workflow identity.
+  - There is no increment, reset, persistence, per-workflow map, or retry ownership.
+- **Consequences:** The existing single-failure application pipeline can construct a real `FailurePolicyContext` using concrete selection and concrete initial-attempt resolution. This source is intentionally insufficient for future retry execution. Retry-capable attempt tracking requires separate architectural review.
+
+---
