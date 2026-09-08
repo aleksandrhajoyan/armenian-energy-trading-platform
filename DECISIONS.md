@@ -1399,3 +1399,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Active FastAPI requests can resolve the lifespan-scoped service through a typed reader. Handlers, query DTOs, query execution, LangGraph wiring, and operational RAG remain deferred.
 
 ---
+
+## ADR-090 — Regulatory HTTP contracts are API-owned projections of canonical application contracts
+
+- **Status:** Accepted
+- **Context:** Chunk 79 published a typed accessor for the lifespan-scoped query-execution service, but HTTP handlers still lacked a deliberate transport shape. Generating OpenAPI models from application dataclasses, reusing domain `RegulatoryConstraint` as a FastAPI `response_model`, or dynamically reflecting application fields would couple HTTP JSON to inner-layer types and invite provider or vector fields into the public contract. Adding a route, `Depends`, or mapper in the same slice would pre-commit execution before the transport contract exists.
+- **Decision:**
+  - API owns `RegulatoryIntelligenceQueryRequest` and `RegulatoryIntelligenceQueryResponse` in `api/schemas`.
+  - The request DTO mirrors `RegulatoryIntelligenceQueryExecutionService.execute` (`query_text: str`, `limit: int`). Limit positivity follows existing `DocumentVectorSearchQuery` semantics. Query text is not stripped.
+  - The response DTO mirrors `RegulatoryIntelligenceResult.constraints` through nested `RegulatoryConstraintResponse` fields already present on canonical `RegulatoryConstraint`. Provider configuration, scores, citations, and invented narrative fields are excluded.
+  - Models are frozen with `extra="forbid"`. There is no dynamic DTO generation, generic mapper, or schema factory.
+  - Transport and application contracts remain separate. No route, production `Depends`, accessor invocation, or `.execute` exists in this slice.
+- **Consequences:** Future HTTP handlers can bind JSON to these DTOs without inventing business fields. Mapping orchestration, route installation, and query execution remain deferred.
+
+---
