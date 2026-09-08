@@ -1426,3 +1426,15 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Isolated HTTP query behavior is proven. Production HTTP exposure remains incomplete. PDF/OCR, document indexing runtime, verified Armenian DAM rules, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.
 
 ---
+
+## ADR-092 — Regulatory Intelligence production router installation
+
+- **Status:** Accepted
+- **Context:** Chunk 81 published a thin Regulatory HTTP query router, but production `create_app()` still installed only health. Isolated tests could mount the endpoint; the production factory did not. Reconstructing the path, wrapping the accessor, moving provider setup into `create_app()`, or introducing a generic router registry would expand this composition slice.
+- **Decision:**
+  - Production `create_app()` imports the existing `router` from `api/routers/regulatory_intelligence.py` as `regulatory_intelligence_router` and includes it once with `prefix=resolved_settings.api_prefix`, the same prefix used by health.
+  - The handler, DTOs, accessor, HTTP method, endpoint path, and mapping remain unchanged. No second prefix is added in `create_app()`.
+  - Construction remains lazy. The existing keyword-only `lifespan` seam remains. The published lifespan still owns service lifecycle. `create_app()` still does not load Regulatory/OpenAI/Qdrant settings, construct clients, call composition builders, assign `app.state`, or invoke `.execute`.
+- **Consequences:** `POST /api/v1/regulatory-intelligence/query` is reachable through the production factory when the default prefix is `/api/v1`. Execution still depends on the lifespan-scoped service. Offline tests can inject a no-op lifespan and keep health credential-free; missing service state maps to the published 503. Operational RAG, PDF/OCR, document indexing, verified Armenian DAM rules, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.
+
+---

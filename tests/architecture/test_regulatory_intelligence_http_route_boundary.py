@@ -1,4 +1,4 @@
-"""Chunk 81 Regulatory HTTP query route stays an unwired API transport boundary."""
+"""Chunk 81 Regulatory HTTP query route stays a thin API transport boundary."""
 
 from __future__ import annotations
 
@@ -326,29 +326,10 @@ def test_application_domain_and_graph_do_not_import_the_router() -> None:
     assert "regulatory-intelligence" not in source
 
 
-def test_create_app_does_not_import_or_include_the_regulatory_router() -> None:
-    modules = imported_modules(API_APP)
-    assert "energy_trading.api.routers.regulatory_intelligence" not in modules
-    assert "energy_trading.api.routers.health" in modules
+def test_accessor_schema_lifespan_and_health_remain_unwired_to_the_handler() -> None:
     names = imported_names(API_APP)
     assert "query_regulatory_intelligence" not in names
-    source = API_APP.read_text(encoding="utf-8")
-    assert "routers.regulatory_intelligence" not in source
-    assert "query_regulatory_intelligence" not in source
-    tree = ast.parse(source, filename=str(API_APP))
-    create_app = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == "create_app"
-    )
-    included: list[str] = []
-    for node in ast.walk(create_app):
-        if not isinstance(node, ast.Call) or _call_name(node) != "include_router":
-            continue
-        assert len(node.args) == 1
-        assert isinstance(node.args[0], ast.Name)
-        included.append(node.args[0].id)
-    assert included == ["health_router"]
+    assert "get_regulatory_intelligence_query_execution_service" not in names
     health_source = HEALTH_ROUTER.read_text(encoding="utf-8")
     assert "get_regulatory_intelligence_query_execution_service" not in health_source
     accessor_source = ACCESSOR_MODULE.read_text(encoding="utf-8")

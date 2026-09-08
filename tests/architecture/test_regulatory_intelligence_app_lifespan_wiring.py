@@ -1,4 +1,4 @@
-"""Chunk 77 installs the Regulatory lifespan in create_app without writing app.state."""
+"""Chunk 77/82: create_app installs the Regulatory lifespan and query router."""
 
 from __future__ import annotations
 
@@ -105,6 +105,7 @@ ALLOWED_APP_IMPORTS = frozenset(
         "energy_trading.api.exception_handlers",
         "energy_trading.api.middleware",
         "energy_trading.api.routers.health",
+        "energy_trading.api.routers.regulatory_intelligence",
         "energy_trading.shared.config.settings",
         "energy_trading.shared.observability.logging",
     }
@@ -141,6 +142,12 @@ def test_create_app_imports_chunk_76_builder_only() -> None:
     names = imported_names(API_APP)
     assert "build_regulatory_intelligence_lifespan" in names
     assert "FastAPI" in names
+    assert "health_router" in names
+    assert "regulatory_intelligence_router" in names
+    assert "query_regulatory_intelligence" not in names
+    assert "get_regulatory_intelligence_query_execution_service" not in names
+    assert "RegulatoryIntelligenceQueryRequest" not in names
+    assert "RegulatoryIntelligenceQueryResponse" not in names
     assert "loaded_regulatory_intelligence_runtime" not in names
     assert "managed_regulatory_intelligence_runtime" not in names
     assert "load_openai_settings" not in names
@@ -225,6 +232,47 @@ def test_production_default_installs_returned_lifespan_into_fastapi() -> None:
     identifiers = {node.id for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Name)}
     leaked_frameworks = sorted(name for name in identifiers if name in GENERIC_FRAMEWORK_NAMES)
     assert leaked_frameworks == []
+
+
+def test_create_app_includes_regulatory_router_once_with_api_prefix() -> None:
+    modules = imported_modules(API_APP)
+    assert "energy_trading.api.routers.health" in modules
+    assert "energy_trading.api.routers.regulatory_intelligence" in modules
+    assert "energy_trading.api.dependencies.regulatory_intelligence" not in modules
+    assert "energy_trading.api.schemas.regulatory_intelligence" not in modules
+    create_app = _create_app_function()
+    included: list[tuple[str, dict[str, str]]] = []
+    for node in ast.walk(create_app):
+        if not isinstance(node, ast.Call) or _call_name(node) != "include_router":
+            continue
+        assert len(node.args) == 1
+        assert isinstance(node.args[0], ast.Name)
+        keywords: dict[str, str] = {}
+        for keyword in node.keywords:
+            assert keyword.arg is not None
+            keywords[keyword.arg] = ast.unparse(keyword.value)
+        included.append((node.args[0].id, keywords))
+    assert included == [
+        ("health_router", {"prefix": "resolved_settings.api_prefix"}),
+        ("regulatory_intelligence_router", {"prefix": "resolved_settings.api_prefix"}),
+    ]
+    source = API_APP.read_text(encoding="utf-8")
+    assert "/regulatory-intelligence/query" not in source
+    assert "/regulatory-intelligence" not in source
+    assert ".execute(" not in source
+    assert "app.state" not in source
+    assert "regulatory_intelligence_query_execution_service" not in source
+    assert "load_openai_settings" not in source
+    assert "load_qdrant_settings" not in source
+    assert "load_regulatory_intelligence_runtime_settings" not in source
+    assert "create_openai_client" not in source
+    assert "create_qdrant_client" not in source
+    assert "langgraph" not in source.lower()
+    assert "build_regulatory_intelligence_query_execution" not in source
+    assert "build_regulatory_intelligence_provider_runtime" not in source
+    assert "build_regulatory_intelligence_configured_runtime" not in source
+    assert "managed_regulatory_intelligence_runtime" not in source
+    assert "loaded_regulatory_intelligence_runtime" not in source
 
 
 def test_health_router_and_http_routes_remain_service_free() -> None:

@@ -12,6 +12,9 @@ from energy_trading.api.composition.regulatory_intelligence_lifespan import (
 from energy_trading.api.exception_handlers import register_exception_handlers
 from energy_trading.api.middleware import CorrelationMiddleware, RequestLoggingMiddleware
 from energy_trading.api.routers.health import router as health_router
+from energy_trading.api.routers.regulatory_intelligence import (
+    router as regulatory_intelligence_router,
+)
 from energy_trading.shared.config.settings import AppSettings, get_settings
 from energy_trading.shared.observability.logging import configure_logging
 
@@ -28,8 +31,9 @@ def create_app(
 
     Passing ``lifespan`` replaces the production Regulatory lifespan so
     transport tests can stay independent of provider credentials. The default
-    installs ``build_regulatory_intelligence_lifespan``; constructing the app
-    does not load Regulatory settings or create clients.
+    installs ``build_regulatory_intelligence_lifespan`` and includes the
+    published Regulatory query router; constructing the app does not load
+    Regulatory settings or create clients.
     """
 
     resolved_settings = settings if settings is not None else get_settings()
@@ -47,6 +51,10 @@ def create_app(
     application.add_middleware(CorrelationMiddleware)
     register_exception_handlers(application)
     application.include_router(health_router, prefix=resolved_settings.api_prefix)
+    application.include_router(
+        regulatory_intelligence_router,
+        prefix=resolved_settings.api_prefix,
+    )
 
     if settings is not None:
 
