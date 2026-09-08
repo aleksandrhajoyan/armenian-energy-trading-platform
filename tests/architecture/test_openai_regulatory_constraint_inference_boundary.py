@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
+    REGULATORY_PROVIDER_RUNTIME_RELATIVE,
     SRC_ROOT,
     annotation_type_names,
     async_function_arg_names,
@@ -13,6 +14,7 @@ from tests.architecture.import_inspection import (
     imported_modules,
     imported_names,
     is_forbidden,
+    is_regulatory_provider_runtime_module,
 )
 
 PRODUCTION_ROOT = SRC_ROOT / "energy_trading"
@@ -31,12 +33,14 @@ QUERY_EMBEDDING_ADAPTER_MODULE = (
 )
 CLIENT_FACTORY_MODULE = PRODUCTION_ROOT / "infrastructure" / "openai" / "client.py"
 COMPOSITION_MODULE = API_ROOT / "composition" / "regulatory_intelligence.py"
+PROVIDER_RUNTIME_MODULE = API_ROOT / "composition" / "regulatory_intelligence_runtime.py"
 
 ALLOWED_OPENAI_ADAPTER_MODULES = frozenset(
     {
         ADAPTER_MODULE.resolve(),
         QUERY_EMBEDDING_ADAPTER_MODULE.resolve(),
         CLIENT_FACTORY_MODULE.resolve(),
+        PROVIDER_RUNTIME_MODULE.resolve(),
     }
 )
 
@@ -212,12 +216,20 @@ def test_openai_sdk_imports_exist_only_in_approved_openai_adapters() -> None:
     assert "openai" in imported_modules(ADAPTER_MODULE)
     assert "openai" in imported_modules(QUERY_EMBEDDING_ADAPTER_MODULE)
     assert "openai" in imported_modules(CLIENT_FACTORY_MODULE)
+    assert "openai" in imported_modules(PROVIDER_RUNTIME_MODULE)
 
 
 def test_inner_layers_do_not_import_openai() -> None:
     assert collect_import_violations(DOMAIN_ROOT, FORBIDDEN_INNER_OPENAI) == []
     assert collect_import_violations(APPLICATION_ROOT, FORBIDDEN_INNER_OPENAI) == []
-    assert collect_import_violations(API_ROOT, FORBIDDEN_INNER_OPENAI) == []
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            FORBIDDEN_INNER_OPENAI,
+            exclude_relative_prefixes=(REGULATORY_PROVIDER_RUNTIME_RELATIVE,),
+        )
+        == []
+    )
     if ML_ROOT.exists():
         assert collect_import_violations(ML_ROOT, FORBIDDEN_INNER_OPENAI) == []
 
@@ -364,9 +376,20 @@ def test_create_app_and_composition_do_not_construct_openai_inference() -> None:
         "energy_trading.infrastructure.regulatory",
         "energy_trading.infrastructure.regulatory.openai_constraint_inference",
     )
-    assert collect_import_violations(API_ROOT, forbidden_wiring) == []
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            forbidden_wiring,
+            exclude_relative_prefixes=(REGULATORY_PROVIDER_RUNTIME_RELATIVE,),
+        )
+        == []
+    )
     for path in sorted(API_ROOT.rglob("*.py")):
         names = imported_names(path)
+        if is_regulatory_provider_runtime_module(path):
+            assert "OpenAIRegulatoryConstraintInferenceAdapter" in names
+            assert "AsyncOpenAI" in names
+            continue
         assert "OpenAIRegulatoryConstraintInferenceAdapter" not in names
         assert "AsyncOpenAI" not in names
     call_names = _create_app_call_names(API_APP)

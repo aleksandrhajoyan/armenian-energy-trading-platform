@@ -6,9 +6,11 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
+    REGULATORY_PROVIDER_RUNTIME_RELATIVE,
     SRC_ROOT,
     collect_import_violations,
     imported_names,
+    is_regulatory_provider_runtime_module,
 )
 
 COMPOSE_FILE = SRC_ROOT.parent / "compose.yaml"
@@ -240,7 +242,14 @@ def test_live_tests_own_ephemeral_collection_and_dot_metric() -> None:
 def test_inner_layers_remain_qdrant_free() -> None:
     assert collect_import_violations(DOMAIN_ROOT, FORBIDDEN_INNER_QDRANT) == []
     assert collect_import_violations(APPLICATION_ROOT, FORBIDDEN_INNER_QDRANT) == []
-    assert collect_import_violations(API_ROOT, FORBIDDEN_INNER_QDRANT) == []
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            FORBIDDEN_INNER_QDRANT,
+            exclude_relative_prefixes=(REGULATORY_PROVIDER_RUNTIME_RELATIVE,),
+        )
+        == []
+    )
     if ML_ROOT.exists():
         assert collect_import_violations(ML_ROOT, FORBIDDEN_INNER_QDRANT) == []
 
@@ -252,9 +261,23 @@ def test_create_app_still_does_not_wire_qdrant() -> None:
         "energy_trading.infrastructure.vector_store.qdrant",
         "energy_trading.shared.config.qdrant",
     )
-    assert collect_import_violations(API_ROOT, forbidden_wiring) == []
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            forbidden_wiring,
+            exclude_relative_prefixes=(REGULATORY_PROVIDER_RUNTIME_RELATIVE,),
+        )
+        == []
+    )
     for path in sorted(API_ROOT.rglob("*.py")):
         names = imported_names(path)
+        if is_regulatory_provider_runtime_module(path):
+            assert "AsyncQdrantClient" in names
+            assert "QdrantDocumentVectorSearch" in names
+            assert "QdrantDocumentVectorConfig" in names
+            assert "QdrantDocumentVectorIndex" not in names
+            assert "create_qdrant_client" not in names
+            continue
         assert "AsyncQdrantClient" not in names
         assert "QdrantDocumentVectorIndex" not in names
         assert "QdrantDocumentVectorSearch" not in names

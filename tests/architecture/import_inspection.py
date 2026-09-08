@@ -41,10 +41,17 @@ def is_forbidden(module: str, prefixes: tuple[str, ...]) -> bool:
 
 
 API_COMPOSITION_RELATIVE_PREFIX = "energy_trading/api/composition/"
+REGULATORY_PROVIDER_RUNTIME_RELATIVE = (
+    "energy_trading/api/composition/regulatory_intelligence_runtime.py"
+)
 
 
 def is_api_composition_module(path: Path) -> bool:
     return path.relative_to(SRC_ROOT).as_posix().startswith(API_COMPOSITION_RELATIVE_PREFIX)
+
+
+def is_regulatory_provider_runtime_module(path: Path) -> bool:
+    return path.relative_to(SRC_ROOT).as_posix() == REGULATORY_PROVIDER_RUNTIME_RELATIVE
 
 
 def http_transport_api_paths(api_root: Path) -> list[Path]:

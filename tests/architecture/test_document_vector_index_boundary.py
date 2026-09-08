@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
+    REGULATORY_PROVIDER_RUNTIME_RELATIVE,
     SRC_ROOT,
     annotation_type_names,
     async_function_arg_names,
@@ -257,7 +258,14 @@ def test_api_composition_does_not_import_or_construct_document_vector_index() ->
         "qdrant_client",
         "qdrant",
     )
-    assert collect_import_violations(API_ROOT, forbidden_wiring) == []
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            forbidden_wiring,
+            exclude_relative_prefixes=(REGULATORY_PROVIDER_RUNTIME_RELATIVE,),
+        )
+        == []
+    )
     for path in sorted(API_ROOT.rglob("*.py")):
         names = imported_names(path)
         assert "DocumentVectorIndexPort" not in names

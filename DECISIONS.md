@@ -1242,7 +1242,26 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Provider adapters still do not construct the client, load environment variables, or read settings.
   - Model selection, base URL, organization, timeout, and retry/fallback mechanics remain outside this settings object and factory.
   - Implicit SDK retries are disabled (`max_retries=0`) so application orchestration retains retry ownership. This is not an implementation of retry logic.
-  - `create_app()`, LangGraph, and `build_regulatory_intelligence_query_execution` remain unwired to OpenAI settings and the factory.
-- **Consequences:** Client construction capability exists offline. Production OpenAI runtime injection, adapter composition, and Regulatory RAG remain absent. Domain, application, API, and ML remain OpenAI-SDK-free. The approved production OpenAI SDK allowlist is exactly the two published adapters plus this client-factory module.
+  - `create_app()`, LangGraph, and `build_regulatory_intelligence_query_execution` remain unwired to OpenAI settings and the factory. Chunk 71's provider-aware builder receives an already-created client and does not call this factory.
+- **Consequences:** Client construction capability exists offline. Production OpenAI runtime lifecycle and Regulatory RAG remain absent. Domain, application, and ML remain OpenAI-SDK-free. HTTP routes/`create_app()` remain OpenAI-SDK-free. The approved production OpenAI SDK allowlist is the two published adapters, this client-factory module, and the one provider-aware Regulatory composition module.
+
+---
+
+## ADR-081 — Regulatory provider composition is a separate API-owned outer builder
+
+- **Status:** Accepted
+- **Context:** Chunk 67 published a provider-neutral Regulatory application builder that accepts already-constructed application ports. Chunks 68–70 published concrete OpenAI adapters and an OpenAI client factory. Folding OpenAI, Qdrant, settings, or client construction into the Chunk 67 builder would make application composition provider-aware. Folding that construction into agents, LangGraph, or domain would violate Clean Architecture. A generic provider registry, DI container, or runtime-settings DTO would invent an abstraction this repository does not own.
+- **Decision:**
+  - Provider-aware object composition lives in a separate API composition module: `build_regulatory_intelligence_provider_runtime` in `energy_trading.api.composition.regulatory_intelligence_runtime`.
+  - Chunk 67 `build_regulatory_intelligence_query_execution` remains provider-neutral and does not import OpenAI, Qdrant, infrastructure adapters, settings, or client factories.
+  - The provider-aware builder is synchronous and keyword-only. It receives already-created `AsyncOpenAI` and `AsyncQdrantClient` instances, existing `QdrantDocumentVectorConfig`, and two explicit model strings (`query_embedding_model`, `constraint_inference_model`).
+  - It constructs exactly `OpenAIDocumentQueryEmbeddingAdapter`, `QdrantDocumentVectorSearch`, and `OpenAIRegulatoryConstraintInferenceAdapter`, then delegates application composition to `build_regulatory_intelligence_query_execution` exactly once and returns that service unchanged.
+  - Clients are injected. The builder does not call `load_openai_settings`, `create_openai_client`, Qdrant settings loaders, or `create_qdrant_client`. It does not read environment variables or `.env`.
+  - Model IDs remain explicit and separate at this composition boundary. They are not placed in `OpenAISettings` and are not inferred from task type.
+  - Qdrant adapter configuration is the already-published `QdrantDocumentVectorConfig`. The builder does not create collections, indexes, distance metrics, or payload schemas.
+  - Construction performs no provider I/O: no embed, search, infer, execute, run, health, collection, or close/aclose operations.
+  - The builder owns no FastAPI lifespan, client lifecycle, or LangGraph wiring. `create_app()` remains unwired.
+  - Application, agents, domain, and ML do not import the provider-aware builder. HTTP routes remain provider-SDK-free. The OpenAI/Qdrant SDK exception is limited to this one API composition module plus existing approved infrastructure modules.
+- **Consequences:** Concrete Regulatory provider object composition exists offline. Production settings loading, client lifecycle, HTTP invocation, LangGraph Phase 1 wiring, document extraction/indexing, and operational RAG remain absent.
 
 ---
