@@ -110,6 +110,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
   - [x] **Chunk 69** — OpenAI Regulatory Constraint Inference Infrastructure Adapter
   - [x] **Chunk 70** — Async OpenAI Client & Typed Settings Foundation — Offline
   - [x] **Chunk 71** — Regulatory Intelligence Provider Runtime Composition — Offline
+  - [x] **Chunk 72** — Regulatory Intelligence Runtime Settings Boundary — Offline
 - [ ] Pricing & Sales Agent
 - [ ] Contract-phase graph slice
 
@@ -159,5 +160,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 71
-- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 71 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize production OpenAI/Qdrant client lifecycle, settings loading into runtime, `create_app()` / LangGraph wiring of Regulatory composition, PDF/OCR, actual RAG workflow, verified Armenian DAM rule extraction, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.
+- **Completed:** Chunk 0 through Chunk 72
+- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 72 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize production OpenAI/Qdrant client lifecycle, settings loading into the Regulatory runtime stack, `create_app()` / LangGraph wiring of Regulatory composition, PDF/OCR, actual RAG workflow, verified Armenian DAM rule extraction, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.

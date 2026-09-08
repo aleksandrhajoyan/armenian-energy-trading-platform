@@ -1265,3 +1265,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Concrete Regulatory provider object composition exists offline. Production settings loading, client lifecycle, HTTP invocation, LangGraph Phase 1 wiring, document extraction/indexing, and operational RAG remain absent.
 
 ---
+
+## ADR-082 — Regulatory runtime configuration is use-case-specific and separate from provider connection settings
+
+- **Status:** Accepted
+- **Context:** Chunk 71's provider-aware builder requires an explicit query-embedding model, an explicit constraint-inference model, and existing `QdrantDocumentVectorConfig` (`collection_name`, `vector_size`). Folding those values into `OpenAISettings` would mix use-case model selection with the OpenAI API credential. Folding collection/vector targeting into `QdrantSettings` would mix Regulatory document-runtime identity with generic host/port/API-key connection settings. A generic runtime-settings hierarchy, model catalog, or settings→client DI container would invent an abstraction this repository does not own. Wiring settings into the Chunk 71 builder in this chunk would mix typed configuration with still-deferred client lifecycle.
+- **Decision:**
+  - Typed `RegulatoryIntelligenceRuntimeSettings` lives in `energy_trading.shared.config` beside the other service-specific settings objects.
+  - The object owns exactly four fields: `query_embedding_model`, `constraint_inference_model`, `qdrant_collection_name`, and `qdrant_vector_size`.
+  - The environment prefix is dedicated: `ENERGY_REGULATORY_`. Exact variables are `ENERGY_REGULATORY_QUERY_EMBEDDING_MODEL`, `ENERGY_REGULATORY_CONSTRAINT_INFERENCE_MODEL`, `ENERGY_REGULATORY_QDRANT_COLLECTION_NAME`, and `ENERGY_REGULATORY_QDRANT_VECTOR_SIZE`.
+  - Model identifiers belong here, not in `OpenAISettings`. Collection name and vector size belong here, not in generic `QdrantSettings`.
+  - All four fields are required with no production defaults. String fields strip whitespace and reject blank/whitespace-only values. Vector size must be a strictly positive integer and is not inferred from the embedding model.
+  - The two model fields may hold the same value. They remain separate configuration fields.
+  - The settings module is SDK-free and runtime-object-free. It does not import OpenAI or Qdrant clients, does not construct `QdrantDocumentVectorConfig`, and does not call Chunk 67 or Chunk 71 builders.
+  - `load_regulatory_intelligence_runtime_settings(*, env_file=...)` is uncached and separate from `AppSettings`. Process health and `create_app()` do not load it.
+  - Generic configuration frameworks, model catalogs, provider registries, and settings aggregation DTOs are rejected.
+- **Consequences:** Callers can load Regulatory runtime-specific values independently of provider connection settings. Production settings→client→runtime wiring, HTTP invocation, and operational RAG remain absent.
+
+---
