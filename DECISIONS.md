@@ -1322,3 +1322,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Callers can supply already-loaded typed settings and receive a lifecycle-owned `RegulatoryIntelligenceQueryExecutionService`. Settings loading, FastAPI integration, HTTP invocation, and operational RAG remain absent. Direct provider SDK API-composition imports remain limited to the existing two approved modules.
 
 ---
+
+## ADR-085 — Regulatory settings loading is composed above the managed runtime
+
+- **Status:** Accepted
+- **Context:** Chunk 74 can own Regulatory provider-client lifetime from already-loaded `OpenAISettings`, `QdrantSettings`, and `RegulatoryIntelligenceRuntimeSettings`, but callers still had to invoke the three existing typed loaders themselves. Folding environment discovery into the managed runtime would mix configuration loading with resource lifetime. Folding FastAPI lifespan into the same function would couple a reusable settings-to-runtime seam to one HTTP framework. A generic settings aggregator, runtime manager, DI container, or provider registry would invent an abstraction this repository does not own. Direct `os.environ` / `dotenv` parsing in API composition would bypass the published loaders.
+- **Decision:**
+  - Settings loading lives in a separate Regulatory-specific API composition module: `loaded_regulatory_intelligence_runtime` in `energy_trading.api.composition.regulatory_intelligence_loaded_runtime`.
+  - The callable is a keyword-only async context manager (`contextlib.asynccontextmanager`). It exposes one `env_file: str | Path | None = ".env"` argument matching the existing three loader contracts and forwards that exact value to each loader.
+  - It calls `load_openai_settings`, `load_qdrant_settings`, and `load_regulatory_intelligence_runtime_settings` exactly once each, then delegates resource ownership and service construction to `managed_regulatory_intelligence_runtime`.
+  - It does not instantiate settings classes as a substitute for loaders, construct clients, import OpenAI/Qdrant SDK types, call client factories, construct provider adapters, or invoke Chunks 73/71/67 directly.
+  - Loader validation failures propagate unchanged. An earlier loader failure does not fabricate settings or enter the managed runtime. Managed-runtime entry failures and consumer exceptions propagate according to normal context-manager semantics. This layer adds no `try/except` translation or suppression.
+  - Entering the context performs no provider I/O and does not call `.execute(...)`. The yielded object is the exact `RegulatoryIntelligenceQueryExecutionService` produced by Chunk 74.
+  - FastAPI lifespan, `create_app()`, HTTP routes, app state, and LangGraph remain unwired.
+  - Generic settings aggregators, runtime/lifecycle managers, DI containers, and provider registries are rejected.
+- **Consequences:** Callers can supply an explicit settings source and receive a lifecycle-owned `RegulatoryIntelligenceQueryExecutionService`. FastAPI integration, HTTP invocation, LangGraph routing, document indexing, and operational RAG remain absent. Direct provider SDK API-composition imports remain limited to the existing two approved modules. Chunk 74 continues to own client creation and cleanup.
+
+---

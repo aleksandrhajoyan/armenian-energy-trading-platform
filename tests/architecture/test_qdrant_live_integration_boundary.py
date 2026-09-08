@@ -8,9 +8,11 @@ from pathlib import Path
 from tests.architecture.import_inspection import (
     REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
     REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+    REGULATORY_QDRANT_SETTINGS_COMPOSITION_RELATIVES,
     SRC_ROOT,
     collect_import_violations,
     imported_names,
+    is_regulatory_loaded_runtime_module,
     is_regulatory_managed_runtime_module,
     is_regulatory_provider_composition_module,
     is_regulatory_provider_runtime_module,
@@ -282,7 +284,7 @@ def test_create_app_still_does_not_wire_qdrant() -> None:
                 "energy_trading.infrastructure.vector_store.qdrant",
                 "energy_trading.shared.config.qdrant",
             ),
-            exclude_relative_prefixes=REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
+            exclude_relative_prefixes=REGULATORY_QDRANT_SETTINGS_COMPOSITION_RELATIVES,
         )
         == []
     )
@@ -304,6 +306,13 @@ def test_create_app_still_does_not_wire_qdrant() -> None:
             assert "QdrantDocumentVectorIndex" not in names
             assert "QdrantDocumentVectorSearch" not in names
             assert "create_qdrant_client" in names
+            continue
+        if is_regulatory_loaded_runtime_module(path):
+            assert "AsyncQdrantClient" not in names
+            assert "QdrantDocumentVectorConfig" not in names
+            assert "QdrantDocumentVectorIndex" not in names
+            assert "QdrantDocumentVectorSearch" not in names
+            assert "create_qdrant_client" not in names
             continue
         assert "AsyncQdrantClient" not in names
         assert "QdrantDocumentVectorIndex" not in names
