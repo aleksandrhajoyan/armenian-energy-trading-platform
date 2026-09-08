@@ -1210,3 +1210,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application remains OpenAI-independent. Callers can inject the adapter behind the published port when they own client lifecycle. This is not production RAG deployment.
 
 ---
+
+## ADR-079 — OpenAI Regulatory constraint inference is an infrastructure adapter behind the agent-specific application port
+
+- **Status:** Accepted
+- **Context:** Chunk 63 published provider-neutral `RegulatoryConstraintInferencePort`. Chunk 67 published an outer composition root that accepts a concrete implementation of that port. Folding OpenAI types into the Regulatory Intelligence Agent would couple application to a vendor SDK. A generic `LLMPort` / RAG framework / prompt catalog would invent an abstraction this repository does not own. Hardcoding Armenian DAM rules would violate the unverified-market constraint. Constructing `AsyncOpenAI` inside the adapter or `create_app()` would mix client lifecycle and secrets with Anti-Corruption conversion.
+- **Decision:**
+  - Provider decision for Regulatory constraint inference is OpenAI, behind the existing agent-specific `RegulatoryConstraintInferencePort`. No generic `LLMPort` is introduced.
+  - `OpenAIRegulatoryConstraintInferenceAdapter` lives in `energy_trading.infrastructure.regulatory`. It structurally satisfies the published port without inheriting it.
+  - The adapter injects an already-constructed `AsyncOpenAI` client and an explicit model string. It does not load API keys, read settings, or construct the client.
+  - One non-empty `infer(*, chunks)` call uses the official Responses structured-output surface `await client.responses.parse(...)` with an infrastructure-local Pydantic envelope. Empty `chunks` returns `()` without a provider call.
+  - Provider-local candidates carry the typed fields required to construct canonical `RegulatoryConstraint` plus `evidence_chunk_ids`. Evidence IDs are checked against the supplied normalized chunks before canonical conversion. Unknown IDs fail closed. `evidence_chunk_ids` is not added to the domain model.
+  - Validated private candidates map explicitly to canonical `RegulatoryConstraint` in encounter order. Provider objects do not enter application. There is no ranking, merging, or invented defaults.
+  - The adapter-local instruction is generic and evidence-bound. It does not contain Armenian DAM values, dates, limits, tariffs, or market-rule constants.
+  - `OpenAIError` and unusable structured output (missing parsed result, refusal, invalid candidate, invalid canonical construction) become sanitized `DependencyUnavailableError`. Exception chaining follows existing infrastructure adapters (`from exc`) while the application-visible message stays static.
+  - No Qdrant coupling, no retry loop, no prompt catalog, no generic RAG/LLM framework, and no `create_app()` / LangGraph / Chunk 67 builder wiring.
+- **Consequences:** Application remains OpenAI-independent and still depends only on `RegulatoryConstraintInferencePort`. Callers can inject the adapter when they own client lifecycle. This is not production RAG deployment and does not claim verified Armenian rule extraction.
+
+---
