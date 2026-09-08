@@ -1023,3 +1023,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Future graph/runtime composition can remain thin. Concrete selector and attempt-number implementations remain independently swappable and independently reviewable. Runtime wiring remains a later chunk.
 
 ---
+
+## ADR-067 — Phase 2 selection proceeds only when one sanitized failure is unambiguous
+
+- **Status:** Accepted
+- **Context:** Concurrent Phase 2 can yield zero, one, or multiple sanitized failure facts. The system has no approved business rule for choosing among simultaneous failures. Allowing first/last/native TaskGroup order to determine policy context would introduce accidental semantics.
+- **Decision:**
+  - Application owns LangGraph-free `StrictSingleParallelIngestionFailureSelector` in `parallel_ingestion_strict_single_failure_selector.py`.
+  - The class satisfies existing `ParallelIngestionFailureSelectionPort` structurally and does not inherit the Protocol.
+  - Exactly one sanitized fact is returned as the same instance. Zero facts fail closed. Multiple facts fail closed.
+  - Empty and multi-fact inputs raise the same sanitized `InvalidRequestError`.
+  - There is no ranking, deduplication, aggregation, first/last winner, agent/error/severity priority, or synthetic combined error.
+- **Consequences:** The prepared failure pipeline can proceed for unambiguous single-agent failure cases. Multiple simultaneous failures remain unsupported and explicit. A future multi-failure policy requires separate architectural review and is not defined here. Attempt tracking and LangGraph failure routing remain later work.
+
+---
