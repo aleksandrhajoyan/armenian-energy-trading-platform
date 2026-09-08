@@ -1189,7 +1189,24 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Construction sequence is fixed: `DocumentVectorSearchQueryPreparationService`, then `RegulatoryIntelligenceAgent`, then `RegulatoryIntelligenceQueryExecutionService`. The builder does not call `.prepare`, `.run`, `.execute`, `.search`, `.infer`, or `.embed_query`.
   - Application does not import the outer builder. `create_app()` does not invoke it. `graph.py` remains unwired.
   - Generic containers, registries, factories, service locators, plugin discovery, and RAG/executor frameworks are rejected.
-  - Concrete embedding providers, inference providers, Qdrant/API provider wiring, HTTP routes, and Phase 1 LangGraph nodes remain deferred.
-- **Consequences:** Callers can assemble the published Regulatory application stack consistently from three port implementations. This is object composition, not production RAG deployment.
+  - Concrete OpenAI query-embedding adapter construction, inference providers, Qdrant/API provider wiring, HTTP routes, and Phase 1 LangGraph nodes remain deferred from this builder.
+- **Consequences:** Callers can assemble the published Regulatory application stack consistently from three port implementations. This is object composition, not production RAG deployment. Chunk 68 added an infrastructure OpenAI query-embedding adapter that can later be injected behind `DocumentQueryEmbeddingPort` without changing this builder.
+
+---
+
+## ADR-078 — OpenAI query embedding is implemented as an infrastructure adapter behind the existing application port
+
+- **Status:** Accepted
+- **Context:** Chunk 64 published provider-neutral `DocumentQueryEmbeddingPort`. Chunk 67 published an outer composition root that accepts a concrete implementation of that port. Folding OpenAI types into application would couple Regulatory Intelligence to a vendor SDK. A generic `EmbeddingPort` / `LLMPort` / LiteLLM framework would invent an abstraction this repository does not own. Constructing `AsyncOpenAI` inside the adapter or `create_app()` would mix client lifecycle and secrets with Anti-Corruption conversion.
+- **Decision:**
+  - Provider decision for query-text embedding is OpenAI.
+  - Official async SDK `openai` (`AsyncOpenAI`) is used. The adapter calls `await client.embeddings.create(...)` with `encoding_format="float"`.
+  - `OpenAIDocumentQueryEmbeddingAdapter` lives in `energy_trading.infrastructure.embeddings`. It structurally satisfies `DocumentQueryEmbeddingPort` without inheriting it.
+  - The adapter injects an already-constructed `AsyncOpenAI` client and an explicit model string. It does not load API keys, read settings, or construct the client.
+  - Valid query text is forwarded unchanged. Empty/whitespace-only text is `InvalidRequestError` before any provider call, without echoing the query.
+  - Provider responses convert immediately to canonical `DocumentQueryEmbedding` (`tuple` of floats). OpenAI response types do not enter application.
+  - `OpenAIError` and subclasses become sanitized `DependencyUnavailableError`. Malformed provider data (empty/multiple embeddings, invalid vectors) is the same dependency failure. Exception chaining follows existing infrastructure adapters (`from exc`) while the application-visible message stays static.
+  - No generic embedding/LLM framework, no Qdrant coupling, no retry loop, no dimensions/model fallback, and no `create_app()` / LangGraph / Chunk 67 builder wiring.
+- **Consequences:** Application remains OpenAI-independent. Callers can inject the adapter behind the published port when they own client lifecycle. This is not production RAG deployment.
 
 ---
