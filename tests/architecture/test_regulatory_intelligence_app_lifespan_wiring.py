@@ -240,6 +240,8 @@ def test_health_router_and_http_routes_remain_service_free() -> None:
     assert "build_regulatory_intelligence_lifespan" not in health_names
     assert "loaded_regulatory_intelligence_runtime" not in health_names
     assert "RegulatoryIntelligenceQueryExecutionService" not in health_names
+    assert "get_regulatory_intelligence_query_execution_service" not in health_names
+    assert "get_regulatory_intelligence_query_execution_service" not in imported_names(API_APP)
     health_source = HEALTH_ROUTER.read_text(encoding="utf-8")
     assert "app.state" not in health_source
     assert "regulatory_intelligence_query_execution_service" not in health_source

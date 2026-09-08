@@ -1385,3 +1385,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Request handlers still have no published way to retrieve the service. Route DTOs, dependency injection, LangGraph wiring, and operational RAG remain deferred. Lifespan-scoped identity on `app.state` is the only exposure primitive.
 
 ---
+
+## ADR-089 — Regulatory request-time service access is a narrow API dependency boundary
+
+- **Status:** Accepted
+- **Context:** Chunk 78 stores the exact lifespan-managed `RegulatoryIntelligenceQueryExecutionService` on `app.state.regulatory_intelligence_query_execution_service` while the Regulatory lifespan is active. HTTP handlers still needed a published, typed way to read that object. A global singleton, service registry, DI container, generic state accessor, or production `Depends(...)`/route in the same slice would either invent abstractions this repository does not own or pre-commit an HTTP contract. Raising `HTTPException`, `AttributeError`, or `RuntimeError` from the accessor would leak transport or runtime internals into a request-time application boundary.
+- **Decision:**
+  - Request-time lookup is a dedicated API dependency function `get_regulatory_intelligence_query_execution_service(request: Request) -> RegulatoryIntelligenceQueryExecutionService`.
+  - The accessor reads the exact published state key and returns that exact service identity. It does not wrap, proxy, clone, or reconstruct the object.
+  - Missing or wrong-type state fails closed as existing `DependencyUnavailableError` with sanitized message `Regulatory Intelligence service is unavailable.` and published code `dependency_unavailable`. No new exception class is introduced. HTTP translation remains in the existing API mapping layer (503).
+  - The accessor is read-only. It does not assign or delete application state, enter or exit lifecycle, load settings, construct clients, or invoke the service.
+  - There is no global singleton, service registry, service locator, or generic DI container. Production code does not wrap the accessor in `Depends(...)` and does not add an HTTP Regulatory route.
+- **Consequences:** Active FastAPI requests can resolve the lifespan-scoped service through a typed reader. Handlers, query DTOs, query execution, LangGraph wiring, and operational RAG remain deferred.
+
+---

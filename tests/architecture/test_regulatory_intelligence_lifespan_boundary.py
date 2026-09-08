@@ -455,14 +455,46 @@ def test_lifespan_assigns_chunk_75_service_on_app_state_and_deletes_it_before_ex
 
 def test_state_mutation_is_confined_to_the_lifespan_module() -> None:
     attribute = "regulatory_intelligence_query_execution_service"
+    accessor_module = API_ROOT / "dependencies" / "regulatory_intelligence.py"
+    dependencies_root = (API_ROOT / "dependencies").resolve()
+    writer = BUILDER_MODULE.resolve()
     offenders: list[str] = []
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path == BUILDER_MODULE:
+        resolved = path.resolve()
+        if resolved == writer or resolved.is_relative_to(dependencies_root):
             continue
         source = path.read_text(encoding="utf-8")
         if attribute in source or "app.state" in source:
             offenders.append(path.relative_to(SRC_ROOT).as_posix())
     assert offenders == []
+    for path in sorted((API_ROOT / "dependencies").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Attribute) and target.attr == attribute:
+                        msg = "dependencies package must not assign the published state attribute"
+                        raise AssertionError(msg)
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Attribute):
+                if node.target.attr == attribute:
+                    msg = "dependencies package must not assign the published state attribute"
+                    raise AssertionError(msg)
+            if isinstance(node, ast.Delete):
+                for target in node.targets:
+                    if isinstance(target, ast.Attribute) and target.attr == attribute:
+                        msg = "dependencies package must not delete the published state attribute"
+                        raise AssertionError(msg)
+        if path.resolve() != accessor_module.resolve():
+            source = path.read_text(encoding="utf-8")
+            assert "app.state" not in source
+    tree = ast.parse(accessor_module.read_text(encoding="utf-8"), filename=str(accessor_module))
+    call_names = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "setattr" not in call_names
+    assert "delattr" not in call_names
     for path in sorted((API_ROOT / "routers").rglob("*.py")):
         source = path.read_text(encoding="utf-8")
         assert attribute not in source

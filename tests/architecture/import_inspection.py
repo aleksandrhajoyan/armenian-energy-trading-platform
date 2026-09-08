@@ -41,6 +41,7 @@ def is_forbidden(module: str, prefixes: tuple[str, ...]) -> bool:
 
 
 API_COMPOSITION_RELATIVE_PREFIX = "energy_trading/api/composition/"
+API_DEPENDENCIES_RELATIVE_PREFIX = "energy_trading/api/dependencies/"
 REGULATORY_PROVIDER_RUNTIME_RELATIVE = (
     "energy_trading/api/composition/regulatory_intelligence_runtime.py"
 )
@@ -124,12 +125,15 @@ def collect_import_violations(
 
 
 def collect_http_api_import_violations(api_root: Path, prefixes: tuple[str, ...]) -> list[str]:
-    """Inspect HTTP transport API modules, excluding object-composition."""
+    """Inspect HTTP transport API modules, excluding object-composition and accessors."""
 
     return collect_import_violations(
         api_root,
         prefixes,
-        exclude_relative_prefixes=(API_COMPOSITION_RELATIVE_PREFIX,),
+        exclude_relative_prefixes=(
+            API_COMPOSITION_RELATIVE_PREFIX,
+            API_DEPENDENCIES_RELATIVE_PREFIX,
+        ),
     )
 
 

@@ -496,7 +496,10 @@ def test_api_composition_does_not_import_or_construct_the_execution_service() ->
         "energy_trading.application.orchestration.regulatory_intelligence_query_execution",
     )
     assert collect_http_api_import_violations(API_ROOT, forbidden_wiring) == []
+    accessor = (API_ROOT / "dependencies" / "regulatory_intelligence.py").resolve()
     for path in http_transport_api_paths(API_ROOT):
+        if path.resolve() == accessor:
+            continue
         names = imported_names(path)
         assert "RegulatoryIntelligenceQueryExecutionService" not in names
     app_source = API_APP.read_text(encoding="utf-8")
