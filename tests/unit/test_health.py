@@ -5,11 +5,11 @@ from httpx import ASGITransport, AsyncClient
 from energy_trading.api.app import create_app
 from energy_trading.shared.config.settings import AppEnvironment
 
-from .api.helpers import make_test_settings
+from .api.helpers import make_test_settings, noop_lifespan
 
 
 async def test_health_returns_process_status() -> None:
-    application = create_app(make_test_settings())
+    application = create_app(make_test_settings(), lifespan=noop_lifespan)
     transport = ASGITransport(app=application)
 
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -34,7 +34,8 @@ async def test_health_reflects_injected_settings() -> None:
         make_test_settings(
             app_name="Health Override",
             environment=AppEnvironment.PRODUCTION,
-        )
+        ),
+        lifespan=noop_lifespan,
     )
     transport = ASGITransport(app=application)
 

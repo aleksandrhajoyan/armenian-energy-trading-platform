@@ -448,6 +448,9 @@ def test_http_create_app_does_not_invoke_the_builder() -> None:
         assert "energy_trading.api.composition.regulatory_intelligence" not in modules
         source = path.read_text(encoding="utf-8")
         assert "build_regulatory_intelligence_query_execution" not in source
+        if path.resolve() == API_APP.resolve():
+            assert "energy_trading.api.composition.regulatory_intelligence_lifespan" in modules
+            continue
         assert "api.composition" not in source
     app_source = API_APP.read_text(encoding="utf-8")
     tree = ast.parse(app_source, filename=str(API_APP))

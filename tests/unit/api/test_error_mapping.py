@@ -20,7 +20,7 @@ from energy_trading.application.errors import (
 )
 from energy_trading.shared.observability.logging import CorrelationIdFilter, JsonLogFormatter
 
-from .helpers import api_client, make_test_settings
+from .helpers import api_client, make_test_settings, noop_lifespan
 
 _SENSITIVE_RUNTIME_MESSAGE = "database password=super-secret-test-value"
 _UNMAPPED_APPLICATION_MESSAGE = "safe-but-unmapped-message"
@@ -34,7 +34,7 @@ class FutureApplicationError(ApplicationError):
 
 
 def _error_app() -> FastAPI:
-    application = create_app(make_test_settings())
+    application = create_app(make_test_settings(), lifespan=noop_lifespan)
 
     @application.get("/__test__/invalid-request", response_model=None)
     async def invalid_request() -> None:

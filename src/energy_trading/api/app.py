@@ -1,8 +1,14 @@
 """FastAPI application factory (HTTP composition root)."""
 
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
+
 from fastapi import FastAPI
 
 from energy_trading import __version__
+from energy_trading.api.composition.regulatory_intelligence_lifespan import (
+    build_regulatory_intelligence_lifespan,
+)
 from energy_trading.api.exception_handlers import register_exception_handlers
 from energy_trading.api.middleware import CorrelationMiddleware, RequestLoggingMiddleware
 from energy_trading.api.routers.health import router as health_router
@@ -10,19 +16,32 @@ from energy_trading.shared.config.settings import AppSettings, get_settings
 from energy_trading.shared.observability.logging import configure_logging
 
 
-def create_app(settings: AppSettings | None = None) -> FastAPI:
+def create_app(
+    settings: AppSettings | None = None,
+    *,
+    lifespan: Callable[[FastAPI], AbstractAsyncContextManager[None]] | None = None,
+) -> FastAPI:
     """Build a FastAPI application without initializing external systems.
 
     Passing ``settings`` overrides the default provider so tests do not depend
     on process-wide cached configuration or a local ``.env`` file.
+
+    Passing ``lifespan`` replaces the production Regulatory lifespan so
+    transport tests can stay independent of provider credentials. The default
+    installs ``build_regulatory_intelligence_lifespan``; constructing the app
+    does not load Regulatory settings or create clients.
     """
 
     resolved_settings = settings if settings is not None else get_settings()
     configure_logging(resolved_settings.log_level)
+    resolved_lifespan = (
+        lifespan if lifespan is not None else build_regulatory_intelligence_lifespan()
+    )
 
     application = FastAPI(
         title=resolved_settings.app_name,
         version=__version__,
+        lifespan=resolved_lifespan,
     )
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(CorrelationMiddleware)

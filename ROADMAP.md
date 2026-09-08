@@ -115,6 +115,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
   - [x] **Chunk 74** — Managed Regulatory Intelligence Runtime Lifecycle — Offline
   - [x] **Chunk 75** — Regulatory Intelligence Settings-Loaded Managed Runtime Composition — Offline
   - [x] **Chunk 76** — Regulatory Intelligence FastAPI Lifespan Boundary — Unwired
+  - [x] **Chunk 77** — Regulatory Intelligence `create_app()` Lifespan Installation — No Service Exposure
 - [ ] Pricing & Sales Agent
 - [ ] Contract-phase graph slice
 
@@ -164,5 +165,5 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 76
-- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 76 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize `create_app()` installation of the Regulatory lifespan, Regulatory service exposure, HTTP routes, LangGraph wiring of Regulatory composition, PDF/OCR, actual RAG workflow, verified Armenian DAM rule extraction, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.
+- **Completed:** Chunk 0 through Chunk 77
+- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 77 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize Regulatory service exposure, HTTP routes, LangGraph wiring of Regulatory composition, PDF/OCR, actual RAG workflow, verified Armenian DAM rule extraction, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.

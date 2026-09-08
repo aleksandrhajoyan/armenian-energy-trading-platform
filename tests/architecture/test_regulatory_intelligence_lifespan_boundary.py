@@ -232,16 +232,6 @@ def _call_name(node: ast.Call) -> str | None:
     return None
 
 
-def _create_app_function() -> ast.FunctionDef:
-    tree = ast.parse(API_APP.read_text(encoding="utf-8"), filename=str(API_APP))
-    create_app = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == "create_app"
-    )
-    return create_app
-
-
 def test_builder_lives_in_api_composition_package() -> None:
     assert BUILDER_MODULE.parent == COMPOSITION_ROOT
     assert BUILDER_MODULE.exists()
@@ -467,31 +457,19 @@ def test_application_and_domain_do_not_import_the_lifespan_builder() -> None:
         assert "build_regulatory_intelligence_lifespan" not in source
 
 
-def test_http_create_app_and_routes_remain_unwired() -> None:
+def test_http_routes_remain_unwired_to_chunk_75_and_provider_sdks() -> None:
     forbidden_wiring = (
         "openai",
         "qdrant_client",
-        "energy_trading.api.composition.regulatory_intelligence_lifespan",
         "energy_trading.api.composition.regulatory_intelligence_loaded_runtime",
         "energy_trading.infrastructure.openai",
         "energy_trading.infrastructure.vector_store.qdrant.client",
     )
     assert collect_http_api_import_violations(API_ROOT, forbidden_wiring) == []
     names = imported_names(API_APP)
-    assert "build_regulatory_intelligence_lifespan" not in names
     assert "loaded_regulatory_intelligence_runtime" not in names
     app_source = API_APP.read_text(encoding="utf-8")
-    assert "build_regulatory_intelligence_lifespan" not in app_source
     assert "loaded_regulatory_intelligence_runtime" not in app_source
-    create_app = _create_app_function()
-    fastapi_keywords: list[str] = []
-    for node in ast.walk(create_app):
-        if not isinstance(node, ast.Call):
-            continue
-        if _call_name(node) != "FastAPI":
-            continue
-        fastapi_keywords.extend(keyword.arg or "" for keyword in node.keywords)
-    assert "lifespan" not in fastapi_keywords
     for path in (
         LOADED_RUNTIME_MODULE,
         MANAGED_RUNTIME_MODULE,

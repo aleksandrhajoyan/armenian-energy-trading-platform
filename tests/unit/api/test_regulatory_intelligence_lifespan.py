@@ -12,14 +12,13 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from energy_trading.api.app import create_app
 from energy_trading.api.composition.regulatory_intelligence_lifespan import (
     build_regulatory_intelligence_lifespan,
 )
 from energy_trading.api.composition.regulatory_intelligence_loaded_runtime import (
     loaded_regulatory_intelligence_runtime,
 )
-from tests.unit.api.helpers import make_test_settings
+from tests.architecture.import_inspection import SRC_ROOT, imported_modules, imported_names
 
 _LIFESPAN_MODULE = "energy_trading.api.composition.regulatory_intelligence_lifespan"
 _EXPLICIT_ENV_FILE = Path("sentinel-chunk76.env")
@@ -276,21 +275,10 @@ def test_fastapi_lifespan_compatibility_without_modifying_create_app(
     assert spy.calls == [{"env_file": None}]
 
 
-def test_create_app_remains_unwired_to_the_lifespan_boundary(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    spy = _patch_loaded_runtime(monkeypatch)
-    source = inspect.getsource(create_app)
-    assert "build_regulatory_intelligence_lifespan" not in source
-    assert "loaded_regulatory_intelligence_runtime" not in source
-    application = create_app(make_test_settings())
-    installed = application.router.lifespan_context
-    try:
-        installed_source = inspect.getsource(installed)
-    except OSError:
-        installed_source = ""
-    assert "build_regulatory_intelligence_lifespan" not in installed_source
-    assert "loaded_regulatory_intelligence_runtime" not in installed_source
-    assert spy.calls == []
-    assert spy.events == []
-    assert spy.active is False
+def test_lifespan_module_does_not_import_the_app_factory() -> None:
+    path = SRC_ROOT / "energy_trading/api/composition/regulatory_intelligence_lifespan.py"
+    names = imported_names(path)
+    modules = imported_modules(path)
+    assert "create_app" not in names
+    assert "energy_trading.api.app" not in modules
+    assert "energy_trading.api.routers" not in modules

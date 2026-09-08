@@ -1355,3 +1355,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** FastAPI-compatible lifecycle ownership can be proven independently of service exposure. `create_app()` installation, the service-access mechanism, route/dependency wiring, LangGraph routing, and operational RAG remain deferred. Direct provider SDK API-composition imports remain limited to the existing two approved modules. Chunk 75 continues to own settings loading; Chunk 74 continues to own client lifetime.
 
 ---
+
+## ADR-087 — Regulatory lifecycle is installed in the app factory before service exposure
+
+- **Status:** Accepted
+- **Context:** Chunk 76 defined a FastAPI-compatible Regulatory lifespan that owns Chunk 75 entry/exit without exposing the composed service. Leaving it unwired meant production process lifetime still did not own Regulatory clients. Folding settings, clients, or the query-execution service into `AppSettings` or `app.state` in the same slice would mix HTTP factory construction with provider configuration and pre-commit a service-access mechanism. A generic lifespan registry, DI container, or environment kill-switch would invent abstractions this repository does not own. Existing health/error tests must remain offline and must not require OpenAI/Qdrant credentials.
+- **Decision:**
+  - Production `create_app()` installs `build_regulatory_intelligence_lifespan()` as the default FastAPI `lifespan=` callback.
+  - App construction remains lazy. Calling `create_app()` does not load OpenAI, Qdrant, or Regulatory settings and does not create provider clients. Those actions remain inside Chunk 75, entered only on lifespan startup.
+  - A narrow keyword-only `lifespan` argument lets tests inject an explicit no-op/test callback. When that override is supplied, the production Chunk 76 builder is not called. There is no environment flag and no silent skip when settings are absent on the production path.
+  - Provider-specific settings do not enter `AppSettings`. `create_app()` does not read OpenAI keys, Qdrant URLs, model names, collection names, or vector size.
+  - The composed Regulatory service remains unexposed: no `app.state` key, no lifespan-state dictionary, no request-state mapping, no dependency provider, and no query execution on startup.
+  - Generic lifespan frameworks, service registries, and DI containers are rejected.
+- **Consequences:** Production FastAPI processes own Regulatory client lifetime through the existing Chunk 76/75/74 stack. HTTP handlers still cannot access the query-execution service. Route DTOs, dependency injection, LangGraph wiring, and operational RAG remain deferred. Transport tests stay credential-free by injecting the explicit no-op lifespan.
+
+---

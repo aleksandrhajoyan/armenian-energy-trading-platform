@@ -8,7 +8,7 @@ from energy_trading.api.app import create_app
 from energy_trading.shared.observability.correlation import is_valid_correlation_id
 from energy_trading.shared.observability.logging import CorrelationIdFilter, JsonLogFormatter
 
-from .helpers import api_client, make_test_settings
+from .helpers import api_client, make_test_settings, noop_lifespan
 
 
 async def test_health_reuses_valid_correlation_id() -> None:
@@ -61,7 +61,7 @@ async def test_sequential_requests_do_not_leak_correlation_ids() -> None:
 
 
 async def test_concurrent_requests_do_not_leak_correlation_ids() -> None:
-    application = create_app(make_test_settings())
+    application = create_app(make_test_settings(), lifespan=noop_lifespan)
     async with api_client(application) as client:
         responses = await asyncio.gather(
             *[

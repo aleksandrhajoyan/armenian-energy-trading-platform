@@ -11,6 +11,13 @@ from energy_trading.api.app import create_app
 from energy_trading.shared.config.settings import AppEnvironment, AppSettings
 
 
+@asynccontextmanager
+async def noop_lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Test-only lifespan that owns no Regulatory runtime."""
+
+    yield
+
+
 def make_test_settings(
     *,
     app_name: str = "AI Energy Trading Platform",
@@ -33,7 +40,11 @@ async def api_client(
     *,
     raise_app_exceptions: bool = True,
 ) -> AsyncIterator[AsyncClient]:
-    app = application if application is not None else create_app(make_test_settings())
+    app = (
+        application
+        if application is not None
+        else create_app(make_test_settings(), lifespan=noop_lifespan)
+    )
     transport = ASGITransport(app=app, raise_app_exceptions=raise_app_exceptions)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
