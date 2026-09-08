@@ -10,11 +10,15 @@ failure classification, tuple-level failure-fact classification composition,
 Phase 2 failure-fact selection contract, Phase 2 strict single-failure
 selector, Phase 2 attempt-number source contract, Phase 2 initial
 attempt-number source, Phase 2 initial terminal-fail failure policy,
-document vector-search query preparation, Regulatory Intelligence query
+document vector-search query preparation, document vector index-entry
+preparation, Regulatory Intelligence query
 execution, and
 LangGraph runtime.
 """
 
+from energy_trading.application.orchestration.document_vector_index_entry_preparation import (
+    DocumentVectorIndexEntryPreparationService,
+)
 from energy_trading.application.orchestration.document_vector_search_query_preparation import (
     DocumentVectorSearchQueryPreparationService,
 )
@@ -104,6 +108,7 @@ from energy_trading.application.orchestration.state import (
 
 __all__ = [
     "ConcurrentParallelIngestionExecutor",
+    "DocumentVectorIndexEntryPreparationService",
     "DocumentVectorSearchQueryPreparationService",
     "FailureAction",
     "FailurePolicyContext",

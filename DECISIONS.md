@@ -1451,3 +1451,16 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Document-chunk embeddings can be produced offline behind the published application port. Operational indexing, PDF/OCR, verified Armenian corpus, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.
 
 ---
+
+## ADR-094 — Document vector index-entry preparation service
+
+- **Status:** Accepted
+- **Context:** Chunks 19–20 published `DocumentEmbeddingPort` and `DocumentVectorIndexEntry`, and Chunk 83 added a concrete document-chunk embedder. Callers still had no provider-neutral application step that embeds already-normalized chunks and pairs them into index entries. Folding that pairing into `DocumentVectorIndexPort.index()`, Qdrant, OpenAI adapter construction, FastAPI, or a generic indexing/RAG pipeline would pre-commit a write runtime this slice does not own.
+- **Decision:**
+  - Application owns `DocumentVectorIndexEntryPreparationService` in `application/orchestration/document_vector_index_entry_preparation.py`.
+  - The service injects exactly `DocumentEmbeddingPort`. Keyword-only `async prepare(*, chunks) -> tuple[DocumentVectorIndexEntry, ...]` awaits `embed(...)` exactly once, forwards the original chunk tuple unchanged, preserves input order, and constructs existing `DocumentVectorIndexEntry` values from matching `(document_id, chunk_id)` identities.
+  - Empty input delegates to the published embedding contract and returns `()`. Cardinality mismatch or identity mismatch fails closed as sanitized `DependencyUnavailableError` without exposing chunk text, identifiers, vectors, or provider details. Existing application errors from `embed(...)` propagate unchanged. There is no retry, fallback, sorting, deduplication, or `.index(...)`.
+  - The service remains unwired from `create_app()`, Regulatory runtime composition, the OpenAI document embedding adapter, Qdrant indexing, LangGraph, and extraction.
+- **Consequences:** Canonical index entries can be prepared offline behind the published embedding port. Operational document indexing, PDF/OCR, verified Armenian corpus, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.
+
+---
