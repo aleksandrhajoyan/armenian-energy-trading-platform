@@ -465,8 +465,6 @@ def test_graph_policy_extractor_and_executor_remain_unwired_to_classification() 
         assert "classify_parallel_ingestion_agent_failure" not in source
         assert "ParallelIngestionFailureFact" not in source
         assert "parallel_ingestion_failure_fact" not in source
-    graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
-    assert "add_conditional_edges" not in graph_source
 
 
 def test_api_composition_does_not_import_or_construct_classification() -> None:

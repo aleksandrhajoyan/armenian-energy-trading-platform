@@ -405,8 +405,6 @@ def test_graph_workflow_and_transitions_remain_unwired_to_the_decision_service()
         assert "build_parallel_ingestion_failure_policy_context" not in source
         assert "execute_parallel_ingestion_failure_action" not in source
         assert "ParallelIngestionFailureHandlingService" not in source
-    graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
-    assert "add_conditional_edges" not in graph_source
 
 
 def test_api_composition_does_not_import_or_construct_the_decision_service() -> None:

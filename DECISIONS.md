@@ -1093,3 +1093,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** The single-failure terminal path is executable entirely inside application code. Future LangGraph wiring can remain thin. Multi-failure selection and retry/fallback behavior remain separate concerns.
 
 ---
+
+## ADR-072 — LangGraph captures Phase 2 exception groups at the workflow-step boundary and delegates terminal failure handling
+
+- **Status:** Accepted
+- **Context:** Chunk 61 published `ParallelIngestionFailureRuntimeHandlingService` as the outer application composition for Phase 2 `BaseExceptionGroup` handling. Without a narrow graph catch and route, successful Phase 2 still reached `FORECASTING` / `RUNNING`, while exception groups still escaped the graph. Duplicating preparation, selection, policy, or `fail_parallel_ingestion` inside `graph.py` would violate the already-published application ownership of those seams.
+- **Decision:**
+  - `build_workflow_graph` injects the published runtime failure handler through keyword-only dependency injection alongside `ParallelIngestionWorkflowStep`.
+  - The graph factory does not construct the handler or any of its dependencies.
+  - Node `parallel_ingestion` awaits the injected step and catches only `BaseExceptionGroup`. The exact group object and the original current `WorkflowState` are forwarded to `handle` exactly once.
+  - Ordinary non-group exceptions continue to propagate and are not sent through the Phase 2 ExceptionGroup pipeline.
+  - A Phase-2-specific conditional edge after `parallel_ingestion` routes `INGESTION` / `RUNNING` to `parallel_ingestion_success_transition` and `INGESTION` / `FAILED` to `END`.
+  - Unexpected post-Phase-2 phase/status combinations fail closed as `InvalidRequestError`.
+  - Lower-level failure interpretation stays outside `graph.py`.
+- **Consequences:** The currently supported one-attributed-failure path can terminate at `INGESTION` / `FAILED` through LangGraph without expanding `WorkflowState` or adding a checkpointer, store, retry/fallback execution, multi-failure selector, diagnostics mapping, or Phase 3. Direct non-group failures retain existing propagation. Multi-failure selection and retry/fallback remain deferred.
+
+---

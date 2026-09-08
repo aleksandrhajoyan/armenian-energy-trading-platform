@@ -398,13 +398,11 @@ def test_graph_delegates_to_published_transition_without_reimplementing_policy()
         elif name == "advance_after_parallel_ingestion":
             transition_calls += 1
     assert add_node_count == 3
-    assert add_edge_count == 4
+    assert add_edge_count == 3
     assert transition_calls == 1
-    assert "add_conditional_edges" not in graph_source
     identifiers = _identifier_names(GRAPH_MODULE)
     assert "replace" not in identifiers
-    assert "WorkflowPhase" not in identifiers
-    assert "WorkflowStatus" not in identifiers
+    assert "add_conditional_edges" in graph_source
     transition_source = TRANSITION_MODULE.read_text(encoding="utf-8").lower()
     assert "langgraph" not in transition_source
 

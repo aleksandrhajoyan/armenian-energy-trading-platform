@@ -454,8 +454,6 @@ def test_graph_policy_and_lower_layers_remain_unwired_to_the_policy() -> None:
         source = path.read_text(encoding="utf-8")
         assert "InitialParallelIngestionFailurePolicy" not in source
         assert "parallel_ingestion_initial_failure_policy" not in source
-    graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
-    assert "add_conditional_edges" not in graph_source
 
 
 def test_api_composition_does_not_import_or_construct_the_policy() -> None:

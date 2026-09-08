@@ -428,8 +428,6 @@ def test_graph_policy_and_classification_remain_unwired_to_attempt_number() -> N
         source = path.read_text(encoding="utf-8")
         assert "ParallelIngestionAttemptNumberPort" not in source
         assert "parallel_ingestion_attempt_number" not in source
-    graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
-    assert "add_conditional_edges" not in graph_source
 
 
 def test_api_composition_does_not_import_or_construct_attempt_number() -> None:

@@ -567,8 +567,6 @@ def test_graph_policy_and_lower_layers_remain_unwired_to_the_resolution_service(
         source = path.read_text(encoding="utf-8")
         assert "ParallelIngestionFailureContextResolutionService" not in source
         assert "parallel_ingestion_failure_context_resolution" not in source
-    graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
-    assert "add_conditional_edges" not in graph_source
 
 
 def test_api_composition_does_not_import_or_construct_the_resolution_service() -> None:

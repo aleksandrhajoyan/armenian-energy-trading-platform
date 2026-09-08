@@ -263,7 +263,6 @@ ALLOWED_INIT_ANNOTATIONS = {
 }
 
 UNWIRED_MODULES = (
-    GRAPH_MODULE,
     WORKFLOW_MODULE,
     EXECUTOR_MODULE,
     EXTRACTION_MODULE,
@@ -614,8 +613,17 @@ def test_graph_policy_and_lower_layers_remain_unwired_to_the_runtime_handling_se
         source = path.read_text(encoding="utf-8")
         assert "ParallelIngestionFailureRuntimeHandlingService" not in source
         assert "parallel_ingestion_failure_runtime_handling" not in source
+    graph_names = imported_names(GRAPH_MODULE)
+    assert "ParallelIngestionFailureRuntimeHandlingService" in graph_names
+    graph_modules = imported_modules(GRAPH_MODULE)
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_runtime_handling"
+        in graph_modules
+    )
     graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
-    assert "add_conditional_edges" not in graph_source
+    assert "ParallelIngestionFailureContextPreparationService" not in graph_source
+    assert "ParallelIngestionFailureHandlingService" not in graph_source
+    assert "InitialParallelIngestionFailurePolicy" not in graph_source
 
 
 def test_api_composition_does_not_import_or_construct_the_runtime_handling_service() -> None:

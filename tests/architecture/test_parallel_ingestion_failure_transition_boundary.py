@@ -469,17 +469,14 @@ def test_graph_does_not_import_or_call_the_failure_transition() -> None:
         elif name == "fail_parallel_ingestion":
             failure_calls += 1
     assert add_node_count == 3
-    assert add_edge_count == 4
+    assert add_edge_count == 3
     assert success_calls == 1
     assert failure_calls == 0
-    assert "add_conditional_edges" not in graph_source
     assert "fail_parallel_ingestion" not in graph_source
     assert "execute_parallel_ingestion_failure_action" not in graph_source
     assert "ParallelIngestionFailureHandlingService" not in graph_source
     identifiers = _identifier_names(GRAPH_MODULE)
     assert "replace" not in identifiers
-    assert "WorkflowPhase" not in identifiers
-    assert "WorkflowStatus" not in identifiers
     assert "execute_parallel_ingestion_failure_action" not in identifiers
     transition_source = FAILURE_TRANSITION_MODULE.read_text(encoding="utf-8").lower()
     assert "langgraph" not in transition_source

@@ -94,7 +94,6 @@ FORBIDDEN_GRAPH_NAMES = frozenset(
         "InMemorySaver",
         "BaseStore",
         "BaseCache",
-        "add_conditional_edges",
         "entrypoint",
         "task",
         "interrupt",
@@ -108,6 +107,8 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
     {
         "langgraph.graph",
         "langgraph.graph.state",
+        "energy_trading.application.errors",
+        "energy_trading.application.orchestration.parallel_ingestion_failure_runtime_handling",
         "energy_trading.application.orchestration.parallel_ingestion_transition",
         "energy_trading.application.orchestration.parallel_ingestion_workflow",
         "energy_trading.application.orchestration.state",
@@ -115,8 +116,12 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
         "START",
         "StateGraph",
         "CompiledStateGraph",
+        "InvalidRequestError",
+        "ParallelIngestionFailureRuntimeHandlingService",
         "ParallelIngestionWorkflowStep",
+        "WorkflowPhase",
         "WorkflowState",
+        "WorkflowStatus",
         "advance_after_parallel_ingestion",
     }
 )
@@ -383,10 +388,12 @@ def test_graph_module_does_not_import_outer_layers_or_vendors() -> None:
 def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> None:
     names = imported_names(GRAPH_MODULE)
     assert "WorkflowState" in names
+    assert "WorkflowPhase" in names
+    assert "WorkflowStatus" in names
     assert "ParallelIngestionWorkflowStep" in names
+    assert "ParallelIngestionFailureRuntimeHandlingService" in names
     assert "advance_after_parallel_ingestion" in names
-    assert "WorkflowPhase" not in names
-    assert "WorkflowStatus" not in names
+    assert "InvalidRequestError" in names
     assert "AgentPort" not in names
     assert "AgentName" not in names
     assert "ParallelIngestionPlan" not in names
@@ -395,6 +402,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "ParallelIngestionWorkflowContextPort" not in names
     assert "ConcurrentParallelIngestionExecutor" not in names
     assert "FailurePolicyPort" not in names
+    assert "FailureAction" not in names
     assert "fail_parallel_ingestion" not in names
     assert "ParallelIngestionFailureDecisionService" not in names
     assert "build_parallel_ingestion_failure_policy_context" not in names
@@ -412,7 +420,6 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "StrictSingleParallelIngestionFailureSelector" not in names
     assert "InitialParallelIngestionAttemptNumberSource" not in names
     assert "InitialParallelIngestionFailurePolicy" not in names
-    assert "ParallelIngestionFailureRuntimeHandlingService" not in names
     assert "WeatherAndRenewableForecastAgent" not in names
     assert "HydroResourcesAgent" not in names
     assert "GenerationAvailabilityAgent" not in names
@@ -421,6 +428,10 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     modules = imported_modules(GRAPH_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion_workflow" in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_transition" in modules
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_runtime_handling"
+        in modules
+    )
     assert (
         "energy_trading.application.orchestration.parallel_ingestion_failure_transition"
         not in modules
@@ -481,10 +492,6 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
         "energy_trading.application.orchestration.parallel_ingestion_initial_failure_policy"
         not in modules
     )
-    assert (
-        "energy_trading.application.orchestration.parallel_ingestion_failure_runtime_handling"
-        not in modules
-    )
     assert "energy_trading.application.agents.weather_and_renewable_forecast" not in modules
     assert "energy_trading.application.agents.hydro_resources" not in modules
     assert "energy_trading.application.agents.generation_availability" not in modules
@@ -509,7 +516,7 @@ def test_graph_module_excludes_forbidden_runtime_features() -> None:
             call_names.add(func.id)
         elif isinstance(func, ast.Attribute):
             call_names.add(func.attr)
-    assert "add_conditional_edges" not in call_names
+    assert "add_conditional_edges" in call_names
     assert "compile" in call_names
     compile_calls = [
         node
@@ -524,7 +531,7 @@ def test_graph_module_excludes_forbidden_runtime_features() -> None:
     assert compile_call.keywords == []
 
 
-def test_graph_factory_requires_injected_parallel_ingestion_step() -> None:
+def test_graph_factory_requires_injected_step_and_runtime_failure_handler() -> None:
     tree = ast.parse(GRAPH_MODULE.read_text(encoding="utf-8"), filename=str(GRAPH_MODULE))
     factory = next(
         node
@@ -535,11 +542,17 @@ def test_graph_factory_requires_injected_parallel_ingestion_step() -> None:
     assert factory.args.vararg is None
     assert factory.args.kwarg is None
     assert factory.args.posonlyargs == []
-    assert [arg.arg for arg in factory.args.kwonlyargs] == ["parallel_ingestion_step"]
-    annotation = factory.args.kwonlyargs[0].annotation
-    assert annotation is not None
-    assert ast.unparse(annotation) == "ParallelIngestionWorkflowStep"
-    assert factory.args.kw_defaults == [None]
+    assert [arg.arg for arg in factory.args.kwonlyargs] == [
+        "parallel_ingestion_step",
+        "parallel_ingestion_failure_runtime_handler",
+    ]
+    step_annotation = factory.args.kwonlyargs[0].annotation
+    handler_annotation = factory.args.kwonlyargs[1].annotation
+    assert step_annotation is not None
+    assert handler_annotation is not None
+    assert ast.unparse(step_annotation) == "ParallelIngestionWorkflowStep"
+    assert ast.unparse(handler_annotation) == "ParallelIngestionFailureRuntimeHandlingService"
+    assert factory.args.kw_defaults == [None, None]
 
 
 def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
@@ -556,8 +569,10 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "parallel_ingestion_failure_transition" not in string_constants
     add_node_count = 0
     add_edge_count = 0
+    add_conditional_edges_count = 0
     constructed: list[str] = []
     transition_calls = 0
+    handler_calls = 0
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -571,10 +586,15 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
             add_node_count += 1
         elif name == "add_edge":
             add_edge_count += 1
+        elif name == "add_conditional_edges":
+            add_conditional_edges_count += 1
         elif name == "advance_after_parallel_ingestion":
             transition_calls += 1
+        elif name == "handle":
+            handler_calls += 1
         if name in {
             "ParallelIngestionWorkflowStep",
+            "ParallelIngestionFailureRuntimeHandlingService",
             "ConcurrentParallelIngestionExecutor",
             "ParallelIngestionPlan",
             "ParallelIngestionSuccess",
@@ -586,10 +606,13 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
         }:
             constructed.append(name)
     assert add_node_count == 3
-    assert add_edge_count == 4
+    assert add_edge_count == 3
+    assert add_conditional_edges_count == 1
     assert transition_calls == 1
+    assert handler_calls == 1
     assert constructed == []
     assert "FailurePolicyPort" not in source
+    assert "FailureAction" not in source
     assert "fail_parallel_ingestion" not in source
     assert "ParallelIngestionFailureDecisionService" not in source
     assert "build_parallel_ingestion_failure_policy_context" not in source
@@ -617,13 +640,28 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "parallel_ingestion_initial_attempt_number_source" not in source
     assert "InitialParallelIngestionFailurePolicy" not in source
     assert "parallel_ingestion_initial_failure_policy" not in source
-    assert "ParallelIngestionFailureRuntimeHandlingService" not in source
-    assert "parallel_ingestion_failure_runtime_handling" not in source
-    assert "add_conditional_edges" not in source
+    assert "ParallelIngestionFailureRuntimeHandlingService" in source
+    assert "parallel_ingestion_failure_runtime_handling" in source
+    assert "add_conditional_edges" in source
     identifiers = _identifier_names(GRAPH_MODULE)
     assert "replace" not in identifiers
-    assert "WorkflowPhase" not in identifiers
-    assert "WorkflowStatus" not in identifiers
+    assert "WorkflowPhase" in identifiers
+    assert "WorkflowStatus" in identifiers
+    assert ".exceptions" not in source
+    assert "__cause__" not in source
+
+
+def test_graph_catches_only_base_exception_group_at_phase2_step_boundary() -> None:
+    tree = ast.parse(GRAPH_MODULE.read_text(encoding="utf-8"), filename=str(GRAPH_MODULE))
+    handlers = [node for node in ast.walk(tree) if isinstance(node, ast.ExceptHandler)]
+    assert len(handlers) == 1
+    handler = handlers[0]
+    assert isinstance(handler.type, ast.Name)
+    assert handler.type.id == "BaseExceptionGroup"
+    caught_types = {ast.unparse(node.type) for node in handlers if node.type is not None}
+    assert caught_types == {"BaseExceptionGroup"}
+    assert "Exception" not in caught_types
+    assert "BaseException" not in caught_types
 
 
 def test_graph_module_has_no_type_ignore_or_private_langgraph_imports() -> None:
