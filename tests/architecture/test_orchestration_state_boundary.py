@@ -114,6 +114,8 @@ FORBIDDEN_FIELD_NAMES = frozenset(
         "policy_context",
         "retry_state",
         "fallback_state",
+        "failure_group",
+        "failure_policy_context",
         "load_forecasts",
         "price_forecasts",
         "risk_assessment",
@@ -263,6 +265,11 @@ def test_workflow_state_has_only_construction_validation() -> None:
         "energy_trading.application.orchestration.parallel_ingestion_failure_context_resolution"
         not in modules
     )
+    assert "ParallelIngestionFailureContextPreparationService" not in names
+    assert (
+        "energy_trading.application.orchestration.parallel_ingestion_failure_context_preparation"
+        not in modules
+    )
 
 
 def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
@@ -294,6 +301,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
         "ParallelIngestionAttemptNumberPort",
         "ParallelIngestionWorkflowContextPort",
         "ConcurrentParallelIngestionExecutor",
+        "ParallelIngestionFailureContextPreparationService",
         "ParallelIngestionFailureContextResolutionService",
         "ParallelIngestionFailureDecisionService",
         "ParallelIngestionFailureFact",

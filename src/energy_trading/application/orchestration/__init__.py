@@ -1,7 +1,8 @@
 """Application orchestration contracts, concurrent ingestion executor,
 workflow context port, workflow step, Phase 2 success and terminal-failure
 transitions, failure-policy context construction, failure-policy context
-resolution service, failure-policy decision service, terminal FAIL action
+resolution service, failure-policy context preparation service,
+failure-policy decision service, terminal FAIL action
 execution, prepared failure-handling composition, Phase 2 agent-failure
 attribution, ExceptionGroup attributed-leaf extraction, sanitized one-leaf
 failure classification, tuple-level failure-fact classification composition,
@@ -44,6 +45,9 @@ from energy_trading.application.orchestration.parallel_ingestion_failure_classif
 )
 from energy_trading.application.orchestration.parallel_ingestion_failure_context import (
     build_parallel_ingestion_failure_policy_context,
+)
+from energy_trading.application.orchestration.parallel_ingestion_failure_context_preparation import (  # noqa: E501
+    ParallelIngestionFailureContextPreparationService,
 )
 from energy_trading.application.orchestration.parallel_ingestion_failure_context_resolution import (
     ParallelIngestionFailureContextResolutionService,
@@ -91,6 +95,7 @@ __all__ = [
     "ParallelIngestionAgentFailure",
     "ParallelIngestionAttemptNumberPort",
     "ParallelIngestionExecutionPort",
+    "ParallelIngestionFailureContextPreparationService",
     "ParallelIngestionFailureContextResolutionService",
     "ParallelIngestionFailureDecisionService",
     "ParallelIngestionFailureFact",

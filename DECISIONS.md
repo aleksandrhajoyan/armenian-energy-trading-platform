@@ -1051,3 +1051,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** The existing single-failure application pipeline can construct a real `FailurePolicyContext` using concrete selection and concrete initial-attempt resolution. This source is intentionally insufficient for future retry execution. Retry-capable attempt tracking requires separate architectural review.
 
 ---
+
+## ADR-069 — Phase 2 exception-group interpretation is composed inside application before runtime routing
+
+- **Status:** Accepted
+- **Context:** The application now has individually reviewed stages for attributed-leaf extraction, sanitized failure classification, and failure-context resolution. Future LangGraph runtime code should not duplicate or own these interpretation steps.
+- **Decision:**
+  - Application owns LangGraph-free `ParallelIngestionFailureContextPreparationService` in `parallel_ingestion_failure_context_preparation.py`.
+  - Constructor injects an already-constructed `ParallelIngestionFailureContextResolutionService`.
+  - Keyword-only `async prepare(*, workflow_id, phase, failure_group) -> FailurePolicyContext` accepts workflow identity, `WorkflowPhase`, and `BaseExceptionGroup`.
+  - The service delegates extraction, tuple-level classification, and context resolution in that order.
+  - It does not invoke failure policy, execute a failure action, or mutate `WorkflowState`.
+- **Consequences:** Future runtime/LangGraph failure routing can call one application-level entry point. Exception interpretation remains application-owned and testable independently of LangGraph. Multi-failure selection, retries, and graph wiring remain separate reviewed concerns.
+
+---
