@@ -44,6 +44,13 @@ API_COMPOSITION_RELATIVE_PREFIX = "energy_trading/api/composition/"
 REGULATORY_PROVIDER_RUNTIME_RELATIVE = (
     "energy_trading/api/composition/regulatory_intelligence_runtime.py"
 )
+REGULATORY_CONFIGURED_RUNTIME_RELATIVE = (
+    "energy_trading/api/composition/regulatory_intelligence_configured_runtime.py"
+)
+REGULATORY_PROVIDER_COMPOSITION_RELATIVES = (
+    REGULATORY_PROVIDER_RUNTIME_RELATIVE,
+    REGULATORY_CONFIGURED_RUNTIME_RELATIVE,
+)
 
 
 def is_api_composition_module(path: Path) -> bool:
@@ -52,6 +59,10 @@ def is_api_composition_module(path: Path) -> bool:
 
 def is_regulatory_provider_runtime_module(path: Path) -> bool:
     return path.relative_to(SRC_ROOT).as_posix() == REGULATORY_PROVIDER_RUNTIME_RELATIVE
+
+
+def is_regulatory_provider_composition_module(path: Path) -> bool:
+    return path.relative_to(SRC_ROOT).as_posix() in REGULATORY_PROVIDER_COMPOSITION_RELATIVES
 
 
 def http_transport_api_paths(api_root: Path) -> list[Path]:

@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
+    REGULATORY_CONFIGURED_RUNTIME_RELATIVE,
     SRC_ROOT,
     annotation_type_names,
     collect_import_violations,
@@ -254,7 +255,14 @@ def test_inner_layers_do_not_import_regulatory_runtime_settings() -> None:
     forbidden = ("energy_trading.shared.config.regulatory_intelligence",)
     assert collect_import_violations(DOMAIN_ROOT, forbidden) == []
     assert collect_import_violations(APPLICATION_ROOT, forbidden) == []
-    assert collect_import_violations(API_ROOT, forbidden) == []
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            forbidden,
+            exclude_relative_prefixes=(REGULATORY_CONFIGURED_RUNTIME_RELATIVE,),
+        )
+        == []
+    )
     if ML_ROOT.exists():
         assert collect_import_violations(ML_ROOT, forbidden) == []
 

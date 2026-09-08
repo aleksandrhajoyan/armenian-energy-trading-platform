@@ -1243,7 +1243,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Model selection, base URL, organization, timeout, and retry/fallback mechanics remain outside this settings object and factory.
   - Implicit SDK retries are disabled (`max_retries=0`) so application orchestration retains retry ownership. This is not an implementation of retry logic.
   - `create_app()`, LangGraph, and `build_regulatory_intelligence_query_execution` remain unwired to OpenAI settings and the factory. Chunk 71's provider-aware builder receives an already-created client and does not call this factory.
-- **Consequences:** Client construction capability exists offline. Production OpenAI runtime lifecycle and Regulatory RAG remain absent. Domain, application, and ML remain OpenAI-SDK-free. HTTP routes/`create_app()` remain OpenAI-SDK-free. The approved production OpenAI SDK allowlist is the two published adapters, this client-factory module, and the one provider-aware Regulatory composition module.
+- **Consequences:** Client construction capability exists offline. Production OpenAI runtime lifecycle and Regulatory RAG remain absent. Domain, application, and ML remain OpenAI-SDK-free. HTTP routes/`create_app()` remain OpenAI-SDK-free. The approved production OpenAI SDK allowlist is the two published adapters, this client-factory module, and the two exact API provider-composition modules (`api/composition/regulatory_intelligence_runtime.py` and `api/composition/regulatory_intelligence_configured_runtime.py`).
 
 ---
 
@@ -1261,7 +1261,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Qdrant adapter configuration is the already-published `QdrantDocumentVectorConfig`. The builder does not create collections, indexes, distance metrics, or payload schemas.
   - Construction performs no provider I/O: no embed, search, infer, execute, run, health, collection, or close/aclose operations.
   - The builder owns no FastAPI lifespan, client lifecycle, or LangGraph wiring. `create_app()` remains unwired.
-  - Application, agents, domain, and ML do not import the provider-aware builder. HTTP routes remain provider-SDK-free. The OpenAI/Qdrant SDK exception is limited to this one API composition module plus existing approved infrastructure modules.
+  - Application, agents, domain, and ML do not import the provider-aware builder. HTTP routes remain provider-SDK-free. The OpenAI/Qdrant SDK exception is limited to the two exact API provider-composition modules (`api/composition/regulatory_intelligence_runtime.py` and `api/composition/regulatory_intelligence_configured_runtime.py`) plus existing approved infrastructure modules.
 - **Consequences:** Concrete Regulatory provider object composition exists offline. Production settings loading, client lifecycle, HTTP invocation, LangGraph Phase 1 wiring, document extraction/indexing, and operational RAG remain absent.
 
 ---
@@ -1280,6 +1280,26 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - The settings module is SDK-free and runtime-object-free. It does not import OpenAI or Qdrant clients, does not construct `QdrantDocumentVectorConfig`, and does not call Chunk 67 or Chunk 71 builders.
   - `load_regulatory_intelligence_runtime_settings(*, env_file=...)` is uncached and separate from `AppSettings`. Process health and `create_app()` do not load it.
   - Generic configuration frameworks, model catalogs, provider registries, and settings aggregation DTOs are rejected.
-- **Consequences:** Callers can load Regulatory runtime-specific values independently of provider connection settings. Production settings→client→runtime wiring, HTTP invocation, and operational RAG remain absent.
+- **Consequences:** Callers can load Regulatory runtime-specific values independently of provider connection settings. Production settings→client→runtime wiring, HTTP invocation, and operational RAG remain absent. Chunk 73 adapts an already-constructed settings object without loading environment values.
+
+---
+
+## ADR-083 — Regulatory runtime settings are adapted in a separate configured composition layer
+
+- **Status:** Accepted
+- **Context:** Chunk 72 published typed `RegulatoryIntelligenceRuntimeSettings` without constructing `QdrantDocumentVectorConfig` or calling Chunk 71. Folding that translation into the settings module would mix typed configuration with adapter config. Folding it into the Chunk 71 builder would change that explicit five-argument seam. Folding env loading, client factories, or FastAPI lifespan into the same function would mix still-deferred lifecycle with configuration-to-composition adaptation. A generic runtime abstraction, settings registry, or DI container would invent an abstraction this repository does not own.
+- **Decision:**
+  - Configured composition lives in a separate API composition module: `build_regulatory_intelligence_configured_runtime` in `energy_trading.api.composition.regulatory_intelligence_configured_runtime`.
+  - Chunk 72 remains plain typed config. It still does not construct `QdrantDocumentVectorConfig`.
+  - Chunk 71 remains unchanged. It still receives already-created clients, existing `QdrantDocumentVectorConfig`, and two explicit model strings.
+  - The configured builder is synchronous and keyword-only. It receives already-created `AsyncOpenAI` and `AsyncQdrantClient` instances plus already-constructed `RegulatoryIntelligenceRuntimeSettings`.
+  - It constructs exactly one `QdrantDocumentVectorConfig` from `settings.qdrant_collection_name` and `settings.qdrant_vector_size`, then calls `build_regulatory_intelligence_provider_runtime` exactly once with those clients, that config, and `settings.query_embedding_model` / `settings.constraint_inference_model`, and returns that service unchanged.
+  - Clients remain injected. The builder does not call settings loaders, client factories, `os.getenv`, or `.env`. It does not construct OpenAI or Qdrant clients.
+  - Vector size is not inferred from the embedding model. No score thresholds, filters, distance metrics, collection-creation options, or defaults are added.
+  - The builder does not construct provider adapters, the query-preparation service, the Regulatory agent, or the query-execution service. Chunk 71 and Chunk 67 retain those responsibilities.
+  - Construction performs no provider I/O and owns no client lifecycle, FastAPI lifespan, or LangGraph wiring. `create_app()` remains unwired.
+  - The API provider-composition exception is exactly two modules: `regulatory_intelligence_runtime.py` and `regulatory_intelligence_configured_runtime.py`. It is not broadened to all `api/composition`. HTTP routes remain provider-SDK-free.
+  - Generic runtime abstractions, provider registries, and DI containers are rejected.
+- **Consequences:** Callers can supply injected clients plus typed Regulatory settings and receive a wired `RegulatoryIntelligenceQueryExecutionService`. Settings loading, client construction, client lifecycle, HTTP invocation, and operational RAG remain absent.
 
 ---

@@ -6,10 +6,11 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
-    REGULATORY_PROVIDER_RUNTIME_RELATIVE,
+    REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
     SRC_ROOT,
     collect_import_violations,
     imported_names,
+    is_regulatory_provider_composition_module,
     is_regulatory_provider_runtime_module,
 )
 
@@ -246,7 +247,7 @@ def test_inner_layers_remain_qdrant_free() -> None:
         collect_import_violations(
             API_ROOT,
             FORBIDDEN_INNER_QDRANT,
-            exclude_relative_prefixes=(REGULATORY_PROVIDER_RUNTIME_RELATIVE,),
+            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
         )
         == []
     )
@@ -265,18 +266,21 @@ def test_create_app_still_does_not_wire_qdrant() -> None:
         collect_import_violations(
             API_ROOT,
             forbidden_wiring,
-            exclude_relative_prefixes=(REGULATORY_PROVIDER_RUNTIME_RELATIVE,),
+            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
         )
         == []
     )
     for path in sorted(API_ROOT.rglob("*.py")):
         names = imported_names(path)
-        if is_regulatory_provider_runtime_module(path):
+        if is_regulatory_provider_composition_module(path):
             assert "AsyncQdrantClient" in names
-            assert "QdrantDocumentVectorSearch" in names
             assert "QdrantDocumentVectorConfig" in names
             assert "QdrantDocumentVectorIndex" not in names
             assert "create_qdrant_client" not in names
+            if is_regulatory_provider_runtime_module(path):
+                assert "QdrantDocumentVectorSearch" in names
+            else:
+                assert "QdrantDocumentVectorSearch" not in names
             continue
         assert "AsyncQdrantClient" not in names
         assert "QdrantDocumentVectorIndex" not in names

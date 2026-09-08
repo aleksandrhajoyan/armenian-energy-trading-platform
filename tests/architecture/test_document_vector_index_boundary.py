@@ -6,7 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
-    REGULATORY_PROVIDER_RUNTIME_RELATIVE,
+    REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
     SRC_ROOT,
     annotation_type_names,
     async_function_arg_names,
@@ -262,7 +262,7 @@ def test_api_composition_does_not_import_or_construct_document_vector_index() ->
         collect_import_violations(
             API_ROOT,
             forbidden_wiring,
-            exclude_relative_prefixes=(REGULATORY_PROVIDER_RUNTIME_RELATIVE,),
+            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
         )
         == []
     )

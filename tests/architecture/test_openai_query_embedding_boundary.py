@@ -6,7 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
-    REGULATORY_PROVIDER_RUNTIME_RELATIVE,
+    REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
     SRC_ROOT,
     annotation_type_names,
     async_function_arg_names,
@@ -14,6 +14,7 @@ from tests.architecture.import_inspection import (
     imported_modules,
     imported_names,
     is_forbidden,
+    is_regulatory_provider_composition_module,
     is_regulatory_provider_runtime_module,
 )
 
@@ -32,12 +33,16 @@ INFERENCE_ADAPTER_MODULE = (
 CLIENT_FACTORY_MODULE = PRODUCTION_ROOT / "infrastructure" / "openai" / "client.py"
 COMPOSITION_MODULE = API_ROOT / "composition" / "regulatory_intelligence.py"
 PROVIDER_RUNTIME_MODULE = API_ROOT / "composition" / "regulatory_intelligence_runtime.py"
+CONFIGURED_RUNTIME_MODULE = (
+    API_ROOT / "composition" / "regulatory_intelligence_configured_runtime.py"
+)
 ALLOWED_OPENAI_ADAPTER_MODULES = frozenset(
     {
         ADAPTER_MODULE.resolve(),
         INFERENCE_ADAPTER_MODULE.resolve(),
         CLIENT_FACTORY_MODULE.resolve(),
         PROVIDER_RUNTIME_MODULE.resolve(),
+        CONFIGURED_RUNTIME_MODULE.resolve(),
     }
 )
 
@@ -193,6 +198,7 @@ def test_openai_sdk_imports_exist_only_in_the_query_embedding_adapter() -> None:
     assert "openai" in imported_modules(INFERENCE_ADAPTER_MODULE)
     assert "openai" in imported_modules(CLIENT_FACTORY_MODULE)
     assert "openai" in imported_modules(PROVIDER_RUNTIME_MODULE)
+    assert "openai" in imported_modules(CONFIGURED_RUNTIME_MODULE)
 
 
 def test_inner_layers_do_not_import_openai() -> None:
@@ -202,7 +208,7 @@ def test_inner_layers_do_not_import_openai() -> None:
         collect_import_violations(
             API_ROOT,
             FORBIDDEN_INNER_OPENAI,
-            exclude_relative_prefixes=(REGULATORY_PROVIDER_RUNTIME_RELATIVE,),
+            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
         )
         == []
     )
@@ -340,15 +346,18 @@ def test_create_app_and_composition_do_not_construct_openai() -> None:
         collect_import_violations(
             API_ROOT,
             forbidden_wiring,
-            exclude_relative_prefixes=(REGULATORY_PROVIDER_RUNTIME_RELATIVE,),
+            exclude_relative_prefixes=REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
         )
         == []
     )
     for path in sorted(API_ROOT.rglob("*.py")):
         names = imported_names(path)
-        if is_regulatory_provider_runtime_module(path):
-            assert "OpenAIDocumentQueryEmbeddingAdapter" in names
+        if is_regulatory_provider_composition_module(path):
             assert "AsyncOpenAI" in names
+            if is_regulatory_provider_runtime_module(path):
+                assert "OpenAIDocumentQueryEmbeddingAdapter" in names
+            else:
+                assert "OpenAIDocumentQueryEmbeddingAdapter" not in names
             continue
         assert "OpenAIDocumentQueryEmbeddingAdapter" not in names
         assert "AsyncOpenAI" not in names
