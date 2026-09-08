@@ -1,4 +1,4 @@
-"""Chunk 77 installs the Regulatory lifespan in create_app without exposing it."""
+"""Chunk 77 installs the Regulatory lifespan in create_app without writing app.state."""
 
 from __future__ import annotations
 
@@ -219,6 +219,7 @@ def test_production_default_installs_returned_lifespan_into_fastapi() -> None:
     assert builder_call.keywords == []
     source = API_APP.read_text(encoding="utf-8")
     assert "app.state" not in source
+    assert "regulatory_intelligence_query_execution_service" not in source
     assert ".execute(" not in source
     assert "global " not in source
     identifiers = {node.id for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Name)}
@@ -241,6 +242,7 @@ def test_health_router_and_http_routes_remain_service_free() -> None:
     assert "RegulatoryIntelligenceQueryExecutionService" not in health_names
     health_source = HEALTH_ROUTER.read_text(encoding="utf-8")
     assert "app.state" not in health_source
+    assert "regulatory_intelligence_query_execution_service" not in health_source
     assert (
         collect_http_api_import_violations(
             API_ROOT,
@@ -286,3 +288,4 @@ def test_application_domain_ml_and_graph_remain_unwired() -> None:
     assert "build_regulatory_intelligence_lifespan" not in source
     assert "create_app" not in imported_names(LIFESPAN_MODULE)
     assert "create_app" not in imported_names(LOADED_RUNTIME_MODULE)
+    assert "regulatory_intelligence_query_execution_service" not in source

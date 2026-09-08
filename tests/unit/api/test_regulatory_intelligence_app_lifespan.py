@@ -1,4 +1,4 @@
-"""Production create_app installs the Regulatory lifespan without exposing it."""
+"""Production create_app installs the Regulatory lifespan and exposes it on app.state."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from energy_trading.api.composition.regulatory_intelligence_lifespan import (
 from tests.unit.api.helpers import make_test_settings, noop_lifespan
 
 _LIFESPAN_MODULE = "energy_trading.api.composition.regulatory_intelligence_lifespan"
+_SERVICE_ATTR = "regulatory_intelligence_query_execution_service"
 
 
 @dataclass
@@ -75,11 +76,8 @@ class _LoadedRuntimeSpy:
             self.events.append("exit")
 
 
-def _state_values(owner: object) -> list[object]:
-    state = getattr(owner, "_state", {})
-    if isinstance(state, dict):
-        return list(state.values())
-    return []
+def _has_service(app: FastAPI) -> bool:
+    return hasattr(app.state, _SERVICE_ATTR)
 
 
 def test_production_create_app_installs_chunk_76_lifespan(
@@ -161,7 +159,7 @@ def test_production_default_is_not_noop(monkeypatch: pytest.MonkeyPatch) -> None
     assert sentinel.events == ["enter", "exit"]
 
 
-def test_startup_does_not_expose_or_invoke_a_regulatory_service(
+def test_create_app_exposes_chunk_75_service_on_app_state_during_lifespan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = _RecordingService()
@@ -172,18 +170,21 @@ def test_startup_does_not_expose_or_invoke_a_regulatory_service(
 
     monkeypatch.setattr(f"{_LIFESPAN_MODULE}.loaded_regulatory_intelligence_runtime", fake_loaded)
     application = create_app(make_test_settings())
+    assert _has_service(application) is False
 
     @application.get("/peek")
     async def peek(request: Request) -> dict[str, str]:
-        assert service not in _state_values(request.app.state)
-        assert service not in _state_values(request.state)
+        exposed = request.app.state.regulatory_intelligence_query_execution_service
+        assert exposed is service
         return {"status": "ok"}
 
     with TestClient(application) as client:
+        assert application.state.regulatory_intelligence_query_execution_service is service
         response = client.get("/peek")
         assert response.status_code == 200
-        assert service not in _state_values(application.state)
+        assert response.json() == {"status": "ok"}
         assert service.calls == []
+    assert _has_service(application) is False
     assert service.calls == []
 
 

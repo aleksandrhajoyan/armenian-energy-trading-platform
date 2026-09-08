@@ -1370,3 +1370,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Production FastAPI processes own Regulatory client lifetime through the existing Chunk 76/75/74 stack. HTTP handlers still cannot access the query-execution service. Route DTOs, dependency injection, LangGraph wiring, and operational RAG remain deferred. Transport tests stay credential-free by injecting the explicit no-op lifespan.
 
 ---
+
+## ADR-088 — Regulatory service exposure is lifespan-scoped application state
+
+- **Status:** Accepted
+- **Context:** Chunk 77 installed the Regulatory FastAPI lifespan so production processes own provider-client lifetime, but the yielded `RegulatoryIntelligenceQueryExecutionService` remained unused. Adding a typed accessor, FastAPI `Depends`, request-state mapping, or HTTP route in the same slice would pre-commit a handler contract before the smallest exposure primitive exists. A global singleton, service registry, DI container, or generic app-state manager would invent abstractions this repository does not own. Leaving a closed service on `app.state` after teardown would retain a stale reference after Chunk 75 exits.
+- **Decision:**
+  - While the Regulatory lifespan is active, FastAPI `app.state.regulatory_intelligence_query_execution_service` holds the exact object yielded by `loaded_regulatory_intelligence_runtime`.
+  - Identity is preserved. The object is not wrapped, cloned, proxied, reconstructed, or placed in a mapping.
+  - The attribute does not exist before lifespan startup. A `try`/`finally` deletes it before the inner Chunk 75 context exits, including on body failure.
+  - If Chunk 75 entry fails, the attribute is never assigned. If Chunk 75 teardown fails, the attribute is already gone when that failure propagates.
+  - There is no global singleton, service registry, typed accessor, FastAPI dependency, request-state key, or HTTP route. `create_app()` does not write `app.state`.
+  - The service is not invoked during startup or shutdown.
+- **Consequences:** Request handlers still have no published way to retrieve the service. Route DTOs, dependency injection, LangGraph wiring, and operational RAG remain deferred. Lifespan-scoped identity on `app.state` is the only exposure primitive.
+
+---
