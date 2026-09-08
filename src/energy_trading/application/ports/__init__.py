@@ -12,6 +12,10 @@ from energy_trading.application.ports.document_extraction import (
     DocumentExtractionResult,
     ExtractedDocumentChunk,
 )
+from energy_trading.application.ports.document_query_embedding import (
+    DocumentQueryEmbedding,
+    DocumentQueryEmbeddingPort,
+)
 from energy_trading.application.ports.document_vector_index import (
     DocumentVectorIndexEntry,
     DocumentVectorIndexPort,
@@ -43,6 +47,8 @@ __all__ = [
     "DocumentEmbeddingPort",
     "DocumentExtractionPort",
     "DocumentExtractionResult",
+    "DocumentQueryEmbedding",
+    "DocumentQueryEmbeddingPort",
     "DocumentVectorIndexEntry",
     "DocumentVectorIndexPort",
     "DocumentVectorSearchPort",

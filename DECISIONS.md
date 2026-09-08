@@ -1124,6 +1124,22 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - No concrete inference provider, PDF/OCR, Qdrant composition, graph wiring, API wiring, persistence, retry/fallback execution, or verified Armenian rule extraction is added. No new dependency is added.
   - Weather, Hydro, Generation, News, Market, and Regulatory are not generalized into a shared agent base class, registry, factory, or RAG framework.
   - Canonical identity remains the existing `AgentName.REGULATORY_INTELLIGENCE` display value `Regulatory Intelligence Agent`.
-- **Consequences:** The first Regulatory Intelligence application boundary is proven without vendor, LLM-SDK, or hardcoded-rule coupling. A future infrastructure/LLM adapter may satisfy `RegulatoryConstraintInferencePort` only after receiving already-normalized retrieved chunks. Actual RAG runtime, query-text embedding, and contract-phase graph wiring remain separately reviewed work.
+- **Consequences:** The first Regulatory Intelligence application boundary is proven without vendor, LLM-SDK, or hardcoded-rule coupling. A future infrastructure/LLM adapter may satisfy `RegulatoryConstraintInferencePort` only after receiving already-normalized retrieved chunks. Actual RAG runtime, query-preparation composition, and contract-phase graph wiring remain separately reviewed work. Chunk 64 added a dedicated query-text embedding port; it is not wired into this agent.
+
+---
+
+## ADR-074 — Query-text embedding uses a dedicated application port separate from document-chunk embedding
+
+- **Status:** Accepted
+- **Context:** Chunk 63 accepts an already-constructed `DocumentVectorSearchQuery` and delegates it to `DocumentVectorSearchPort`. That query DTO requires a finite vector. Chunk 19 already published `DocumentEmbeddingPort` over `ExtractedDocumentChunk` values returning `DocumentChunkEmbedding` (`document_id`, `chunk_id`, `vector`). Broadening that document-chunk port to accept query text, or reusing `DocumentChunkEmbedding` / `DocumentVectorSearchQuery` as a query-embedding result, would collapse distinct use cases, invent fake document identity, or treat a search request as an embedding result. A generic `EmbeddingPort` / `LLMPort` would hide those differences behind a framework the application does not own.
+- **Decision:**
+  - Query-text embedding is a dedicated application-owned Protocol: `DocumentQueryEmbeddingPort.embed_query(query_text: str) -> DocumentQueryEmbedding`.
+  - Document-chunk embedding remains `DocumentEmbeddingPort`. Query embedding does not inherit it, does not accept `ExtractedDocumentChunk`, and does not search or index.
+  - Query text and document chunks are separate application use cases. Normalized query text is not a document chunk. Document chunks are not query text.
+  - Provider, model, credentials, token limits, HTTP clients, and Qdrant types stay outside application. There is no concrete embedding implementation in this chunk.
+  - A generic embedding framework (`EmbeddingPort[T]`, `LLMPort`, `AIProviderPort`) is rejected.
+  - Existing vector DTOs were inspected and not reused: `DocumentChunkEmbedding` is document-identity-specific; `DocumentVectorSearchQuery` is a search request (`vector` plus `limit`), not an embedding result. There was no provider-neutral finite-vector-only application value. Chunk 64 therefore introduces minimal frozen `DocumentQueryEmbedding` with exactly `vector: tuple[float, ...]`, using the already-published finite-tuple validation semantics.
+  - Query-preparation composition (`DocumentQueryEmbedding` → `DocumentVectorSearchQuery`) remains deferred. Regulatory Intelligence still receives an already-built search query and is not injected with this port.
+- **Consequences:** Callers can later compose query text → query embedding → search query without changing document-chunk embedding, vector search, or Regulatory Intelligence in this chunk. A future provider adapter may satisfy `DocumentQueryEmbeddingPort` structurally. No live embedding provider, RAG orchestration, or graph/API wiring is authorized here.
 
 ---
