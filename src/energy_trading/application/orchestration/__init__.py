@@ -10,7 +10,8 @@ failure classification, tuple-level failure-fact classification composition,
 Phase 2 failure-fact selection contract, Phase 2 strict single-failure
 selector, Phase 2 attempt-number source contract, Phase 2 initial
 attempt-number source, Phase 2 initial terminal-fail failure policy,
-document vector-search query preparation, and
+document vector-search query preparation, Regulatory Intelligence query
+execution, and
 LangGraph runtime.
 """
 
@@ -92,6 +93,9 @@ from energy_trading.application.orchestration.parallel_ingestion_transition impo
 from energy_trading.application.orchestration.parallel_ingestion_workflow import (
     ParallelIngestionWorkflowStep,
 )
+from energy_trading.application.orchestration.regulatory_intelligence_query_execution import (
+    RegulatoryIntelligenceQueryExecutionService,
+)
 from energy_trading.application.orchestration.state import (
     WorkflowPhase,
     WorkflowState,
@@ -120,6 +124,7 @@ __all__ = [
     "ParallelIngestionSuccess",
     "ParallelIngestionWorkflowContextPort",
     "ParallelIngestionWorkflowStep",
+    "RegulatoryIntelligenceQueryExecutionService",
     "StrictSingleParallelIngestionFailureSelector",
     "WorkflowPhase",
     "WorkflowState",

@@ -1140,7 +1140,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - A generic embedding framework (`EmbeddingPort[T]`, `LLMPort`, `AIProviderPort`) is rejected.
   - Existing vector DTOs were inspected and not reused: `DocumentChunkEmbedding` is document-identity-specific; `DocumentVectorSearchQuery` is a search request (`vector` plus `limit`), not an embedding result. There was no provider-neutral finite-vector-only application value. Chunk 64 therefore introduces minimal frozen `DocumentQueryEmbedding` with exactly `vector: tuple[float, ...]`, using the already-published finite-tuple validation semantics.
   - Query-preparation composition (`DocumentQueryEmbedding` → `DocumentVectorSearchQuery`) remains deferred. Regulatory Intelligence still receives an already-built search query and is not injected with this port.
-- **Consequences:** Callers can later compose query text → query embedding → search query without changing document-chunk embedding, vector search, or Regulatory Intelligence in this chunk. A future provider adapter may satisfy `DocumentQueryEmbeddingPort` structurally. No live embedding provider, RAG orchestration, or graph/API wiring is authorized here. Chunk 65 added `DocumentVectorSearchQueryPreparationService` as that composition; it is not wired into Regulatory Intelligence.
+- **Consequences:** Callers can later compose query text → query embedding → search query without changing document-chunk embedding, vector search, or Regulatory Intelligence in this chunk. A future provider adapter may satisfy `DocumentQueryEmbeddingPort` structurally. No live embedding provider, RAG orchestration, or graph/API wiring is authorized here. Chunk 65 added `DocumentVectorSearchQueryPreparationService` as that composition. Chunk 66 added `RegulatoryIntelligenceQueryExecutionService` as the outer composition over that service plus the unchanged agent; neither is injected into Regulatory Intelligence.
 
 ---
 
@@ -1157,6 +1157,23 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Search is not invoked. Regulatory Intelligence remains unchanged and still consumes a prebuilt `DocumentVectorSearchQuery`. This service is not injected into that agent.
   - Existing embedding and query-contract failures propagate unchanged. There is no fallback vector or fallback query.
   - Query rewriting, query expansion, tokenization, hybrid lexical/vector retrieval, default search limits, caching, retries, embedding providers, Qdrant wiring, and generic RAG machinery remain deferred.
-- **Consequences:** Application callers can compose query text → query embedding → `DocumentVectorSearchQuery` without changing Chunk 63–64 contracts. Regulatory RAG is still not operational: no embedding provider, no search invocation, no agent/graph/API wiring.
+- **Consequences:** Application callers can compose query text → query embedding → `DocumentVectorSearchQuery` without changing Chunk 63–64 contracts. Regulatory RAG is still not operational: no embedding provider, no graph/API wiring. Chunk 66 added `RegulatoryIntelligenceQueryExecutionService` as an outer composition over this service plus the unchanged Regulatory Intelligence Agent.
+
+---
+
+## ADR-076 — Regulatory query execution composes query preparation with the existing Regulatory Intelligence Agent
+
+- **Status:** Accepted
+- **Context:** Chunks 63–65 published query-text embedding, query preparation into `DocumentVectorSearchQuery`, and a Regulatory Intelligence Agent that still consumes that already-built query. Folding query text into the agent would change its typed retrieval-plus-inference boundary. Duplicating embedding, search, or inference inside a new use case would collapse distinct seams. A new request/result DTO or generic RAG/executor framework would invent policy this repository does not own.
+- **Decision:**
+  - Query execution is a narrow application-owned service: `RegulatoryIntelligenceQueryExecutionService`.
+  - Constructor injects exactly `DocumentVectorSearchQueryPreparationService` and `RegulatoryIntelligenceAgent`. It does not inject embedding, search, or inference ports, Qdrant, an LLM, cache, graph, API, or a generic agent registry/executor.
+  - Public operation is keyword-only `async execute(*, query_text: str, limit: int) -> RegulatoryIntelligenceResult`.
+  - Sequence is fixed: await `prepare(query_text=query_text, limit=limit)` exactly once, construct existing `RegulatoryIntelligenceRequest(search_query=prepared_query)`, await `run(request)` exactly once, and return that `RegulatoryIntelligenceResult` unchanged.
+  - The agent remains typed around `DocumentVectorSearchQuery`. Query text never enters the agent. No new DTO is introduced.
+  - The service does not call `embed_query`, `.search(...)`, or inference. Those remain owned by query preparation and the agent.
+  - Existing preparation and agent errors propagate unchanged. Preparation failure does not invoke the agent. Empty `constraints=()` remains legitimate success.
+  - Embedding providers, inference providers, Qdrant/API composition, Phase 1 graph wiring, prompt catalogs, and generic RAG machinery remain deferred.
+- **Consequences:** Application callers can compose query text + limit through real published services and the unchanged agent when dependencies are injected. This is application composition, not production RAG readiness.
 
 ---
