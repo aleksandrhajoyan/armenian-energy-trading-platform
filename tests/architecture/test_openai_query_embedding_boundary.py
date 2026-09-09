@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
+    DOCUMENT_VECTOR_INDEX_MANAGED_RUNTIME_RELATIVE,
     DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
     REGULATORY_MANAGED_RUNTIME_RELATIVE,
     REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
@@ -239,7 +240,10 @@ def test_inner_layers_do_not_import_openai() -> None:
         collect_import_violations(
             API_ROOT,
             ("energy_trading.infrastructure.openai",),
-            exclude_relative_prefixes=(REGULATORY_MANAGED_RUNTIME_RELATIVE,),
+            exclude_relative_prefixes=(
+                REGULATORY_MANAGED_RUNTIME_RELATIVE,
+                DOCUMENT_VECTOR_INDEX_MANAGED_RUNTIME_RELATIVE,
+            ),
         )
         == []
     )

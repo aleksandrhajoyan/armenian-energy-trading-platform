@@ -50,12 +50,23 @@ DOCUMENT_VECTOR_INDEX_PROVIDER_RUNTIME_RELATIVE = (
 DOCUMENT_VECTOR_INDEX_CONFIGURED_RUNTIME_RELATIVE = (
     "energy_trading/api/composition/document_vector_index_configured_runtime.py"
 )
+DOCUMENT_VECTOR_INDEX_MANAGED_RUNTIME_RELATIVE = (
+    "energy_trading/api/composition/document_vector_index_managed_runtime.py"
+)
 DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES = (
     DOCUMENT_VECTOR_INDEX_PROVIDER_RUNTIME_RELATIVE,
     DOCUMENT_VECTOR_INDEX_CONFIGURED_RUNTIME_RELATIVE,
 )
 DOCUMENT_VECTOR_INDEX_RUNTIME_SETTINGS_CONSUMER_RELATIVES = (
     DOCUMENT_VECTOR_INDEX_CONFIGURED_RUNTIME_RELATIVE,
+    DOCUMENT_VECTOR_INDEX_MANAGED_RUNTIME_RELATIVE,
+)
+DOCUMENT_VECTOR_INDEX_INFRA_CLIENT_COMPOSITION_RELATIVES = (
+    *DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
+    DOCUMENT_VECTOR_INDEX_MANAGED_RUNTIME_RELATIVE,
+)
+DOCUMENT_VECTOR_INDEX_TYPED_SETTINGS_COMPOSITION_RELATIVES = (
+    DOCUMENT_VECTOR_INDEX_MANAGED_RUNTIME_RELATIVE,
 )
 API_DEPENDENCIES_RELATIVE_PREFIX = "energy_trading/api/dependencies/"
 API_REGULATORY_QUERY_ROUTER_RELATIVE = "energy_trading/api/routers/regulatory_intelligence.py"
@@ -110,6 +121,10 @@ def is_document_vector_index_configured_runtime_module(path: Path) -> bool:
 def is_document_vector_index_provider_composition_module(path: Path) -> bool:
     relative = path.relative_to(SRC_ROOT).as_posix()
     return relative in DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES
+
+
+def is_document_vector_index_managed_runtime_module(path: Path) -> bool:
+    return path.relative_to(SRC_ROOT).as_posix() == DOCUMENT_VECTOR_INDEX_MANAGED_RUNTIME_RELATIVE
 
 
 def is_regulatory_provider_runtime_module(path: Path) -> bool:

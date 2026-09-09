@@ -1501,7 +1501,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - It constructs one `OpenAIDocumentEmbeddingAdapter` with `client=` / `model=` and one `QdrantDocumentVectorIndex` with the published positional `(client, config)` constructor, then delegates exactly once to `build_document_vector_index_execution` and returns that `DocumentVectorIndexExecutionService`.
   - Construction is inert: no `.embed`, `.index`, or `.execute`; no settings/env; no client factories; no client close; no collection management. Existing application errors from later `execute` calls propagate unchanged through the published Chunk 86 stack.
   - The builder is exported from `api/composition/__init__.py`. It remains unwired from `create_app()`, Regulatory runtime lifecycle, LangGraph, and document extraction.
-- **Consequences:** Callers can assemble the published indexing stack from already-created provider clients without a settings-loaded or managed runtime. Chunk 89 later added configured settings mapping above this builder. Managed indexing lifecycle, document acquisition, PDF/OCR, actual corpus indexing, reindex strategy, and Regulatory contract-phase integration remain deferred.
+- **Consequences:** Callers can assemble the published indexing stack from already-created provider clients without a settings-loaded runtime. Chunk 89 later added configured settings mapping above this builder. Chunk 90 owns client lifetime above Chunk 89. Document acquisition, PDF/OCR, actual corpus indexing, reindex strategy, and Regulatory contract-phase integration remain deferred.
 
 ---
 
@@ -1519,7 +1519,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - The settings module is SDK-free and runtime-object-free. It does not import OpenAI or Qdrant clients, does not construct `QdrantDocumentVectorConfig`, and does not call Chunk 86 or Chunk 87 builders.
   - `load_document_vector_index_runtime_settings(*, env_file=...)` is uncached and separate from `AppSettings`. Process health, `create_app()`, and the Chunk 87 builder do not load it.
   - Generic configuration frameworks, model catalogs, provider registries, and settings aggregation DTOs are rejected.
-- **Consequences:** Callers can load document-index runtime-specific values independently of provider connection settings and Regulatory query runtime settings. Chunk 89 consumes an already-constructed instance without calling the loader. Managed indexing runtime, client construction, client lifecycle, HTTP ingestion, and operational corpus indexing remain absent.
+- **Consequences:** Callers can load document-index runtime-specific values independently of provider connection settings and Regulatory query runtime settings. Chunk 89 and Chunk 90 consume an already-constructed instance without calling the loader. Settings-loaded indexing runtime, HTTP ingestion, and operational corpus indexing remain absent.
 
 ---
 
@@ -1533,6 +1533,25 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - It constructs exactly one `QdrantDocumentVectorConfig(collection_name=settings.qdrant_collection_name, vector_size=settings.qdrant_vector_size)`, then delegates exactly once to `build_document_vector_index_provider_runtime` with those clients, that config, and `settings.document_embedding_model`, and returns that `DocumentVectorIndexExecutionService` unchanged.
   - Construction is inert: no `.embed`, `.index`, or `.execute`; no settings/env loading; no client factories; no client close; no collection management; no direct adapter construction except `QdrantDocumentVectorConfig`; no direct Chunk 86 call.
   - The builder is exported from `api/composition/__init__.py`. It remains unwired from `create_app()`, FastAPI lifespan, LangGraph, and document extraction.
-- **Consequences:** Callers can assemble the published indexing stack from already-created provider clients plus already-constructed typed settings. Managed indexing runtime, settings-loaded indexing runtime, document acquisition, PDF/OCR, actual corpus indexing, collection-management strategy, and Regulatory contract-phase integration remain deferred.
+- **Consequences:** Callers can assemble the published indexing stack from already-created provider clients plus already-constructed typed settings. Chunk 90 owns client lifetime separately from this adaptation seam. Settings-loaded indexing runtime, document acquisition, PDF/OCR, actual corpus indexing, collection-management strategy, and Regulatory contract-phase integration remain deferred.
+
+---
+
+## ADR-100 — Document-index provider clients are owned by a narrow async managed-runtime boundary
+
+- **Status:** Accepted
+- **Context:** Chunk 89 can assemble a document vector index execution service from already-created provider clients plus already-constructed `DocumentVectorIndexRuntimeSettings`, but callers still had to construct and close those clients themselves. Folding environment loading into that seam would mix configuration discovery with object composition. Folding FastAPI lifespan into the same function would couple a reusable resource owner to one HTTP framework. A generic DI container, resource registry, provider registry, or `ManagedRuntime[T]` would invent an abstraction this repository does not own. Direct `AsyncOpenAI` / `AsyncQdrantClient` construction in API composition would widen the provider-SDK allowlist beyond the approved provider-composition modules.
+- **Decision:**
+  - Resource lifetime lives in a separate document-index-specific API composition module: `managed_document_vector_index_runtime` in `energy_trading.api.composition.document_vector_index_managed_runtime`.
+  - The callable is an async context manager (`contextlib.asynccontextmanager`) and is keyword-only. It receives already-loaded `OpenAISettings`, `QdrantSettings`, and `DocumentVectorIndexRuntimeSettings`.
+  - It does not load environment values, accept an `env_file`, accept caller-supplied clients, or accept loose model/Qdrant arguments.
+  - Clients are created through existing `create_openai_client` and `create_qdrant_client`. Direct SDK client constructors are not used. Direct OpenAI/Qdrant SDK type imports are not added to this module.
+  - Cleanup is registered immediately after each successful client creation via `AsyncExitStack.push_async_callback(...close)` because both pinned clients expose async `close()`.
+  - Service construction delegates exactly once to `build_document_vector_index_configured_runtime`. Chunks 86, 87, and 89 retain object-composition responsibilities.
+  - Expected cleanup order is LIFO: Qdrant then OpenAI, provided both were created. If OpenAI construction fails, later factories and the configured builder are not called. If Qdrant construction fails, the OpenAI client is still closed. If Chunk 89 fails, both created clients are closed. Consumer exceptions still close both clients and then propagate. If one cleanup raises, the other registered cleanup is still attempted and the cleanup exception is not suppressed.
+  - Entering the context performs no provider I/O. The yielded service is constructed, not executed.
+  - FastAPI lifespan, `create_app()`, HTTP routes, app state, and LangGraph remain unwired.
+  - Generic lifecycle managers, DI containers, resource registries, and provider registries are rejected.
+- **Consequences:** Callers can supply already-loaded typed settings and receive a lifecycle-owned `DocumentVectorIndexExecutionService`. Settings loading, FastAPI integration, document acquisition, PDF/OCR, actual corpus indexing, collection-management strategy, and Regulatory contract-phase integration remain absent. Direct provider SDK API-composition imports remain limited to the existing approved provider-composition modules.
 
 ---

@@ -6,6 +6,9 @@ from energy_trading.api.composition.document_vector_index_configured_runtime imp
 from energy_trading.api.composition.document_vector_index_execution import (
     build_document_vector_index_execution,
 )
+from energy_trading.api.composition.document_vector_index_managed_runtime import (
+    managed_document_vector_index_runtime,
+)
 from energy_trading.api.composition.document_vector_index_runtime import (
     build_document_vector_index_provider_runtime,
 )
@@ -37,5 +40,6 @@ __all__ = [
     "build_regulatory_intelligence_provider_runtime",
     "build_regulatory_intelligence_query_execution",
     "loaded_regulatory_intelligence_runtime",
+    "managed_document_vector_index_runtime",
     "managed_regulatory_intelligence_runtime",
 ]

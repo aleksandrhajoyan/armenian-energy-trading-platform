@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
+    DOCUMENT_VECTOR_INDEX_INFRA_CLIENT_COMPOSITION_RELATIVES,
     DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
     REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
     REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
@@ -129,7 +130,7 @@ def test_inner_layers_do_not_import_qdrant() -> None:
             ("energy_trading.infrastructure.vector_store.qdrant",),
             exclude_relative_prefixes=(
                 *REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
-                *DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
+                *DOCUMENT_VECTOR_INDEX_INFRA_CLIENT_COMPOSITION_RELATIVES,
             ),
         )
         == []
@@ -241,7 +242,7 @@ def test_create_app_does_not_wire_document_vector_adapters() -> None:
             ),
             exclude_relative_prefixes=(
                 *REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
-                *DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
+                *DOCUMENT_VECTOR_INDEX_INFRA_CLIENT_COMPOSITION_RELATIVES,
             ),
         )
         == []

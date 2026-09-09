@@ -27,6 +27,8 @@ SETTINGS_MODULE = CONFIG_ROOT / "document_vector_index.py"
 REGULATORY_SETTINGS_MODULE = CONFIG_ROOT / "regulatory_intelligence.py"
 PROVIDER_RUNTIME_MODULE = API_ROOT / "composition" / "document_vector_index_runtime.py"
 NEUTRAL_BUILDER_MODULE = API_ROOT / "composition" / "document_vector_index_execution.py"
+CONFIGURED_RUNTIME_MODULE = API_ROOT / "composition" / "document_vector_index_configured_runtime.py"
+MANAGED_RUNTIME_MODULE = API_ROOT / "composition" / "document_vector_index_managed_runtime.py"
 
 EXPECTED_FIELDS = (
     "document_embedding_model",
@@ -308,6 +310,7 @@ def test_create_app_remains_unwired() -> None:
     assert "DocumentVectorIndexRuntimeSettings" not in source
     assert "load_document_vector_index_runtime_settings" not in source
     assert "ENERGY_DOCUMENT_INDEX_" not in source
+    assert "managed_document_vector_index_runtime" not in source
 
 
 def test_chunk_87_builder_does_not_load_settings() -> None:
@@ -337,6 +340,16 @@ def test_chunk_87_builder_does_not_load_settings() -> None:
     neutral_source = NEUTRAL_BUILDER_MODULE.read_text(encoding="utf-8")
     assert "DocumentVectorIndexRuntimeSettings" not in neutral_source
     assert "load_document_vector_index_runtime_settings" not in neutral_source
+
+
+def test_chunk_89_and_chunk_90_consume_already_constructed_settings() -> None:
+    for path in (CONFIGURED_RUNTIME_MODULE, MANAGED_RUNTIME_MODULE):
+        names = imported_names(path)
+        assert "DocumentVectorIndexRuntimeSettings" in names
+        assert "load_document_vector_index_runtime_settings" not in names
+        source = path.read_text(encoding="utf-8")
+        assert "load_document_vector_index_runtime_settings" not in source
+        assert "ENERGY_DOCUMENT_INDEX_" not in source
 
 
 def test_regulatory_runtime_settings_are_unchanged() -> None:

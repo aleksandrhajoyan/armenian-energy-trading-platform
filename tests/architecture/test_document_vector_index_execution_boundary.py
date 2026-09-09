@@ -12,6 +12,7 @@ from tests.architecture.import_inspection import (
     http_transport_api_paths,
     imported_modules,
     imported_names,
+    is_document_vector_index_managed_runtime_module,
     is_document_vector_index_provider_composition_module,
     is_forbidden,
 )
@@ -493,6 +494,8 @@ def test_graph_runtime_and_providers_remain_unwired_to_the_execution_service() -
         if path.resolve() == DOCUMENT_VECTOR_INDEX_EXECUTION_COMPOSITION.resolve():
             continue
         if is_document_vector_index_provider_composition_module(path):
+            continue
+        if is_document_vector_index_managed_runtime_module(path):
             continue
         names = imported_names(path)
         assert "DocumentVectorIndexExecutionService" not in names
