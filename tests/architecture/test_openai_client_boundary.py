@@ -6,7 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
-    DOCUMENT_VECTOR_INDEX_PROVIDER_RUNTIME_RELATIVE,
+    DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
     REGULATORY_MANAGED_RUNTIME_RELATIVE,
     REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
     REGULATORY_TYPED_SETTINGS_COMPOSITION_RELATIVES,
@@ -15,7 +15,7 @@ from tests.architecture.import_inspection import (
     collect_import_violations,
     imported_modules,
     imported_names,
-    is_document_vector_index_provider_runtime_module,
+    is_document_vector_index_provider_composition_module,
     is_forbidden,
     is_regulatory_loaded_runtime_module,
     is_regulatory_managed_runtime_module,
@@ -39,6 +39,9 @@ CONFIGURED_RUNTIME_MODULE = (
     API_ROOT / "composition" / "regulatory_intelligence_configured_runtime.py"
 )
 INDEX_RUNTIME_MODULE = API_ROOT / "composition" / "document_vector_index_runtime.py"
+INDEX_CONFIGURED_RUNTIME_MODULE = (
+    API_ROOT / "composition" / "document_vector_index_configured_runtime.py"
+)
 MANAGED_RUNTIME_MODULE = API_ROOT / "composition" / "regulatory_intelligence_managed_runtime.py"
 LOADED_RUNTIME_MODULE = API_ROOT / "composition" / "regulatory_intelligence_loaded_runtime.py"
 QUERY_EMBEDDING_ADAPTER = (
@@ -60,6 +63,7 @@ ALLOWED_OPENAI_SDK_MODULES = frozenset(
         PROVIDER_RUNTIME_MODULE.resolve(),
         CONFIGURED_RUNTIME_MODULE.resolve(),
         INDEX_RUNTIME_MODULE.resolve(),
+        INDEX_CONFIGURED_RUNTIME_MODULE.resolve(),
     }
 )
 
@@ -201,6 +205,7 @@ def test_openai_sdk_imports_exist_only_in_approved_modules() -> None:
     assert "openai" in imported_modules(PROVIDER_RUNTIME_MODULE)
     assert "openai" in imported_modules(CONFIGURED_RUNTIME_MODULE)
     assert "openai" in imported_modules(INDEX_RUNTIME_MODULE)
+    assert "openai" in imported_modules(INDEX_CONFIGURED_RUNTIME_MODULE)
     assert "openai" not in imported_modules(MANAGED_RUNTIME_MODULE)
     assert "openai" not in imported_modules(LOADED_RUNTIME_MODULE)
 
@@ -218,7 +223,7 @@ def test_inner_layers_do_not_import_openai() -> None:
             ),
             exclude_relative_prefixes=(
                 *REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
-                DOCUMENT_VECTOR_INDEX_PROVIDER_RUNTIME_RELATIVE,
+                *DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
             ),
         )
         == []
@@ -373,7 +378,7 @@ def test_create_app_and_composition_do_not_construct_openai_client() -> None:
             ("openai",),
             exclude_relative_prefixes=(
                 *REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
-                DOCUMENT_VECTOR_INDEX_PROVIDER_RUNTIME_RELATIVE,
+                *DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
             ),
         )
         == []
@@ -392,7 +397,7 @@ def test_create_app_and_composition_do_not_construct_openai_client() -> None:
     )
     for path in sorted(API_ROOT.rglob("*.py")):
         names = imported_names(path)
-        if is_document_vector_index_provider_runtime_module(path):
+        if is_document_vector_index_provider_composition_module(path):
             assert "AsyncOpenAI" in names
             assert "OpenAISettings" not in names
             assert "create_openai_client" not in names

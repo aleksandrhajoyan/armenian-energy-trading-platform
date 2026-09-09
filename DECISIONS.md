@@ -1243,7 +1243,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Model selection, base URL, organization, timeout, and retry/fallback mechanics remain outside this settings object and factory.
   - Implicit SDK retries are disabled (`max_retries=0`) so application orchestration retains retry ownership. This is not an implementation of retry logic.
   - `create_app()`, LangGraph, and `build_regulatory_intelligence_query_execution` remain unwired to OpenAI settings and the factory. Chunk 71's provider-aware builder receives an already-created client and does not call this factory.
-- **Consequences:** Client construction capability exists offline. Production OpenAI runtime lifecycle and Regulatory RAG remain absent. Domain, application, and ML remain OpenAI-SDK-free. HTTP routes/`create_app()` remain OpenAI-SDK-free. The approved production OpenAI SDK allowlist is the published OpenAI adapters, this client-factory module, the two exact Regulatory API provider-composition modules (`api/composition/regulatory_intelligence_runtime.py` and `api/composition/regulatory_intelligence_configured_runtime.py`), and the exact document-index provider-composition module (`api/composition/document_vector_index_runtime.py`).
+- **Consequences:** Client construction capability exists offline. Production OpenAI runtime lifecycle and Regulatory RAG remain absent. Domain, application, and ML remain OpenAI-SDK-free. HTTP routes/`create_app()` remain OpenAI-SDK-free. The approved production OpenAI SDK allowlist is the published OpenAI adapters, this client-factory module, the two exact Regulatory API provider-composition modules (`api/composition/regulatory_intelligence_runtime.py` and `api/composition/regulatory_intelligence_configured_runtime.py`), and the two exact document-index provider-composition modules (`api/composition/document_vector_index_runtime.py` and `api/composition/document_vector_index_configured_runtime.py`).
 
 ---
 
@@ -1261,7 +1261,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Qdrant adapter configuration is the already-published `QdrantDocumentVectorConfig`. The builder does not create collections, indexes, distance metrics, or payload schemas.
   - Construction performs no provider I/O: no embed, search, infer, execute, run, health, collection, or close/aclose operations.
   - The builder owns no FastAPI lifespan, client lifecycle, or LangGraph wiring. `create_app()` remains unwired.
-  - Application, agents, domain, and ML do not import the provider-aware builder. HTTP routes remain provider-SDK-free. The OpenAI/Qdrant SDK exception is limited to the two exact Regulatory API provider-composition modules (`api/composition/regulatory_intelligence_runtime.py` and `api/composition/regulatory_intelligence_configured_runtime.py`), the exact document-index provider-composition module (`api/composition/document_vector_index_runtime.py`), plus existing approved infrastructure modules.
+  - Application, agents, domain, and ML do not import the provider-aware builder. HTTP routes remain provider-SDK-free. The OpenAI/Qdrant SDK exception is limited to the two exact Regulatory API provider-composition modules (`api/composition/regulatory_intelligence_runtime.py` and `api/composition/regulatory_intelligence_configured_runtime.py`), the two exact document-index provider-composition modules (`api/composition/document_vector_index_runtime.py` and `api/composition/document_vector_index_configured_runtime.py`), plus existing approved infrastructure modules.
 - **Consequences:** Concrete Regulatory provider object composition exists offline. Production settings loading, client lifecycle, HTTP invocation, LangGraph Phase 1 wiring, document extraction/indexing, and operational RAG remain absent.
 
 ---
@@ -1501,7 +1501,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - It constructs one `OpenAIDocumentEmbeddingAdapter` with `client=` / `model=` and one `QdrantDocumentVectorIndex` with the published positional `(client, config)` constructor, then delegates exactly once to `build_document_vector_index_execution` and returns that `DocumentVectorIndexExecutionService`.
   - Construction is inert: no `.embed`, `.index`, or `.execute`; no settings/env; no client factories; no client close; no collection management. Existing application errors from later `execute` calls propagate unchanged through the published Chunk 86 stack.
   - The builder is exported from `api/composition/__init__.py`. It remains unwired from `create_app()`, Regulatory runtime lifecycle, LangGraph, and document extraction.
-- **Consequences:** Callers can assemble the published indexing stack from already-created provider clients without a settings-loaded or managed runtime. Configured indexing settings mapping, managed indexing lifecycle, document acquisition, PDF/OCR, actual corpus indexing, reindex strategy, and Regulatory contract-phase integration remain deferred.
+- **Consequences:** Callers can assemble the published indexing stack from already-created provider clients without a settings-loaded or managed runtime. Chunk 89 later added configured settings mapping above this builder. Managed indexing lifecycle, document acquisition, PDF/OCR, actual corpus indexing, reindex strategy, and Regulatory contract-phase integration remain deferred.
 
 ---
 
@@ -1519,6 +1519,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - The settings module is SDK-free and runtime-object-free. It does not import OpenAI or Qdrant clients, does not construct `QdrantDocumentVectorConfig`, and does not call Chunk 86 or Chunk 87 builders.
   - `load_document_vector_index_runtime_settings(*, env_file=...)` is uncached and separate from `AppSettings`. Process health, `create_app()`, and the Chunk 87 builder do not load it.
   - Generic configuration frameworks, model catalogs, provider registries, and settings aggregation DTOs are rejected.
-- **Consequences:** Callers can load document-index runtime-specific values independently of provider connection settings and Regulatory query runtime settings. Configured indexing runtime, client construction, client lifecycle, HTTP ingestion, and operational corpus indexing remain absent.
+- **Consequences:** Callers can load document-index runtime-specific values independently of provider connection settings and Regulatory query runtime settings. Chunk 89 consumes an already-constructed instance without calling the loader. Managed indexing runtime, client construction, client lifecycle, HTTP ingestion, and operational corpus indexing remain absent.
+
+---
+
+## ADR-099 — Configured document vector index composition maps typed settings onto the provider-aware builder
+
+- **Status:** Accepted
+- **Context:** Chunk 87's provider-aware builder requires already-created clients, existing `QdrantDocumentVectorConfig`, and an explicit document-embedding model. Chunk 88 published `DocumentVectorIndexRuntimeSettings` with those two Qdrant targeting fields plus the model identifier. Loading settings, constructing clients, owning lifecycle, or introducing a generic configured-runtime/DI hierarchy would expand this slice beyond a settings-to-provider-aware mapping seam.
+- **Decision:**
+  - API composition owns `build_document_vector_index_configured_runtime` in `api/composition/document_vector_index_configured_runtime.py`.
+  - The builder is a synchronous keyword-only function over already-created `AsyncOpenAI`, `AsyncQdrantClient`, and already-constructed `DocumentVectorIndexRuntimeSettings`.
+  - It constructs exactly one `QdrantDocumentVectorConfig(collection_name=settings.qdrant_collection_name, vector_size=settings.qdrant_vector_size)`, then delegates exactly once to `build_document_vector_index_provider_runtime` with those clients, that config, and `settings.document_embedding_model`, and returns that `DocumentVectorIndexExecutionService` unchanged.
+  - Construction is inert: no `.embed`, `.index`, or `.execute`; no settings/env loading; no client factories; no client close; no collection management; no direct adapter construction except `QdrantDocumentVectorConfig`; no direct Chunk 86 call.
+  - The builder is exported from `api/composition/__init__.py`. It remains unwired from `create_app()`, FastAPI lifespan, LangGraph, and document extraction.
+- **Consequences:** Callers can assemble the published indexing stack from already-created provider clients plus already-constructed typed settings. Managed indexing runtime, settings-loaded indexing runtime, document acquisition, PDF/OCR, actual corpus indexing, collection-management strategy, and Regulatory contract-phase integration remain deferred.
 
 ---

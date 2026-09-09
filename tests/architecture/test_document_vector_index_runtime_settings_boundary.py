@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 
 from tests.architecture.import_inspection import (
+    DOCUMENT_VECTOR_INDEX_RUNTIME_SETTINGS_CONSUMER_RELATIVES,
     SRC_ROOT,
     annotation_type_names,
     collect_import_violations,
@@ -252,7 +253,14 @@ def test_inner_layers_do_not_import_document_index_runtime_settings() -> None:
     forbidden = ("energy_trading.shared.config.document_vector_index",)
     assert collect_import_violations(DOMAIN_ROOT, forbidden) == []
     assert collect_import_violations(APPLICATION_ROOT, forbidden) == []
-    assert collect_import_violations(API_ROOT, forbidden) == []
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            forbidden,
+            exclude_relative_prefixes=DOCUMENT_VECTOR_INDEX_RUNTIME_SETTINGS_CONSUMER_RELATIVES,
+        )
+        == []
+    )
     if ML_ROOT.exists():
         assert collect_import_violations(ML_ROOT, forbidden) == []
 

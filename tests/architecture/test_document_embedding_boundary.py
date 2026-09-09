@@ -7,7 +7,7 @@ from pathlib import Path
 
 from tests.architecture.import_inspection import (
     DOCUMENT_VECTOR_INDEX_EXECUTION_COMPOSITION_RELATIVE,
-    DOCUMENT_VECTOR_INDEX_PROVIDER_RUNTIME_RELATIVE,
+    DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
     REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
     REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
     SRC_ROOT,
@@ -218,7 +218,7 @@ def test_api_composition_does_not_import_or_construct_document_embedding() -> No
             exclude_relative_prefixes=(
                 *REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
                 DOCUMENT_VECTOR_INDEX_EXECUTION_COMPOSITION_RELATIVE,
-                DOCUMENT_VECTOR_INDEX_PROVIDER_RUNTIME_RELATIVE,
+                *DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
             ),
         )
         == []
@@ -229,7 +229,7 @@ def test_api_composition_does_not_import_or_construct_document_embedding() -> No
             ("energy_trading.infrastructure.vector_store",),
             exclude_relative_prefixes=(
                 *REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
-                DOCUMENT_VECTOR_INDEX_PROVIDER_RUNTIME_RELATIVE,
+                *DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
             ),
         )
         == []
