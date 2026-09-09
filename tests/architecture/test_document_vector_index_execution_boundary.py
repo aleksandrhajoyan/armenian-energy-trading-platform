@@ -30,6 +30,9 @@ OPENAI_DOCUMENT_EMBEDDING = (
 )
 QDRANT_INDEX = PRODUCTION_ROOT / "infrastructure" / "vector_store" / "qdrant" / "document_vector.py"
 COMPOSITION_ROOT = API_ROOT / "composition"
+DOCUMENT_VECTOR_INDEX_EXECUTION_COMPOSITION = (
+    COMPOSITION_ROOT / "document_vector_index_execution.py"
+)
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -486,6 +489,8 @@ def test_graph_runtime_and_providers_remain_unwired_to_the_execution_service() -
         assert "DocumentVectorIndexExecutionService" not in source
         assert "document_vector_index_execution" not in source
     for path in sorted(COMPOSITION_ROOT.rglob("*.py")):
+        if path.resolve() == DOCUMENT_VECTOR_INDEX_EXECUTION_COMPOSITION.resolve():
+            continue
         names = imported_names(path)
         assert "DocumentVectorIndexExecutionService" not in names
         modules = imported_modules(path)

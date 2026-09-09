@@ -1477,3 +1477,16 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Normalized chunks can be indexed through the published application composition without a provider runtime. Operational corpus ingestion, PDF/OCR, verified Armenian corpus, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.
 
 ---
+
+## ADR-096 — Provider-neutral document vector index execution composition
+
+- **Status:** Accepted
+- **Context:** Chunks 84 and 85 already provide provider-neutral preparation and execution services. Callers still had to assemble those services manually. Constructing OpenAI or Qdrant adapters, loading settings, or introducing a generic DI container would pre-commit a provider runtime this slice does not own.
+- **Decision:**
+  - API composition owns `build_document_vector_index_execution` in `api/composition/document_vector_index_execution.py`.
+  - The builder is a synchronous keyword-only function over already-constructed `DocumentEmbeddingPort` and `DocumentVectorIndexPort`. It constructs one `DocumentVectorIndexEntryPreparationService` and one `DocumentVectorIndexExecutionService`, then returns that execution service.
+  - Construction is inert: no `.embed`, `.prepare`, `.execute`, or `.index`; no settings/env; no client factories; no OpenAI or Qdrant imports. Existing application errors from later `execute` calls propagate unchanged through the published services.
+  - The builder is exported from `api/composition/__init__.py`. It remains unwired from `create_app()`, Regulatory runtime composition, LangGraph, extraction, and concrete provider adapters.
+- **Consequences:** Callers can assemble the published indexing stack from injected ports without a provider runtime. Provider-aware indexing composition, operational corpus ingestion, PDF/OCR, verified Armenian corpus, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.
+
+---

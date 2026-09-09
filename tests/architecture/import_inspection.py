@@ -41,6 +41,9 @@ def is_forbidden(module: str, prefixes: tuple[str, ...]) -> bool:
 
 
 API_COMPOSITION_RELATIVE_PREFIX = "energy_trading/api/composition/"
+DOCUMENT_VECTOR_INDEX_EXECUTION_COMPOSITION_RELATIVE = (
+    "energy_trading/api/composition/document_vector_index_execution.py"
+)
 API_DEPENDENCIES_RELATIVE_PREFIX = "energy_trading/api/dependencies/"
 API_REGULATORY_QUERY_ROUTER_RELATIVE = "energy_trading/api/routers/regulatory_intelligence.py"
 REGULATORY_PROVIDER_RUNTIME_RELATIVE = (
