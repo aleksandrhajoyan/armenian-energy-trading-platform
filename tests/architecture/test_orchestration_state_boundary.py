@@ -306,6 +306,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
                 orchestration_classes.append(node.name)
     assert orchestration_classes == [
         "DocumentVectorIndexEntryPreparationService",
+        "DocumentVectorIndexExecutionService",
         "DocumentVectorSearchQueryPreparationService",
         "FailureAction",
         "FailurePolicyContext",

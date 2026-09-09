@@ -1464,3 +1464,16 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Canonical index entries can be prepared offline behind the published embedding port. Operational document indexing, PDF/OCR, verified Armenian corpus, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.
 
 ---
+
+## ADR-095 — Document vector index execution service
+
+- **Status:** Accepted
+- **Context:** Chunk 84 can prepare canonical `DocumentVectorIndexEntry` values, and application already owns `DocumentVectorIndexPort.index(...)`. Callers still had no provider-neutral application composition that prepares once and indexes once. Injecting `DocumentEmbeddingPort` directly, reconstructing entries, calling Qdrant, or introducing a generic indexing pipeline would duplicate Chunk 84 and pre-commit a provider runtime this slice does not own.
+- **Decision:**
+  - Application owns `DocumentVectorIndexExecutionService` in `application/orchestration/document_vector_index_execution.py`.
+  - The service injects exactly `DocumentVectorIndexEntryPreparationService` and `DocumentVectorIndexPort`. Keyword-only `async execute(*, chunks) -> None` awaits `prepare(...)` exactly once, forwards the original chunk tuple unchanged, then awaits `index(entries)` exactly once with the exact prepared tuple.
+  - Empty input preserves the published contracts: `prepare(())` then `index(())`, both called once, returning `None`. Existing application errors from either dependency propagate unchanged. There is no retry, fallback, `embed(...)`, or `DocumentVectorIndexEntry` construction.
+  - The service remains unwired from `create_app()`, Regulatory runtime composition, OpenAI adapters, Qdrant, LangGraph, and extraction.
+- **Consequences:** Normalized chunks can be indexed through the published application composition without a provider runtime. Operational corpus ingestion, PDF/OCR, verified Armenian corpus, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.
+
+---
