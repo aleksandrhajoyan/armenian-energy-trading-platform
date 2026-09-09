@@ -1504,3 +1504,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Callers can assemble the published indexing stack from already-created provider clients without a settings-loaded or managed runtime. Configured indexing settings mapping, managed indexing lifecycle, document acquisition, PDF/OCR, actual corpus indexing, reindex strategy, and Regulatory contract-phase integration remain deferred.
 
 ---
+
+## ADR-098 — Document vector index runtime configuration is indexing-specific and separate from provider connection and Regulatory settings
+
+- **Status:** Accepted
+- **Context:** Chunk 87's provider-aware builder requires an explicit document-embedding model and existing `QdrantDocumentVectorConfig` (`collection_name`, `vector_size`). Folding those values into `OpenAISettings` would mix indexing model selection with the OpenAI API credential. Folding collection/vector targeting into `QdrantSettings` would mix indexing-runtime identity with generic host/port/API-key connection settings. Folding them into `RegulatoryIntelligenceRuntimeSettings` would mix document-index configuration with Regulatory query-embedding and constraint-inference models. A generic runtime-settings hierarchy, model catalog, or settings→client DI container would invent an abstraction this repository does not own. Wiring settings into the Chunk 87 builder in this chunk would mix typed configuration with still-deferred configured/managed indexing runtime.
+- **Decision:**
+  - Typed `DocumentVectorIndexRuntimeSettings` lives in `energy_trading.shared.config` beside the other service-specific settings objects.
+  - The object owns exactly three fields: `document_embedding_model`, `qdrant_collection_name`, and `qdrant_vector_size`.
+  - The environment prefix is dedicated: `ENERGY_DOCUMENT_INDEX_`. Exact variables are `ENERGY_DOCUMENT_INDEX_DOCUMENT_EMBEDDING_MODEL`, `ENERGY_DOCUMENT_INDEX_QDRANT_COLLECTION_NAME`, and `ENERGY_DOCUMENT_INDEX_QDRANT_VECTOR_SIZE`.
+  - The document-embedding model identifier belongs here, not in `OpenAISettings`. Collection name and vector size belong here, not in generic `QdrantSettings` and not in `RegulatoryIntelligenceRuntimeSettings`.
+  - All three fields are required with no production defaults. String fields strip whitespace and reject blank/whitespace-only values. Vector size must be a strictly positive integer and is not inferred from the embedding model.
+  - Query-embedding and constraint-inference fields are not part of this object.
+  - The settings module is SDK-free and runtime-object-free. It does not import OpenAI or Qdrant clients, does not construct `QdrantDocumentVectorConfig`, and does not call Chunk 86 or Chunk 87 builders.
+  - `load_document_vector_index_runtime_settings(*, env_file=...)` is uncached and separate from `AppSettings`. Process health, `create_app()`, and the Chunk 87 builder do not load it.
+  - Generic configuration frameworks, model catalogs, provider registries, and settings aggregation DTOs are rejected.
+- **Consequences:** Callers can load document-index runtime-specific values independently of provider connection settings and Regulatory query runtime settings. Configured indexing runtime, client construction, client lifecycle, HTTP ingestion, and operational corpus indexing remain absent.
+
+---

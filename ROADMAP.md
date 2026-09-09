@@ -126,10 +126,51 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
   - [x] **Chunk 85** — Document Vector Index Execution Service — Application-only
   - [x] **Chunk 86** — Document Vector Index Provider-Neutral Composition Root
   - [x] **Chunk 87** — Provider-Aware Document Vector Index Composition — Offline
+  - [x] **Chunk 88** — Document Vector Index Runtime Settings Boundary — Offline
 - [ ] Pricing & Sales Agent
 - [ ] Contract-phase graph slice
 
 ## Phase 6 — ML feature pipelines and forecasting
+
+Phase 6 forecasting work is experimental and evidence-driven. This is a **future planning requirement**, not an implementation authorization.
+
+For both Consumer Load Forecast Agent and DAM Price Forecast Agent, the future process should include:
+
+```text
+data preparation
+→ simple time-series baselines
+→ feature engineering
+→ walk-forward / rolling backtesting
+→ LightGBM experiments
+→ XGBoost experiments
+→ justified hyperparameter experiments
+→ comparison
+→ champion model selection
+→ serialization
+→ inference integration
+→ monitoring/retraining policy
+```
+
+Do not use naive random train/test splitting if it leaks future information. Prefer chronological expanding/rolling validation. Complex models must beat meaningful simple baselines before being considered successful.
+
+Example baseline families (planning only):
+
+- **Load:** same hour yesterday; same hour previous week; rolling/seasonal baseline
+- **Price:** appropriate naive/seasonal DAM-price baselines
+
+No model is considered complete merely because it trains or runs.
+
+Future evaluation should not rely only on one aggregate metric. Where data supports it, evaluate regimes such as peak/off-peak, weekday/weekend, seasonality, extreme temperatures, high-volatility price periods, and generation/hydro stress periods. Later, after risk/trading contracts exist, forecast evaluation should connect to controlled downstream business outcomes:
+
+```text
+forecast
+→ risk decision
+→ bid
+→ historical/simulated market outcome
+→ P&L / penalties / risk
+```
+
+Do not implement trading-objective optimization now.
 
 - [ ] Shared ML utilities (`ml/common`)
 - [ ] Load feature pipeline + model training/inference path
@@ -175,5 +216,31 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 87
-- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 87 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize LangGraph wiring of Regulatory composition, PDF/OCR, actual RAG workflow, verified Armenian DAM rule extraction, configured/managed document indexing runtime, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.
+- **Completed:** Chunk 0 through Chunk 88
+- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 88 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize LangGraph wiring of Regulatory composition, PDF/OCR, actual RAG workflow, verified Armenian DAM rule extraction, configured/managed document indexing runtime, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.
+
+---
+
+## Project Completion Targets / Planning Horizon
+
+These figures are **estimates**, **planning targets**, and **subject to revision**. They are not guarantees or architecture invariants. `chunk-240` is not a mandatory stopping point; the project ends when required engineering goals are actually complete.
+
+Approximate milestone bands (planning estimates; later chunks must not be forced to match these bands):
+
+- **~Chunk 120–150** — the system should begin looking like a real integrated platform
+- **~Chunk 170–200** — large portions of the 13-agent end-to-end flow should be runnable
+- **~Chunk 220+** — experiments, hardening, observability, edge cases, production quality
+
+Do not create checkboxes for all numbers through 240.
+
+The first 80+ chunks established reusable patterns (ports, canonical DTOs, error contracts, async conventions, composition roots, provider adapters, settings patterns, lifespan patterns, architecture tests, publication discipline). Some later agents/features may therefore implement faster. Velocity will still vary and will slow in empirical areas: ML experiments, real datasets, feature engineering, backtesting, market validation, live integrations, edge cases, and production hardening. Do not assume linear acceleration.
+
+**Engineering/platform completion** (planning target: roughly first half / middle of October 2026) is distinct from **Armenia-specific live trading validation**. The latter requires authoritative real data and market validation; its date cannot honestly be predicted until those sources are available. Future status wording may be: `Armenia-specific model calibration and live-market validation pending authoritative data access.`
+
+Lack of authoritative Armenian market data must not stop unrelated platform engineering. Preserve the ACL: API / Excel / CSV / manual file / scraper / public dataset / synthetic dataset → source-specific Adapter / ACL → canonical internal model → rest of platform. Source schemas remain replaceable.
+
+Three planning data levels (not implemented by this chunk):
+
+1. **Level 1 — Synthetic / fixture data** validates engineering (ingestion, forecast pipelines, risk, trading, settlement, orchestration). It may include realistic seasonality, hourly peaks, weather influence, noise, missing intervals, anomalies, and price volatility. Synthetic data proves that the engineering system works. It does **not** prove that the model performs well on the real Armenian market.
+2. **Level 2 — Public / proxy datasets** may validate ML engineering, backtesting infrastructure, and general forecasting behavior. They are not Armenia-specific model-quality evidence.
+3. **Level 3 — File-first future integration** of authoritative data through messy Excel, CSV, API, manual files, or scraped sources must enter via source-specific adapters/ACL. Unreadable/unmappable inputs follow existing diagnostic/DLQ policy.

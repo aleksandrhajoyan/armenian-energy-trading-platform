@@ -1,6 +1,10 @@
 """Typed application configuration."""
 
 from energy_trading.shared.config.database import DatabaseSettings, load_database_settings
+from energy_trading.shared.config.document_vector_index import (
+    DocumentVectorIndexRuntimeSettings,
+    load_document_vector_index_runtime_settings,
+)
 from energy_trading.shared.config.openai import OpenAISettings, load_openai_settings
 from energy_trading.shared.config.qdrant import QdrantSettings, load_qdrant_settings
 from energy_trading.shared.config.redis import RedisSettings, load_redis_settings
@@ -20,6 +24,7 @@ __all__ = [
     "AppEnvironment",
     "AppSettings",
     "DatabaseSettings",
+    "DocumentVectorIndexRuntimeSettings",
     "OpenAISettings",
     "QdrantSettings",
     "RedisSettings",
@@ -27,6 +32,7 @@ __all__ = [
     "clear_settings_cache",
     "get_settings",
     "load_database_settings",
+    "load_document_vector_index_runtime_settings",
     "load_openai_settings",
     "load_qdrant_settings",
     "load_redis_settings",
