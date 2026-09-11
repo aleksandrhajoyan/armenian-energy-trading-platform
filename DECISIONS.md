@@ -1742,3 +1742,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Callers can later obtain a constructed PDF extraction-to-index application service from settings plus a local path without entering real extraction or indexing in this composition layer. OCR, URL/file-upload/directory acquisition, automatic/startup/background corpus ingestion, production wiring, collection management, reindex/replace/delete, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
 
 ---
+
+## ADR-114 — Explicit One-Shot Loaded PDF Extraction-to-Index Execution
+
+- **Status:** Accepted
+- **Context:** Chunk 101 published application-owned `DocumentExtractionIndexExecutionService.execute()`, which extracts once and indexes only non-empty chunks. Chunk 103 published `loaded_pdf_document_extraction_index_runtime`, which constructs that service from settings plus a local PDF path without invoking it. Callers still had no explicit one-shot API composition function that entered that loaded runtime and executed the application use case exactly once without inventing HTTP upload, startup/background ingestion, directory scanning, retry/fallback, or `create_app()` wiring.
+- **Decision:**
+  - API owns `execute_loaded_pdf_document_extraction_index` in `api/composition/pdf_document_extraction_index_execute.py`.
+  - The function is keyword-only and async. Inputs are `path: Path`, `document_id: str`, `source_name: str`, and the existing `env_file: str | Path | None = ".env"` contract from Chunk 103. The return type is `DocumentExtractionResult`.
+  - The function enters `loaded_pdf_document_extraction_index_runtime(...)` exactly once, awaits `service.execute()` exactly once with no arguments, and returns that exact result object. Nested extraction and index-execution rules remain owned by Chunk 101. Provider lifetime remains owned by the existing document-index loaded/managed chain.
+  - Runtime-entry failures and `execute()` failures propagate unchanged. Inner runtime teardown still occurs after a failed `execute()`. There is no local `try/except`, retry, fallback, result reconstruction, or new diagnostic.
+  - The function remains unwired from `create_app()`, FastAPI routes, production lifespan, `app.state`, dependency accessors, Regulatory runtime, LangGraph, scheduler, background tasks, and n8n. No automatic/startup/background caller is installed.
+- **Consequences:** An explicit external caller can now run one local text-layer PDF through extraction → embedding → vector-index execution. OCR, URL/file-upload/directory acquisition, automatic/startup/background corpus ingestion, production trigger wiring, collection management, reindex/replace/delete, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
+
+---

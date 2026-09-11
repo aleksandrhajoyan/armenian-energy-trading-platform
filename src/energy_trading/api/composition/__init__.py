@@ -21,6 +21,9 @@ from energy_trading.api.composition.document_vector_index_runtime import (
 from energy_trading.api.composition.pdf_document_extraction_index import (
     build_pdf_document_extraction_index_execution,
 )
+from energy_trading.api.composition.pdf_document_extraction_index_execute import (
+    execute_loaded_pdf_document_extraction_index,
+)
 from energy_trading.api.composition.pdf_document_extraction_index_loaded_runtime import (
     loaded_pdf_document_extraction_index_runtime,
 )
@@ -57,6 +60,7 @@ __all__ = [
     "build_regulatory_intelligence_lifespan",
     "build_regulatory_intelligence_provider_runtime",
     "build_regulatory_intelligence_query_execution",
+    "execute_loaded_pdf_document_extraction_index",
     "loaded_document_vector_index_runtime",
     "loaded_pdf_document_extraction_index_runtime",
     "loaded_regulatory_intelligence_runtime",
