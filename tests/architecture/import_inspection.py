@@ -79,6 +79,7 @@ DOCUMENT_VECTOR_INDEX_QDRANT_SETTINGS_COMPOSITION_RELATIVES = (
 )
 API_DEPENDENCIES_RELATIVE_PREFIX = "energy_trading/api/dependencies/"
 API_REGULATORY_QUERY_ROUTER_RELATIVE = "energy_trading/api/routers/regulatory_intelligence.py"
+API_DOCUMENT_VECTOR_INDEX_ROUTER_RELATIVE = "energy_trading/api/routers/document_vector_index.py"
 REGULATORY_PROVIDER_RUNTIME_RELATIVE = (
     "energy_trading/api/composition/regulatory_intelligence_runtime.py"
 )
@@ -186,7 +187,8 @@ def collect_import_violations(
 def collect_http_api_import_violations(api_root: Path, prefixes: tuple[str, ...]) -> list[str]:
     """Inspect HTTP transport API modules.
 
-    Excludes object-composition, accessors, and the Regulatory query router.
+    Excludes object-composition, accessors, the Regulatory query router,
+    and the Document Vector Index router.
     """
 
     return collect_import_violations(
@@ -196,6 +198,7 @@ def collect_http_api_import_violations(api_root: Path, prefixes: tuple[str, ...]
             API_COMPOSITION_RELATIVE_PREFIX,
             API_DEPENDENCIES_RELATIVE_PREFIX,
             API_REGULATORY_QUERY_ROUTER_RELATIVE,
+            API_DOCUMENT_VECTOR_INDEX_ROUTER_RELATIVE,
         ),
     )
 

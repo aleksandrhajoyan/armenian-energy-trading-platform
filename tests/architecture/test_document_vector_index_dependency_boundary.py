@@ -348,6 +348,8 @@ def test_app_health_and_routers_remain_unwired_to_the_accessor() -> None:
         source = path.read_text(encoding="utf-8")
         assert "get_document_vector_index_execution_service" not in source
     for path in sorted((API_ROOT / "routers").rglob("*.py")):
+        if path.resolve() == (API_ROOT / "routers" / "document_vector_index.py").resolve():
+            continue
         source = path.read_text(encoding="utf-8")
         assert "get_document_vector_index_execution_service" not in source
         assert "document_vector_index_execution_service" not in source

@@ -385,6 +385,8 @@ def test_app_health_accessor_and_routers_remain_unwired_to_the_schema() -> None:
         assert "DocumentVectorIndexRequest" not in source
         assert "energy_trading.api.schemas.document_vector_index" not in source
     for path in sorted((API_ROOT / "routers").rglob("*.py")):
+        if path.resolve() == (API_ROOT / "routers" / "document_vector_index.py").resolve():
+            continue
         source = path.read_text(encoding="utf-8")
         assert "DocumentVectorIndexRequest" not in source
         assert "DocumentVectorIndexChunkRequest" not in source

@@ -1655,3 +1655,16 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Unknown fields are forbidden. The models do not accept raw files, bytes, paths, URLs, MIME types, OCR options, provider/model identifiers, vectors, embeddings, scores, or metadata bags.
   - FastAPI transport does not accept `ExtractedDocumentChunk` as the public request model. No production mapper, route, accessor usage, `.execute(...)`, or response DTO is added in this slice.
 - **Consequences:** HTTP clients can be described against a narrow already-normalized chunk request contract. Indexing route installation, response semantics, document acquisition/PDF/OCR, automatic indexing, and LangGraph remain deferred.
+
+---
+
+## ADR-108 — Document-index HTTP indexing is an unwired route over already-normalized chunks
+
+- **Status:** Accepted
+- **Context:** Chunk 97 published API-owned request DTOs for already-normalized extracted chunks. Chunk 96 published a typed accessor for the lifespan-scoped `DocumentVectorIndexExecutionService`. An HTTP route is needed to connect those surfaces without installing production exposure, inventing a success payload, or accepting raw document upload. Reusing a generic mapper, reading `app.state` in the handler, or calling embedding/Qdrant ports directly would collapse the published boundaries.
+- **Decision:**
+  - The API layer owns a dedicated `APIRouter` that accepts `DocumentVectorIndexRequest`, resolves the service through `Depends(get_document_vector_index_execution_service)`, and explicitly constructs `ExtractedDocumentChunk` values field-by-field.
+  - The handler awaits the published `execute(*, chunks=...)` exactly once and returns HTTP 204 No Content because the application service returns `None`.
+  - There is no response DTO, raw file/upload surface, or generic mapper. Application and provider exceptions are not translated locally.
+  - Production `create_app()` does not import or `include_router` this module. Route existence is not production installation.
+- **Consequences:** The indexing HTTP boundary can be unit-tested independently. Production router installation, corpus ingestion, PDF/OCR, automatic indexing, and LangGraph remain deferred.

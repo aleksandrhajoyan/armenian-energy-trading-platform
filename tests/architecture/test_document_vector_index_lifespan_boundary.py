@@ -466,10 +466,15 @@ def test_state_mutation_is_confined_to_the_lifespan_module() -> None:
     dependencies_root = (API_ROOT / "dependencies").resolve()
     writer = BUILDER_MODULE.resolve()
     production_composer = (COMPOSITION_ROOT / "production_lifespan.py").resolve()
+    document_index_router = (API_ROOT / "routers" / "document_vector_index.py").resolve()
     offenders: list[str] = []
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
         resolved = path.resolve()
-        if resolved == writer or resolved.is_relative_to(dependencies_root):
+        if (
+            resolved == writer
+            or resolved.is_relative_to(dependencies_root)
+            or resolved == document_index_router
+        ):
             continue
         source = path.read_text(encoding="utf-8")
         if attribute in source:
@@ -494,6 +499,8 @@ def test_state_mutation_is_confined_to_the_lifespan_module() -> None:
     assert "get_document_vector_index_execution_service" not in builder_source
     assert "energy_trading.api.dependencies" not in builder_source
     for path in sorted((API_ROOT / "routers").rglob("*.py")):
+        if path.resolve() == (API_ROOT / "routers" / "document_vector_index.py").resolve():
+            continue
         source = path.read_text(encoding="utf-8")
         assert attribute not in source
         assert "document_vector_index_execution_service" not in source

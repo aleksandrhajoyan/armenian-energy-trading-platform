@@ -513,8 +513,9 @@ def test_api_composition_does_not_import_or_construct_the_execution_service() ->
     forbidden_wiring = ("energy_trading.application.orchestration.document_vector_index_execution",)
     assert collect_http_api_import_violations(API_ROOT, forbidden_wiring) == []
     accessor = (API_ROOT / "dependencies" / "document_vector_index.py").resolve()
+    document_index_router = (API_ROOT / "routers" / "document_vector_index.py").resolve()
     for path in http_transport_api_paths(API_ROOT):
-        if path.resolve() == accessor:
+        if path.resolve() in {accessor, document_index_router}:
             continue
         names = imported_names(path)
         assert "DocumentVectorIndexExecutionService" not in names
