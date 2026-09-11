@@ -477,6 +477,8 @@ def test_state_mutation_is_confined_to_the_lifespan_module() -> None:
         if attribute in source or "app.state" in source:
             offenders.append(path.relative_to(SRC_ROOT).as_posix())
     assert offenders == []
+    document_index_accessor = (API_ROOT / "dependencies" / "document_vector_index.py").resolve()
+    reader_modules = {accessor_module.resolve(), document_index_accessor}
     for path in sorted((API_ROOT / "dependencies").rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
@@ -494,7 +496,7 @@ def test_state_mutation_is_confined_to_the_lifespan_module() -> None:
                     if isinstance(target, ast.Attribute) and target.attr == attribute:
                         msg = "dependencies package must not delete the published state attribute"
                         raise AssertionError(msg)
-        if path.resolve() != accessor_module.resolve():
+        if path.resolve() not in reader_modules:
             source = path.read_text(encoding="utf-8")
             assert "app.state" not in source
     tree = ast.parse(accessor_module.read_text(encoding="utf-8"), filename=str(accessor_module))

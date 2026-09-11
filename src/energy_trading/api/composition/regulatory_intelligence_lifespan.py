@@ -2,15 +2,18 @@
 
 This module owns FastAPI lifespan entry and exit of the already-published
 settings-loaded Regulatory runtime. While the lifespan is active it stores the
-exact Chunk 75 service on ``app.state``. It does not add an accessor,
-dependency, or HTTP route, and it does not invoke provider operations.
+exact Chunk 75 service on ``app.state``. It does not invoke the service or
+provider operations.
 
 Ownership:
 
 * API composition root: owns ``build_regulatory_intelligence_lifespan``.
 * Chunk 75 loaded runtime: owns settings loading and managed-runtime lifetime.
-* ``create_app()`` installs this lifespan. HTTP routes, typed accessors, and
-  LangGraph remain deferred.
+* Production ``create_app()`` installs ``build_production_lifespan``, which
+  nests this lifespan as the outer context and Document Vector Index as the
+  inner context. This module exclusively owns Regulatory ``app.state``
+  exposure and removal. The Regulatory typed accessor and HTTP query route
+  already exist. LangGraph remains deferred.
 
 Constructing the returned callback is lazy. Only entering the lifespan context
 enters Chunk 75. The composed service is stored on application state only while

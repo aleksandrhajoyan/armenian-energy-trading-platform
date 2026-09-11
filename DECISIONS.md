@@ -1628,3 +1628,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Ownership is exclusively `document_vector_index_lifespan.py`. `app.py` and `production_lifespan.py` do not assign or delete the attribute. Regulatory continues to own `app.state.regulatory_intelligence_query_execution_service` independently.
   - No typed accessor, FastAPI dependency, HTTP route, automatic indexing, or generic service registry is added.
 - **Consequences:** Production now owns both runtimes, and the exact document-index execution service is available on application state only while that child lifespan is active. Accessor, HTTP ingestion, corpus indexing, PDF/OCR, and LangGraph remain deferred.
+
+---
+
+## ADR-106 — Document-index request-time service access is a narrow API dependency boundary
+
+- **Status:** Accepted
+- **Context:** Chunk 95 stores the exact lifespan-managed `DocumentVectorIndexExecutionService` on `app.state.document_vector_index_execution_service` while the document-index lifespan is active. HTTP handlers still needed a published, typed way to read that object. A global singleton, service registry, DI container, generic state accessor, or production `Depends(...)`/route in the same slice would either invent abstractions this repository does not own or pre-commit an HTTP indexing contract. Raising `HTTPException`, `AttributeError`, or `RuntimeError` from the accessor would leak transport or runtime internals into a request-time application boundary.
+- **Decision:**
+  - Request-time lookup is a dedicated API dependency function `get_document_vector_index_execution_service(request: Request) -> DocumentVectorIndexExecutionService`.
+  - The accessor reads the exact published state key and returns that exact service identity. It does not wrap, proxy, clone, or reconstruct the object.
+  - Missing or wrong-type state fails closed as existing `DependencyUnavailableError` with sanitized message `Document Vector Index service is unavailable.` and published code `dependency_unavailable`. No new exception class is introduced. HTTP translation remains in the existing API mapping layer (503).
+  - The accessor is read-only. It does not assign or delete application state, enter or exit lifecycle, load settings, construct clients, or invoke the service.
+  - There is no global singleton, service registry, service locator, or generic DI container. Production code does not wrap the accessor in `Depends(...)` and does not add an HTTP document-index route.
+- **Consequences:** Active FastAPI requests can resolve the lifespan-scoped document-index execution service through a typed reader. HTTP indexing transport, route installation, automatic indexing, corpus ingestion, PDF/OCR, and LangGraph remain deferred.

@@ -13,7 +13,11 @@ Ownership:
 * Existing document-index runtime settings loader: discovers
   ``DocumentVectorIndexRuntimeSettings``.
 * Chunk 90 managed runtime: owns client lifetime and service construction.
-* FastAPI lifespan, ``create_app()``, and LangGraph remain deferred.
+* Document-index FastAPI lifespan consumes this runtime. Production
+  ``create_app()`` reaches it indirectly through ``build_production_lifespan``.
+  The exact yielded execution service is exposed by
+  ``document_vector_index_lifespan.py``. HTTP indexing, automatic indexing,
+  and LangGraph remain deferred.
 
 Entering the context loads settings and yields a service. It does not execute
 indexing.

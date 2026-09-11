@@ -462,12 +462,14 @@ def test_lifespan_assigns_chunk_91_service_on_app_state_and_deletes_it_before_ex
 
 def test_state_mutation_is_confined_to_the_lifespan_module() -> None:
     attribute = "document_vector_index_execution_service"
+    accessor_module = API_ROOT / "dependencies" / "document_vector_index.py"
+    dependencies_root = (API_ROOT / "dependencies").resolve()
     writer = BUILDER_MODULE.resolve()
     production_composer = (COMPOSITION_ROOT / "production_lifespan.py").resolve()
     offenders: list[str] = []
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
         resolved = path.resolve()
-        if resolved == writer:
+        if resolved == writer or resolved.is_relative_to(dependencies_root):
             continue
         source = path.read_text(encoding="utf-8")
         if attribute in source:
@@ -488,13 +490,48 @@ def test_state_mutation_is_confined_to_the_lifespan_module() -> None:
     }
     assert "setattr" not in call_names
     assert "delattr" not in call_names
+    builder_source = BUILDER_MODULE.read_text(encoding="utf-8")
+    assert "get_document_vector_index_execution_service" not in builder_source
+    assert "energy_trading.api.dependencies" not in builder_source
     for path in sorted((API_ROOT / "routers").rglob("*.py")):
         source = path.read_text(encoding="utf-8")
         assert attribute not in source
         assert "document_vector_index_execution_service" not in source
     for path in sorted((API_ROOT / "dependencies").rglob("*.py")):
-        source = path.read_text(encoding="utf-8")
-        assert attribute not in source
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Attribute) and target.attr == attribute:
+                        msg = "dependencies package must not assign the published state attribute"
+                        raise AssertionError(msg)
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Attribute):
+                if node.target.attr == attribute:
+                    msg = "dependencies package must not assign the published state attribute"
+                    raise AssertionError(msg)
+            if isinstance(node, ast.Delete):
+                for target in node.targets:
+                    if isinstance(target, ast.Attribute) and target.attr == attribute:
+                        msg = "dependencies package must not delete the published state attribute"
+                        raise AssertionError(msg)
+        reader_modules = {
+            accessor_module.resolve(),
+            (API_ROOT / "dependencies" / "regulatory_intelligence.py").resolve(),
+        }
+        if path.resolve() not in reader_modules:
+            source = path.read_text(encoding="utf-8")
+            assert "app.state" not in source
+    accessor_tree = ast.parse(
+        accessor_module.read_text(encoding="utf-8"),
+        filename=str(accessor_module),
+    )
+    accessor_call_names = {
+        node.func.id
+        for node in ast.walk(accessor_tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "setattr" not in accessor_call_names
+    assert "delattr" not in accessor_call_names
 
 
 def test_provider_sdk_allowlist_remains_the_existing_document_index_modules() -> None:
