@@ -1588,3 +1588,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** FastAPI-compatible lifecycle ownership can be proven independently of service exposure. `create_app()` installation, the service-access mechanism, route/dependency wiring, LangGraph routing, document acquisition, PDF/OCR, and actual corpus indexing remain deferred. Direct provider SDK API-composition imports remain limited to the existing approved provider-composition modules. Chunk 91 continues to own settings loading; Chunk 90 continues to own client lifetime.
 
 ---
+
+## ADR-103 — Production FastAPI lifespan composition nests Regulatory outside document-index without a generic lifecycle framework
+
+- **Status:** Accepted
+- **Context:** FastAPI supports one application lifespan callback. Production `create_app()` already installs `build_regulatory_intelligence_lifespan`, which owns published Regulatory query-service exposure. Chunk 92 added `build_document_vector_index_lifespan` without installing it. Replacing the Regulatory lifespan would drop published query behavior. Installing the document-index lifespan beside it is not possible at the FastAPI application boundary. A generic `compose_lifespans(...)`, lifespan registry, resource manager, or DI container would invent a framework this repository does not own. Sharing OpenAI/Qdrant clients across the two runtimes would collapse separately published lifetime seams.
+- **Decision:**
+  - Production-specific nested composition lives in `build_production_lifespan` in `energy_trading.api.composition.production_lifespan`.
+  - The factory is synchronous and keyword-only. It reuses the existing `env_file: str | Path | None = ".env"` contract and returns a FastAPI-compatible callback: `Callable[[FastAPI], AbstractAsyncContextManager[None]]`.
+  - It delegates only to the two published child factories, forwarding the exact supplied `env_file` unchanged, and nests Regulatory as the outer context and Document Vector Index as the inner context. The same FastAPI `app` is passed to both callbacks. The composite yields `None`.
+  - Constructing the factory does not load settings, enter either runtime, create clients, or invoke provider operations. Child lifespan modules retain their own runtime ownership. Ordinary nesting teardown is preserved; lifecycle exceptions are not caught or remapped.
+  - This is not a reusable lifespan framework, service locator, or client-pooling refactor. There is no `app.state` assignment in this module.
+  - `create_app()` remains unchanged and continues to install `build_regulatory_intelligence_lifespan` directly. Installation of the composite is deferred.
+- **Consequences:** Both published lifespans can be owned together without replacing Regulatory behavior. Production `create_app()` installation, document-index `app.state` exposure, indexing HTTP routes, shared-client refactoring, and automatic indexing remain deferred. Direct provider SDK API-composition imports remain limited to the existing approved provider-composition modules.
+
+---
