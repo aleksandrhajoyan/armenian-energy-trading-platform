@@ -1694,7 +1694,23 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Chunking is deterministic and page-based: one chunk per non-empty normalized page; `chunk_id` is `<document_id>:page:<page_number>`; `ordinal` is zero-based among emitted chunks; `page_number` is one-based physical PDF page. Blank pages are skipped, not failures.
   - A readable PDF with no extractable text returns empty chunks plus a sanitized `pdf_no_extractable_text` diagnostic and no DLQ, matching the published "document that yields no normalized text" result case. Invalid/corrupt/non-PDF bytes return empty chunks, a sanitized `pdf_invalid` diagnostic, and opaque `pdf://{source_name}/source` DLQ metadata. Missing/unreadable files raise sanitized `DependencyUnavailableError`. Page `extract_text` parser failures fail closed at document level.
   - Filesystem paths, raw PDF bytes, parser exceptions, and OCR never appear on application DTOs, diagnostics, error messages, or `DLQRecord.payload_reference`. The adapter does not persist DLQ records.
-  - The adapter remains unwired from `create_app()`, Regulatory runtime, document-index runtime, `DocumentVectorIndexExecutionService`, LangGraph, OpenAI, and Qdrant. No HTTP extraction endpoint, settings, or extraction-to-index service is added.
-- **Consequences:** Local text-layer PDFs can be converted into existing canonical chunks in tests and future composition. OCR, scanned documents, URL/HTTP acquisition, automatic corpus ingestion, extraction-to-index orchestration, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
+  - The adapter remains unwired from `create_app()`, Regulatory runtime, document-index runtime, `DocumentVectorIndexExecutionService`, LangGraph, OpenAI, and Qdrant. No HTTP extraction endpoint or settings are added.
+- **Consequences:** Local text-layer PDFs can be converted into existing canonical chunks in tests and future composition. OCR, scanned documents, URL/HTTP acquisition, automatic corpus ingestion, production wiring of extraction-to-index composition, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
+
+---
+
+## ADR-111 — Application Document Extraction-to-Index Execution Composition
+
+- **Status:** Accepted
+- **Context:** Chunk 12 published `DocumentExtractionPort` / `DocumentExtractionResult`. Chunk 85 published `DocumentVectorIndexExecutionService` over already-normalized chunks. Chunk 100 published an unwired PDF text-layer adapter that can return non-empty chunks, empty chunks plus diagnostics, or empty chunks plus DLQ metadata. Callers still had no application-owned use case that composes extraction into indexing without inventing a generic document pipeline, FastAPI route, or automatic corpus ingestion. Wiring that composition into `create_app()`, lifespan, OpenAI, Qdrant, or LangGraph would collapse independently owned boundaries.
+- **Decision:**
+  - Application owns `DocumentExtractionIndexExecutionService` in `application/orchestration/document_extraction_index_execution.py`.
+  - Constructor dependencies are exactly `DocumentExtractionPort` and `DocumentVectorIndexExecutionService`.
+  - The only public operation is `async execute(self) -> DocumentExtractionResult`. It accepts no runtime source, path, or bytes.
+  - `execute` awaits `DocumentExtractionPort.extract()` exactly once, then awaits `DocumentVectorIndexExecutionService.execute(chunks=result.chunks)` only when `result.chunks` is non-empty, and returns the original `DocumentExtractionResult` object unchanged.
+  - Empty `chunks=()` does not invoke index execution. Extraction diagnostics and DLQ records are not rewritten, dropped, or converted into indexing failures.
+  - Extraction and indexing exceptions propagate unchanged. There is no local `try/except`, retry, fallback, or new application error.
+  - The service remains unwired from `create_app()`, FastAPI routes, production lifespan, Regulatory runtime, document-index runtime composition, LangGraph, `PdfTextExtractionAdapter`, OpenAI, and Qdrant. No composition root, settings, or HTTP endpoint is added.
+- **Consequences:** Callers that later compose this service can extract then conditionally index through published application boundaries. Automatic corpus ingestion, OCR, URL/HTTP acquisition, production wiring, collection management, reindex/delete/replace, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
 
 ---
