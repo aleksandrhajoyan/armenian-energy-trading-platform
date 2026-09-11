@@ -116,6 +116,7 @@ ALLOWED_APP_IMPORTS = frozenset(
         "energy_trading.api.composition.production_lifespan",
         "energy_trading.api.exception_handlers",
         "energy_trading.api.middleware",
+        "energy_trading.api.routers.document_vector_index",
         "energy_trading.api.routers.health",
         "energy_trading.api.routers.regulatory_intelligence",
         "energy_trading.shared.config.settings",
@@ -158,10 +159,15 @@ def test_create_app_imports_production_lifespan_builder_only() -> None:
     assert "FastAPI" in names
     assert "health_router" in names
     assert "regulatory_intelligence_router" in names
+    assert "document_vector_index_router" in names
     assert "query_regulatory_intelligence" not in names
+    assert "index_document_vectors" not in names
     assert "get_regulatory_intelligence_query_execution_service" not in names
+    assert "get_document_vector_index_execution_service" not in names
     assert "RegulatoryIntelligenceQueryRequest" not in names
     assert "RegulatoryIntelligenceQueryResponse" not in names
+    assert "DocumentVectorIndexRequest" not in names
+    assert "DocumentVectorIndexChunkRequest" not in names
     assert "loaded_regulatory_intelligence_runtime" not in names
     assert "managed_regulatory_intelligence_runtime" not in names
     assert "loaded_document_vector_index_runtime" not in names
@@ -271,8 +277,11 @@ def test_create_app_includes_regulatory_router_once_with_api_prefix() -> None:
     modules = imported_modules(API_APP)
     assert "energy_trading.api.routers.health" in modules
     assert "energy_trading.api.routers.regulatory_intelligence" in modules
+    assert "energy_trading.api.routers.document_vector_index" in modules
     assert "energy_trading.api.dependencies.regulatory_intelligence" not in modules
     assert "energy_trading.api.schemas.regulatory_intelligence" not in modules
+    assert "energy_trading.api.dependencies.document_vector_index" not in modules
+    assert "energy_trading.api.schemas.document_vector_index" not in modules
     create_app = _create_app_function()
     included: list[tuple[str, dict[str, str]]] = []
     for node in ast.walk(create_app):
@@ -288,10 +297,13 @@ def test_create_app_includes_regulatory_router_once_with_api_prefix() -> None:
     assert included == [
         ("health_router", {"prefix": "resolved_settings.api_prefix"}),
         ("regulatory_intelligence_router", {"prefix": "resolved_settings.api_prefix"}),
+        ("document_vector_index_router", {"prefix": "resolved_settings.api_prefix"}),
     ]
     source = API_APP.read_text(encoding="utf-8")
     assert "/regulatory-intelligence/query" not in source
     assert "/regulatory-intelligence" not in source
+    assert "/document-vector-index/index" not in source
+    assert "/document-vector-index" not in source
     assert ".execute(" not in source
     assert "app.state" not in source
     assert "regulatory_intelligence_query_execution_service" not in source

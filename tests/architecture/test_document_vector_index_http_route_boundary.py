@@ -1,4 +1,4 @@
-"""Chunk 98 Document Vector Index HTTP route stays a thin unwired API boundary."""
+"""Chunk 98 Document Vector Index HTTP route stays a thin API transport boundary."""
 
 from __future__ import annotations
 
@@ -372,18 +372,14 @@ def test_application_domain_and_graph_do_not_import_the_router() -> None:
     assert "document-vector-index" not in source
 
 
-def test_create_app_health_and_regulatory_remain_unwired_to_the_router() -> None:
+def test_accessor_schema_lifespan_health_and_regulatory_remain_unwired_to_the_handler() -> None:
     names = imported_names(API_APP)
     assert "index_document_vectors" not in names
     assert "get_document_vector_index_execution_service" not in names
-    modules = imported_modules(API_APP)
-    assert "energy_trading.api.routers.document_vector_index" not in modules
-    assert "energy_trading.api.routers.health" in modules
-    assert "energy_trading.api.routers.regulatory_intelligence" in modules
+    assert "DocumentVectorIndexRequest" not in names
     source = API_APP.read_text(encoding="utf-8")
-    assert "document_vector_index_router" not in source
-    assert "document-vector-index" not in source
     assert "index_document_vectors" not in source
+    assert "/document-vector-index" not in source
     health_source = HEALTH_ROUTER.read_text(encoding="utf-8")
     assert "get_document_vector_index_execution_service" not in health_source
     assert "index_document_vectors" not in health_source
@@ -400,15 +396,3 @@ def test_create_app_health_and_regulatory_remain_unwired_to_the_router() -> None
     production_source = PRODUCTION_LIFESPAN_MODULE.read_text(encoding="utf-8")
     assert "index_document_vectors" not in production_source
     assert "include_router" not in production_source
-    included: list[str] = []
-    create_app = next(
-        node
-        for node in ast.parse(source, filename=str(API_APP)).body
-        if isinstance(node, ast.FunctionDef) and node.name == "create_app"
-    )
-    for node in ast.walk(create_app):
-        if not isinstance(node, ast.Call) or _call_name(node) != "include_router":
-            continue
-        assert isinstance(node.args[0], ast.Name)
-        included.append(node.args[0].id)
-    assert included == ["health_router", "regulatory_intelligence_router"]

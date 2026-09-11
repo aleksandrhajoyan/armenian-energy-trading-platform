@@ -4,7 +4,7 @@ This module is a thin transport boundary. It binds the published request DTO,
 resolves the published index-execution service through FastAPI ``Depends``,
 projects already-normalized chunk fields into ``ExtractedDocumentChunk``, and
 invokes ``execute`` once. Success is HTTP 204 with no body. Production
-``create_app()`` does not install it.
+``create_app()`` installs this router under the existing API prefix.
 """
 
 from typing import Annotated

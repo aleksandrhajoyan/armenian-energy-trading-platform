@@ -1668,3 +1668,15 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - There is no response DTO, raw file/upload surface, or generic mapper. Application and provider exceptions are not translated locally.
   - Production `create_app()` does not import or `include_router` this module. Route existence is not production installation.
 - **Consequences:** The indexing HTTP boundary can be unit-tested independently. Production router installation, corpus ingestion, PDF/OCR, automatic indexing, and LangGraph remain deferred.
+
+---
+
+## ADR-109 — Document Vector Index production router installation
+
+- **Status:** Accepted
+- **Context:** Chunk 98 published a thin Document Vector Index HTTP indexing router, but production `create_app()` still installed only health and Regulatory Intelligence. Isolated tests could mount the endpoint; the production factory did not. Reconstructing the path, wrapping the accessor, moving provider setup into `create_app()`, or introducing a generic router registry would expand this composition slice.
+- **Decision:**
+  - Production `create_app()` imports the existing `router` from `api/routers/document_vector_index.py` as `document_vector_index_router` and includes it once with `prefix=resolved_settings.api_prefix`, the same prefix used by health and Regulatory Intelligence.
+  - The handler, DTOs, accessor, HTTP method, endpoint path, 204 mapping, and explicit `ExtractedDocumentChunk` projection remain unchanged. No second prefix is added in `create_app()`.
+  - Construction remains lazy. The existing keyword-only `lifespan` seam remains. The published document-index lifespan still owns service lifecycle. `create_app()` still does not load document-index/OpenAI/Qdrant settings, construct clients, call composition builders, assign `app.state`, or invoke `.execute`.
+- **Consequences:** `POST /api/v1/document-vector-index/index` is reachable through the production factory when the default prefix is `/api/v1`. Execution still depends on the lifespan-scoped service. The request body remains already-normalized chunks only. Offline tests can inject a no-op lifespan and keep health credential-free; missing service state maps to the published 503. Corpus ingestion, PDF/OCR, automatic/background/startup indexing, reindex/replace/delete, Qdrant collection management, verified Armenian DAM rules, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.

@@ -11,6 +11,9 @@ from energy_trading.api.composition.production_lifespan import (
 )
 from energy_trading.api.exception_handlers import register_exception_handlers
 from energy_trading.api.middleware import CorrelationMiddleware, RequestLoggingMiddleware
+from energy_trading.api.routers.document_vector_index import (
+    router as document_vector_index_router,
+)
 from energy_trading.api.routers.health import router as health_router
 from energy_trading.api.routers.regulatory_intelligence import (
     router as regulatory_intelligence_router,
@@ -32,8 +35,9 @@ def create_app(
     Passing ``lifespan`` replaces the production composite lifespan so
     transport tests can stay independent of provider credentials. The default
     installs ``build_production_lifespan`` and includes the published
-    Regulatory query router; constructing the app does not load Regulatory or
-    document-index settings or create clients.
+    Regulatory query router and Document Vector Index indexing router;
+    constructing the app does not load Regulatory or document-index settings
+    or create clients.
     """
 
     resolved_settings = settings if settings is not None else get_settings()
@@ -51,6 +55,10 @@ def create_app(
     application.include_router(health_router, prefix=resolved_settings.api_prefix)
     application.include_router(
         regulatory_intelligence_router,
+        prefix=resolved_settings.api_prefix,
+    )
+    application.include_router(
+        document_vector_index_router,
         prefix=resolved_settings.api_prefix,
     )
 
