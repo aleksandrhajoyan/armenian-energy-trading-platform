@@ -1,4 +1,4 @@
-"""Chunk 92 FastAPI document vector index lifespan stays an unwired outer lifecycle seam."""
+"""Chunk 95 FastAPI document vector index lifespan exposes Chunk 91 on lifespan-scoped app.state."""
 
 from __future__ import annotations
 
@@ -327,7 +327,7 @@ def test_builder_returns_fastapi_compatible_async_lifespan_callback() -> None:
     decorator = lifespan.decorator_list[0]
     assert isinstance(decorator, ast.Name)
     assert decorator.id == "asynccontextmanager"
-    assert tuple(arg.arg for arg in lifespan.args.args) == ("_app",)
+    assert tuple(arg.arg for arg in lifespan.args.args) == ("app",)
     assert ast.unparse(lifespan.args.args[0].annotation) == "FastAPI"
     assert ast.unparse(lifespan.returns) == "AsyncIterator[None]"
     statements = [
@@ -356,7 +356,20 @@ def test_builder_construction_does_not_load_settings_or_enter_runtime() -> None:
     assert outer_calls == []
 
 
-def test_lifespan_enters_chunk_91_once_forwards_env_file_and_yields_nothing() -> None:
+def _state_attribute(node: ast.AST) -> ast.Attribute | None:
+    if not isinstance(node, ast.Attribute):
+        return None
+    if node.attr != "document_vector_index_execution_service":
+        return None
+    owner = node.value
+    if not isinstance(owner, ast.Attribute) or owner.attr != "state":
+        return None
+    if not isinstance(owner.value, ast.Name) or owner.value.id != "app":
+        return None
+    return node
+
+
+def test_lifespan_assigns_chunk_91_service_on_app_state_and_deletes_it_before_exit() -> None:
     builder = _builder_function(BUILDER_MODULE)
     lifespan = _nested_lifespan(builder)
     control = [
@@ -364,7 +377,7 @@ def test_lifespan_enters_chunk_91_once_forwards_env_file_and_yields_nothing() ->
         for node in ast.walk(builder)
         if isinstance(node, (ast.If, ast.IfExp, ast.Match, ast.For, ast.While, ast.Try))
     ]
-    assert control == []
+    assert control == ["Try"]
     except_handlers = [node for node in ast.walk(builder) if isinstance(node, ast.ExceptHandler)]
     assert except_handlers == []
     constructed: list[str] = []
@@ -390,18 +403,38 @@ def test_lifespan_enters_chunk_91_once_forwards_env_file_and_yields_nothing() ->
     assert _call_name(item.context_expr) == "loaded_document_vector_index_runtime"
     keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in item.context_expr.keywords}
     assert keywords == {"env_file": "env_file"}
-    assert item.optional_vars is None
-    inner = list(wrapper.body)
-    assert len(inner) == 1
-    assert isinstance(inner[0], ast.Expr)
-    assert isinstance(inner[0].value, ast.Yield)
-    assert inner[0].value.value is None
+    assert isinstance(item.optional_vars, ast.Name)
+    assert item.optional_vars.id == "service"
+    inner = [node for node in wrapper.body if not isinstance(node, ast.Expr)]
+    assert [type(node).__name__ for node in inner] == ["Assign", "Try"]
+    assignment = inner[0]
+    assert isinstance(assignment, ast.Assign)
+    assert len(assignment.targets) == 1
+    assigned = _state_attribute(assignment.targets[0])
+    assert assigned is not None
+    assert isinstance(assignment.value, ast.Name)
+    assert assignment.value.id == "service"
+    try_node = inner[1]
+    assert isinstance(try_node, ast.Try)
+    assert try_node.handlers == []
+    assert try_node.orelse == []
+    assert len(try_node.body) == 1
+    assert isinstance(try_node.body[0], ast.Expr)
+    assert isinstance(try_node.body[0].value, ast.Yield)
+    assert try_node.body[0].value.value is None
+    assert len(try_node.finalbody) == 1
+    deletion = try_node.finalbody[0]
+    assert isinstance(deletion, ast.Delete)
+    assert len(deletion.targets) == 1
+    deleted = _state_attribute(deletion.targets[0])
+    assert deleted is not None
     source = BUILDER_MODULE.read_text(encoding="utf-8")
-    assert "app.state" not in source
-    assert "_app.state" not in source
+    assert "app.state.document_vector_index_execution_service" in source
     assert "request.state" not in source
     assert "dependency_overrides" not in source
     assert "global " not in source
+    assert "get_document_vector_index" not in source
+    assert "Depends(" not in source
     assert "OpenAISettings(" not in source
     assert "QdrantSettings(" not in source
     assert "DocumentVectorIndexRuntimeSettings(" not in source
@@ -416,6 +449,8 @@ def test_lifespan_enters_chunk_91_once_forwards_env_file_and_yields_nothing() ->
     assert ".index(" not in source
     assert ".execute(" not in source
     assert ".prepare(" not in source
+    assert ".search(" not in source
+    assert ".infer(" not in source
     assert "create_collection" not in source
     identifiers = {node.id for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Name)}
     leaked_frameworks = sorted(name for name in identifiers if name in GENERIC_FRAMEWORK_NAMES)
@@ -423,6 +458,43 @@ def test_lifespan_enters_chunk_91_once_forwards_env_file_and_yields_nothing() ->
     names = annotation_type_names(BUILDER_MODULE)
     leaked_types = sorted(name for name in names if name in FORBIDDEN_TYPE_NAMES)
     assert leaked_types == []
+
+
+def test_state_mutation_is_confined_to_the_lifespan_module() -> None:
+    attribute = "document_vector_index_execution_service"
+    writer = BUILDER_MODULE.resolve()
+    production_composer = (COMPOSITION_ROOT / "production_lifespan.py").resolve()
+    offenders: list[str] = []
+    for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
+        resolved = path.resolve()
+        if resolved == writer:
+            continue
+        source = path.read_text(encoding="utf-8")
+        if attribute in source:
+            offenders.append(path.relative_to(SRC_ROOT).as_posix())
+    assert offenders == []
+    for path in (API_APP, production_composer):
+        source = path.read_text(encoding="utf-8")
+        assert "app.state" not in source
+        assert attribute not in source
+    writer_tree = ast.parse(
+        BUILDER_MODULE.read_text(encoding="utf-8"),
+        filename=str(BUILDER_MODULE),
+    )
+    call_names = {
+        node.func.id
+        for node in ast.walk(writer_tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "setattr" not in call_names
+    assert "delattr" not in call_names
+    for path in sorted((API_ROOT / "routers").rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        assert attribute not in source
+        assert "document_vector_index_execution_service" not in source
+    for path in sorted((API_ROOT / "dependencies").rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        assert attribute not in source
 
 
 def test_provider_sdk_allowlist_remains_the_existing_document_index_modules() -> None:

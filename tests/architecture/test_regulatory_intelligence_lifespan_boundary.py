@@ -459,6 +459,7 @@ def test_state_mutation_is_confined_to_the_lifespan_module() -> None:
     accessor_module = API_ROOT / "dependencies" / "regulatory_intelligence.py"
     dependencies_root = (API_ROOT / "dependencies").resolve()
     writer = BUILDER_MODULE.resolve()
+    document_index_writer = (COMPOSITION_ROOT / "document_vector_index_lifespan.py").resolve()
     offenders: list[str] = []
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
         resolved = path.resolve()
@@ -469,6 +470,10 @@ def test_state_mutation_is_confined_to_the_lifespan_module() -> None:
         ):
             continue
         source = path.read_text(encoding="utf-8")
+        if resolved == document_index_writer:
+            if attribute in source:
+                offenders.append(path.relative_to(SRC_ROOT).as_posix())
+            continue
         if attribute in source or "app.state" in source:
             offenders.append(path.relative_to(SRC_ROOT).as_posix())
     assert offenders == []

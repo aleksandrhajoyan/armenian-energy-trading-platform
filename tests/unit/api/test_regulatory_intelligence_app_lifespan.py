@@ -174,6 +174,7 @@ def test_create_app_exposes_chunk_75_service_on_app_state_during_lifespan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = _RecordingService()
+    document_index_service = object()
 
     @asynccontextmanager
     async def fake_loaded(**_kwargs: object) -> AsyncIterator[object]:
@@ -181,7 +182,7 @@ def test_create_app_exposes_chunk_75_service_on_app_state_during_lifespan(
 
     @asynccontextmanager
     async def fake_document_index_loaded(**_kwargs: object) -> AsyncIterator[object]:
-        yield object()
+        yield document_index_service
 
     monkeypatch.setattr(
         f"{_REGULATORY_LIFESPAN_MODULE}.loaded_regulatory_intelligence_runtime",
@@ -193,22 +194,24 @@ def test_create_app_exposes_chunk_75_service_on_app_state_during_lifespan(
     )
     application = create_app(make_test_settings())
     assert _has_service(application) is False
+    assert not hasattr(application.state, "document_vector_index_execution_service")
 
     @application.get("/peek")
     async def peek(request: Request) -> dict[str, str]:
         exposed = request.app.state.regulatory_intelligence_query_execution_service
         assert exposed is service
-        assert not hasattr(request.app.state, "document_vector_index_execution_service")
+        assert request.app.state.document_vector_index_execution_service is document_index_service
         return {"status": "ok"}
 
     with TestClient(application) as client:
         assert application.state.regulatory_intelligence_query_execution_service is service
-        assert not hasattr(application.state, "document_vector_index_execution_service")
+        assert application.state.document_vector_index_execution_service is document_index_service
         response = client.get("/peek")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
         assert service.calls == []
     assert _has_service(application) is False
+    assert not hasattr(application.state, "document_vector_index_execution_service")
     assert service.calls == []
 
 

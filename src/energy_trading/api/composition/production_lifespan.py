@@ -11,9 +11,13 @@ Ownership:
 
 * API composition root: owns ``build_production_lifespan``.
 * Production ``create_app()``: installs this factory as the default lifespan.
-* Chunk 76 Regulatory lifespan: owns Regulatory query-service exposure.
-* Chunk 92 document vector index lifespan: owns unused indexing runtime
-  and exposes no service.
+* This module composes the two child lifespan callbacks only. It assigns
+  and deletes neither child service.
+* Regulatory child lifespan: owns Regulatory query-service exposure and
+  removal.
+* Document Vector Index child lifespan: owns Document Vector Index
+  execution-service exposure and removal only while that child lifespan is
+  active. No automatic indexing occurs here.
 
 Wiring:
 

@@ -1,4 +1,4 @@
-"""FastAPI document vector index lifespan owns Chunk 91 lifetime without exposing it."""
+"""FastAPI document vector index lifespan exposes Chunk 91 on app.state."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ from tests.unit.api.helpers import make_test_settings
 
 _LIFESPAN_MODULE = "energy_trading.api.composition.document_vector_index_lifespan"
 _EXPLICIT_ENV_FILE = Path("sentinel-chunk92.env")
+_SERVICE_ATTR = "document_vector_index_execution_service"
 
 
 @dataclass
@@ -48,6 +49,8 @@ class _LoadedRuntimeSpy:
     active: bool = False
     entry_error: BaseException | None = None
     exit_error: BaseException | None = None
+    owner: FastAPI | None = None
+    state_present_on_exit: bool | None = None
 
     def __call__(self, **kwargs: object) -> AbstractAsyncContextManager[object]:
         self.calls.append(kwargs)
@@ -63,6 +66,8 @@ class _LoadedRuntimeSpy:
         try:
             yield self.service
         finally:
+            if self.owner is not None:
+                self.state_present_on_exit = hasattr(self.owner.state, _SERVICE_ATTR)
             self.active = False
             self.events.append("exit")
             if self.exit_error is not None:
@@ -81,11 +86,8 @@ def _patch_loaded_runtime(
     return runtime_spy
 
 
-def _state_values(owner: object) -> list[object]:
-    state = getattr(owner, "_state", {})
-    if isinstance(state, dict):
-        return list(state.values())
-    return []
+def _has_service(app: FastAPI) -> bool:
+    return hasattr(app.state, _SERVICE_ATTR)
 
 
 def test_factory_is_synchronous_keyword_only_and_matches_chunk_91_env_file() -> None:
@@ -111,18 +113,21 @@ def test_returned_callback_is_fastapi_lifespan_callable() -> None:
     assert isinstance(manager, AbstractAsyncContextManager)
 
 
-def test_factory_construction_does_not_enter_loaded_runtime(
+def test_factory_construction_does_not_enter_loaded_runtime_or_mutate_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     spy = _patch_loaded_runtime(monkeypatch)
+    application = FastAPI()
     callback = build_document_vector_index_lifespan(env_file=_EXPLICIT_ENV_FILE)
     assert spy.calls == []
     assert spy.events == []
     assert spy.active is False
-    manager = callback(FastAPI())
+    assert _has_service(application) is False
+    manager = callback(application)
     assert spy.calls == []
     assert spy.events == []
     assert isinstance(manager, AbstractAsyncContextManager)
+    assert _has_service(application) is False
 
 
 async def test_explicit_env_file_is_forwarded_unchanged(
@@ -170,32 +175,68 @@ async def test_loaded_runtime_is_entered_and_exited_exactly_once_and_stays_activ
     assert len(spy.calls) == 1
 
 
-async def test_yielded_service_is_not_exposed_or_invoked(
+async def test_exact_service_identity_is_exposed_during_lifespan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    service = _RecordingService()
+    service = object()
     spy = _patch_loaded_runtime(monkeypatch, _LoadedRuntimeSpy(service=service))
     application = FastAPI()
     callback = build_document_vector_index_lifespan(env_file=None)
     async with callback(application) as yielded:
         assert yielded is None
+        assert application.state.document_vector_index_execution_service is service
         assert spy.active is True
-        assert service not in _state_values(application.state)
-        public_state = [
-            getattr(application.state, name)
-            for name in dir(application.state)
-            if not name.startswith("_")
-        ]
-        assert service not in public_state
-        assert not hasattr(application.state, "document_vector_index_service")
-        assert not hasattr(application.state, "document_vector_index_runtime")
-        assert service.calls == []
     assert yielded is None
-    assert service.calls == []
+
+
+async def test_service_attribute_is_absent_before_and_after_lifespan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = object()
+    spy = _patch_loaded_runtime(monkeypatch, _LoadedRuntimeSpy(service=service))
+    application = FastAPI()
+    callback = build_document_vector_index_lifespan(env_file=None)
+    assert _has_service(application) is False
+    async with callback(application):
+        assert application.state.document_vector_index_execution_service is service
+    assert _has_service(application) is False
     assert spy.events == ["enter", "exit"]
 
 
-async def test_startup_failure_propagates_and_skips_lifespan_body(
+async def test_state_is_removed_before_loaded_runtime_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = object()
+    spy = _LoadedRuntimeSpy(service=service)
+    application = FastAPI()
+    spy.owner = application
+    _patch_loaded_runtime(monkeypatch, spy)
+    callback = build_document_vector_index_lifespan(env_file=None)
+    async with callback(application):
+        assert spy.events == ["enter"]
+        assert application.state.document_vector_index_execution_service is service
+    assert spy.events == ["enter", "exit"]
+    assert spy.state_present_on_exit is False
+    assert _has_service(application) is False
+
+
+async def test_exposed_service_is_not_invoked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _RecordingService()
+    _patch_loaded_runtime(monkeypatch, _LoadedRuntimeSpy(service=service))
+    application = FastAPI()
+    callback = build_document_vector_index_lifespan(env_file=None)
+    async with callback(application) as yielded:
+        assert yielded is None
+        assert application.state.document_vector_index_execution_service is service
+        assert service.calls == []
+    assert yielded is None
+    assert service.calls == []
+    assert _has_service(application) is False
+
+
+async def test_startup_failure_propagates_and_never_exposes_the_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     error = RuntimeError("loaded-runtime-entry-failed")
@@ -203,50 +244,63 @@ async def test_startup_failure_propagates_and_skips_lifespan_body(
         monkeypatch,
         _LoadedRuntimeSpy(service=object(), entry_error=error),
     )
+    application = FastAPI()
     body_reached = False
     callback = build_document_vector_index_lifespan(env_file=None)
     with pytest.raises(RuntimeError) as captured:
-        async with callback(FastAPI()):
+        async with callback(application):
             body_reached = True
     assert captured.value is error
     assert body_reached is False
     assert spy.events == ["enter-failed"]
     assert spy.active is False
     assert len(spy.calls) == 1
+    assert _has_service(application) is False
 
 
-async def test_body_exception_exits_loaded_runtime_and_propagates(
+async def test_body_exception_removes_state_exits_runtime_and_propagates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    spy = _patch_loaded_runtime(monkeypatch)
+    service = object()
+    spy = _LoadedRuntimeSpy(service=service)
+    application = FastAPI()
+    spy.owner = application
+    _patch_loaded_runtime(monkeypatch, spy)
     callback = build_document_vector_index_lifespan(env_file=None)
     with pytest.raises(RuntimeError, match="lifespan-body-failed") as captured:
-        async with callback(FastAPI()):
+        async with callback(application):
+            assert application.state.document_vector_index_execution_service is service
             raise RuntimeError("lifespan-body-failed")
     assert type(captured.value) is RuntimeError
     assert str(captured.value) == "lifespan-body-failed"
     assert spy.events == ["enter", "exit"]
     assert spy.active is False
+    assert spy.state_present_on_exit is False
+    assert _has_service(application) is False
 
 
-async def test_teardown_failure_propagates_unchanged(
+async def test_teardown_failure_removes_state_before_exit_error_propagates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     error = RuntimeError("loaded-runtime-exit-failed")
-    spy = _patch_loaded_runtime(
-        monkeypatch,
-        _LoadedRuntimeSpy(service=object(), exit_error=error),
-    )
+    service = object()
+    spy = _LoadedRuntimeSpy(service=service, exit_error=error)
+    application = FastAPI()
+    spy.owner = application
+    _patch_loaded_runtime(monkeypatch, spy)
     callback = build_document_vector_index_lifespan(env_file=None)
     with pytest.raises(RuntimeError) as captured:
-        async with callback(FastAPI()):
+        async with callback(application):
             assert spy.active is True
+            assert application.state.document_vector_index_execution_service is service
     assert captured.value is error
     assert spy.events == ["enter", "exit"]
     assert spy.active is False
+    assert spy.state_present_on_exit is False
+    assert _has_service(application) is False
 
 
-def test_fastapi_lifespan_compatibility_without_modifying_create_app(
+def test_fastapi_lifespan_compatibility_exposes_service_during_active_app(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = object()
@@ -257,13 +311,15 @@ def test_fastapi_lifespan_compatibility_without_modifying_create_app(
     @application.get("/peek")
     async def peek(request: Request) -> dict[str, str]:
         assert spy.active is True
-        assert service not in _state_values(request.app.state)
-        assert service not in _state_values(request.state)
+        exposed = request.app.state.document_vector_index_execution_service
+        assert exposed is service
         return {"status": "ok"}
 
+    assert _has_service(application) is False
     with TestClient(application) as client:
         assert spy.events == ["enter"]
         assert spy.active is True
+        assert application.state.document_vector_index_execution_service is service
         response = client.get("/peek")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
@@ -271,9 +327,10 @@ def test_fastapi_lifespan_compatibility_without_modifying_create_app(
     assert spy.events == ["enter", "exit"]
     assert spy.active is False
     assert spy.calls == [{"env_file": None}]
+    assert _has_service(application) is False
 
 
-def test_create_app_remains_unwired_to_the_lifespan_boundary(
+def test_create_app_does_not_import_or_enter_the_lifespan_boundary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     spy = _patch_loaded_runtime(monkeypatch)
@@ -291,6 +348,7 @@ def test_create_app_remains_unwired_to_the_lifespan_boundary(
     assert spy.calls == []
     assert spy.events == []
     assert spy.active is False
+    assert _has_service(application) is False
 
 
 def test_lifespan_module_does_not_import_the_app_factory() -> None:
@@ -302,7 +360,7 @@ def test_lifespan_module_does_not_import_the_app_factory() -> None:
     assert "energy_trading.api.routers" not in modules
 
 
-def test_lifespan_module_does_not_call_lower_layers_or_assign_state() -> None:
+def test_lifespan_module_does_not_call_lower_layers_or_execute() -> None:
     import energy_trading.api.composition.document_vector_index_lifespan as module
 
     source = inspect.getsource(module)
@@ -322,9 +380,11 @@ def test_lifespan_module_does_not_call_lower_layers_or_assign_state() -> None:
     assert ".execute(" not in source
     assert ".embed(" not in source
     assert ".index(" not in source
-    assert "app.state" not in source
-    assert "_app.state" not in source
+    assert "app.state.document_vector_index_execution_service" in source
     assert "os.environ" not in source
     assert "getenv" not in source
     assert "dotenv" not in source
     assert "loaded_document_vector_index_runtime" in source
+    assert "get_document_vector_index" not in source
+    assert "Depends(" not in source
+    assert "include_router" not in source

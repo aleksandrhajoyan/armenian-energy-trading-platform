@@ -1614,4 +1614,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - `app.py` does not import `build_regulatory_intelligence_lifespan` or `build_document_vector_index_lifespan` and does not reproduce nested child composition.
   - `create_app()` construction remains lazy: it may construct the composite callback, but it does not load Regulatory or document-index settings, create OpenAI/Qdrant clients, execute provider calls, or index anything.
   - Regulatory query-router installation and lifespan-owned `app.state` exposure are unchanged. The Document Vector Index service remains unexposed and is not executed.
-- **Consequences:** Entering the real production application lifespan enters both published child runtimes through Chunk 93. Offline tests can still inject a no-op lifespan. Document-index `app.state` exposure, indexing HTTP routes, shared-client refactoring, and automatic indexing remain deferred.
+- **Consequences:** Entering the real production application lifespan enters both published child runtimes through Chunk 93. Offline tests can still inject a no-op lifespan. Document-index indexing HTTP routes, shared-client refactoring, and automatic indexing remain deferred.
+
+---
+
+## ADR-105 — Document-index FastAPI app.state exposes the exact lifespan-scoped execution service
+
+- **Status:** Accepted
+- **Context:** Chunk 94 enters the document-index lifecycle through `create_app` → `build_production_lifespan` → `build_document_vector_index_lifespan` → `loaded_document_vector_index_runtime`, but the exact yielded `DocumentVectorIndexExecutionService` was discarded. ADR-102 separated FastAPI lifecycle ownership from service exposure. Regulatory already publishes its query service on lifespan-scoped `app.state`. Inventing a generic service registry, DI container, or shared state map would collapse those independently owned attributes. Adding an accessor, HTTP route, or automatic `execute(...)` would expand beyond lifespan-scoped exposure.
+- **Decision:**
+  - The document-index lifespan callback accepts the real FastAPI `app`, enters `loaded_document_vector_index_runtime` exactly once, captures the exact yielded `DocumentVectorIndexExecutionService`, stores that identity on `app.state.document_vector_index_execution_service`, yields `None`, and deletes that attribute in `finally` before the loaded runtime exits.
+  - Factory construction remains lazy. The module does not wrap, proxy, reconstruct, adapt, or invoke the service.
+  - Ownership is exclusively `document_vector_index_lifespan.py`. `app.py` and `production_lifespan.py` do not assign or delete the attribute. Regulatory continues to own `app.state.regulatory_intelligence_query_execution_service` independently.
+  - No typed accessor, FastAPI dependency, HTTP route, automatic indexing, or generic service registry is added.
+- **Consequences:** Production now owns both runtimes, and the exact document-index execution service is available on application state only while that child lifespan is active. Accessor, HTTP ingestion, corpus indexing, PDF/OCR, and LangGraph remain deferred.

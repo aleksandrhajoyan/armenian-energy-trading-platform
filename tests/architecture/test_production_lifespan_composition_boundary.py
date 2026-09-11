@@ -453,6 +453,8 @@ def test_nested_lifespan_nests_regulatory_outer_document_index_inner() -> None:
 def test_composite_does_not_assign_state_or_invoke_providers() -> None:
     source = BUILDER_MODULE.read_text(encoding="utf-8")
     assert "app.state" not in source
+    assert "regulatory_intelligence_query_execution_service" not in source
+    assert "document_vector_index_execution_service" not in source
     assert "request.state" not in source
     assert "dependency_overrides" not in source
     assert "global " not in source
