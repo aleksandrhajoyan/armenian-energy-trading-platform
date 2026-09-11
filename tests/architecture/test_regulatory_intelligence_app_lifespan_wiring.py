@@ -1,4 +1,4 @@
-"""Chunk 77/82: create_app installs the Regulatory lifespan and query router."""
+"""Chunk 77/82/94: create_app installs the composite lifespan and query router."""
 
 from __future__ import annotations
 
@@ -37,12 +37,20 @@ FORBIDDEN_APP_PREFIXES = (
     "energy_trading.shared.config.openai",
     "energy_trading.shared.config.qdrant",
     "energy_trading.shared.config.regulatory_intelligence",
+    "energy_trading.shared.config.document_vector_index",
     "energy_trading.infrastructure",
+    "energy_trading.api.composition.regulatory_intelligence_lifespan",
     "energy_trading.api.composition.regulatory_intelligence_loaded_runtime",
     "energy_trading.api.composition.regulatory_intelligence_managed_runtime",
     "energy_trading.api.composition.regulatory_intelligence_configured_runtime",
     "energy_trading.api.composition.regulatory_intelligence_runtime",
     "energy_trading.api.composition.regulatory_intelligence",
+    "energy_trading.api.composition.document_vector_index_lifespan",
+    "energy_trading.api.composition.document_vector_index_loaded_runtime",
+    "energy_trading.api.composition.document_vector_index_managed_runtime",
+    "energy_trading.api.composition.document_vector_index_configured_runtime",
+    "energy_trading.api.composition.document_vector_index_runtime",
+    "energy_trading.api.composition.document_vector_index_execution",
     "langgraph",
     "langchain",
     "langchain_core",
@@ -74,10 +82,14 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "OpenAISettings",
         "QdrantSettings",
         "RegulatoryIntelligenceRuntimeSettings",
+        "DocumentVectorIndexRuntimeSettings",
         "RegulatoryIntelligenceQueryExecutionService",
+        "DocumentVectorIndexExecutionService",
         "OpenAIDocumentQueryEmbeddingAdapter",
+        "OpenAIDocumentEmbeddingAdapter",
         "OpenAIRegulatoryConstraintInferenceAdapter",
         "QdrantDocumentVectorSearch",
+        "QdrantDocumentVectorIndex",
         "QdrantDocumentVectorConfig",
     }
 )
@@ -101,7 +113,7 @@ ALLOWED_APP_IMPORTS = frozenset(
         "contextlib",
         "fastapi",
         "energy_trading",
-        "energy_trading.api.composition.regulatory_intelligence_lifespan",
+        "energy_trading.api.composition.production_lifespan",
         "energy_trading.api.exception_handlers",
         "energy_trading.api.middleware",
         "energy_trading.api.routers.health",
@@ -130,7 +142,7 @@ def _call_name(node: ast.Call) -> str | None:
     return None
 
 
-def test_create_app_imports_chunk_76_builder_only() -> None:
+def test_create_app_imports_production_lifespan_builder_only() -> None:
     leaked = sorted(
         module
         for module in imported_modules(API_APP)
@@ -140,7 +152,9 @@ def test_create_app_imports_chunk_76_builder_only() -> None:
     extras = imported_modules(API_APP) - ALLOWED_APP_IMPORTS
     assert extras == set()
     names = imported_names(API_APP)
-    assert "build_regulatory_intelligence_lifespan" in names
+    assert "build_production_lifespan" in names
+    assert "build_regulatory_intelligence_lifespan" not in names
+    assert "build_document_vector_index_lifespan" not in names
     assert "FastAPI" in names
     assert "health_router" in names
     assert "regulatory_intelligence_router" in names
@@ -150,9 +164,12 @@ def test_create_app_imports_chunk_76_builder_only() -> None:
     assert "RegulatoryIntelligenceQueryResponse" not in names
     assert "loaded_regulatory_intelligence_runtime" not in names
     assert "managed_regulatory_intelligence_runtime" not in names
+    assert "loaded_document_vector_index_runtime" not in names
+    assert "managed_document_vector_index_runtime" not in names
     assert "load_openai_settings" not in names
     assert "load_qdrant_settings" not in names
     assert "load_regulatory_intelligence_runtime_settings" not in names
+    assert "load_document_vector_index_runtime_settings" not in names
     assert "create_openai_client" not in names
     assert "create_qdrant_client" not in names
     assert "openai" not in names
@@ -194,19 +211,30 @@ def test_production_default_installs_returned_lifespan_into_fastapi() -> None:
         if name in {
             "loaded_regulatory_intelligence_runtime",
             "managed_regulatory_intelligence_runtime",
+            "loaded_document_vector_index_runtime",
+            "managed_document_vector_index_runtime",
             "load_openai_settings",
             "load_qdrant_settings",
             "load_regulatory_intelligence_runtime_settings",
+            "load_document_vector_index_runtime_settings",
+            "create_openai_client",
+            "create_qdrant_client",
+            "build_regulatory_intelligence_lifespan",
+            "build_document_vector_index_lifespan",
             "execute",
             "embed_query",
+            "embed",
+            "index",
             "search",
             "infer",
             "run",
         }:
             runtime_calls.append(name)
     assert runtime_calls == []
-    assert "build_regulatory_intelligence_lifespan" in constructed
-    assert constructed.count("build_regulatory_intelligence_lifespan") == 1
+    assert "build_production_lifespan" in constructed
+    assert constructed.count("build_production_lifespan") == 1
+    assert "build_regulatory_intelligence_lifespan" not in constructed
+    assert "build_document_vector_index_lifespan" not in constructed
     assert constructed.count("FastAPI") == 1
     fastapi_call = next(
         node
@@ -219,15 +247,20 @@ def test_production_default_installs_returned_lifespan_into_fastapi() -> None:
     builder_call = next(
         node
         for node in ast.walk(create_app)
-        if isinstance(node, ast.Call)
-        and _call_name(node) == "build_regulatory_intelligence_lifespan"
+        if isinstance(node, ast.Call) and _call_name(node) == "build_production_lifespan"
     )
     assert builder_call.args == []
     assert builder_call.keywords == []
+    async_with_nodes = [node for node in ast.walk(create_app) if isinstance(node, ast.AsyncWith)]
+    assert async_with_nodes == []
     source = API_APP.read_text(encoding="utf-8")
     assert "app.state" not in source
     assert "regulatory_intelligence_query_execution_service" not in source
+    assert "document_vector_index_execution_service" not in source
     assert ".execute(" not in source
+    assert ".index(" not in source
+    assert ".embed(" not in source
+    assert ".search(" not in source
     assert "global " not in source
     identifiers = {node.id for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Name)}
     leaked_frameworks = sorted(name for name in identifiers if name in GENERIC_FRAMEWORK_NAMES)
@@ -273,6 +306,10 @@ def test_create_app_includes_regulatory_router_once_with_api_prefix() -> None:
     assert "build_regulatory_intelligence_configured_runtime" not in source
     assert "managed_regulatory_intelligence_runtime" not in source
     assert "loaded_regulatory_intelligence_runtime" not in source
+    assert "loaded_document_vector_index_runtime" not in source
+    assert "managed_document_vector_index_runtime" not in source
+    assert "build_regulatory_intelligence_lifespan" not in source
+    assert "build_document_vector_index_lifespan" not in source
 
 
 def test_health_router_and_http_routes_remain_service_free() -> None:
@@ -332,10 +369,14 @@ def test_application_domain_ml_and_graph_remain_unwired() -> None:
         assert collect_import_violations(ML_ROOT, forbidden) == []
     names = imported_names(GRAPH_MODULE)
     assert "create_app" not in names
+    assert "build_production_lifespan" not in names
     assert "build_regulatory_intelligence_lifespan" not in names
+    assert "build_document_vector_index_lifespan" not in names
     source = GRAPH_MODULE.read_text(encoding="utf-8")
     assert "energy_trading.api" not in source
+    assert "build_production_lifespan" not in source
     assert "build_regulatory_intelligence_lifespan" not in source
+    assert "build_document_vector_index_lifespan" not in source
     assert "create_app" not in imported_names(LIFESPAN_MODULE)
     assert "create_app" not in imported_names(LOADED_RUNTIME_MODULE)
     assert "regulatory_intelligence_query_execution_service" not in source

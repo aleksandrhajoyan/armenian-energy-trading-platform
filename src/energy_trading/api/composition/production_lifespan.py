@@ -1,16 +1,26 @@
 """Production FastAPI lifespan composition boundary.
 
 This module nests the already-published Regulatory Intelligence and document
-vector index lifespan callbacks for a single FastAPI process. It does not
-install the composite into ``create_app()``, expose indexing on application
-state, or invoke provider operations.
+vector index lifespan callbacks for a single FastAPI process. Production
+``create_app()`` installs ``build_production_lifespan()`` as the default
+lifespan. An explicit ``create_app(..., lifespan=...)`` argument still
+replaces that default. This module only composes the two published lifespan
+callbacks. It does not execute indexing or provider operations itself.
 
 Ownership:
 
 * API composition root: owns ``build_production_lifespan``.
-* Chunk 76 Regulatory lifespan: owns Regulatory runtime exposure.
-* Chunk 92 document vector index lifespan: owns unused indexing runtime.
-* ``create_app()`` remains on the existing Regulatory lifespan.
+* Production ``create_app()``: installs this factory as the default lifespan.
+* Chunk 76 Regulatory lifespan: owns Regulatory query-service exposure.
+* Chunk 92 document vector index lifespan: owns unused indexing runtime
+  and exposes no service.
+
+Wiring:
+
+    create_app()
+    → build_production_lifespan()
+    → Regulatory lifespan
+    → Document Vector Index lifespan
 
 Constructing the returned callback is lazy. Child lifespan factories retain
 their own runtime ownership. Regulatory is the outer context; document vector

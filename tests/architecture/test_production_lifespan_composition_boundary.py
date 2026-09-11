@@ -1,4 +1,4 @@
-"""Chunk 93 production FastAPI lifespan composition stays an unwired nesting seam."""
+"""Chunk 93 production FastAPI lifespan composition remains the nesting seam."""
 
 from __future__ import annotations
 
@@ -523,24 +523,25 @@ def test_application_and_domain_do_not_import_the_production_lifespan() -> None:
         assert "build_production_lifespan" not in source
 
 
-def test_create_app_remains_on_regulatory_lifespan_and_unwired_to_composite() -> None:
+def test_create_app_installs_production_lifespan_without_child_factories() -> None:
     forbidden_wiring = (
         "openai",
         "qdrant_client",
-        "energy_trading.api.composition.production_lifespan",
         "energy_trading.api.composition.document_vector_index_lifespan",
+        "energy_trading.api.composition.regulatory_intelligence_lifespan",
         "energy_trading.api.composition.document_vector_index_loaded_runtime",
         "energy_trading.infrastructure.openai",
         "energy_trading.infrastructure.vector_store.qdrant.client",
     )
     assert collect_http_api_import_violations(API_ROOT, forbidden_wiring) == []
     names = imported_names(API_APP)
-    assert "build_production_lifespan" not in names
+    assert "build_production_lifespan" in names
     assert "build_document_vector_index_lifespan" not in names
-    assert "build_regulatory_intelligence_lifespan" in names
+    assert "build_regulatory_intelligence_lifespan" not in names
     app_source = API_APP.read_text(encoding="utf-8")
-    assert "build_production_lifespan" not in app_source
+    assert "build_production_lifespan" in app_source
     assert "build_document_vector_index_lifespan" not in app_source
+    assert "build_regulatory_intelligence_lifespan" not in app_source
     create_app = _create_app_function()
     constructed: list[str] = []
     for node in ast.walk(create_app):
@@ -549,27 +550,32 @@ def test_create_app_remains_on_regulatory_lifespan_and_unwired_to_composite() ->
         name = _call_name(node)
         if name is not None:
             constructed.append(name)
-    assert "build_production_lifespan" not in constructed
-    assert constructed.count("build_regulatory_intelligence_lifespan") == 1
+    assert constructed.count("build_production_lifespan") == 1
+    assert "build_regulatory_intelligence_lifespan" not in constructed
+    assert "build_document_vector_index_lifespan" not in constructed
     builder_call = next(
         node
         for node in ast.walk(create_app)
-        if isinstance(node, ast.Call)
-        and _call_name(node) == "build_regulatory_intelligence_lifespan"
+        if isinstance(node, ast.Call) and _call_name(node) == "build_production_lifespan"
     )
     assert builder_call.args == []
     assert builder_call.keywords == []
+    async_with_nodes = [node for node in ast.walk(create_app) if isinstance(node, ast.AsyncWith)]
+    assert async_with_nodes == []
     for node in ast.walk(create_app):
         if not isinstance(node, ast.Call) or _call_name(node) != "FastAPI":
             continue
         for keyword in node.keywords:
             if keyword.arg != "lifespan":
                 continue
-            assert "production_lifespan" not in ast.unparse(keyword.value)
+            assert ast.unparse(keyword.value) == "resolved_lifespan"
             assert "document_vector_index" not in ast.unparse(keyword.value)
+            assert "regulatory_intelligence" not in ast.unparse(keyword.value)
     for path in sorted((API_ROOT / "routers").rglob("*.py")):
         source = path.read_text(encoding="utf-8")
         assert "build_production_lifespan" not in source
+        assert "build_document_vector_index_lifespan" not in source
+        assert "build_regulatory_intelligence_lifespan" not in source
 
 
 def test_graph_remains_unwired_to_the_production_lifespan() -> None:

@@ -261,24 +261,29 @@ async def test_composed_lifespan_yields_none(
     ]
 
 
-def test_create_app_remains_unwired_to_the_production_lifespan(
+def test_create_app_installs_production_lifespan_without_entering_children(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     regulatory, document_index, events = _patch_child_lifespans(monkeypatch)
     source = inspect.getsource(create_app)
-    assert "build_production_lifespan" not in source
+    assert "build_production_lifespan" in source
+    assert "build_regulatory_intelligence_lifespan" not in source
+    assert "build_document_vector_index_lifespan" not in source
     application = create_app(make_test_settings())
+    assert events == []
+    assert regulatory.calls == [{"env_file": ".env"}]
+    assert document_index.calls == [{"env_file": ".env"}]
+    assert regulatory.entered is False
+    assert document_index.entered is False
+    assert regulatory.apps == []
+    assert document_index.apps == []
     installed = application.router.lifespan_context
     try:
         installed_source = inspect.getsource(installed)
     except OSError:
         installed_source = ""
-    assert "build_production_lifespan" not in installed_source
-    assert events == []
-    assert regulatory.calls == []
-    assert document_index.calls == []
-    assert regulatory.entered is False
-    assert document_index.entered is False
+    assert "build_regulatory_intelligence_lifespan" not in installed_source
+    assert "build_document_vector_index_lifespan" not in installed_source
 
 
 def test_composite_module_does_not_import_the_app_factory() -> None:

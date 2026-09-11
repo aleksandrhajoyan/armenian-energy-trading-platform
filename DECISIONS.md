@@ -1599,7 +1599,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - It delegates only to the two published child factories, forwarding the exact supplied `env_file` unchanged, and nests Regulatory as the outer context and Document Vector Index as the inner context. The same FastAPI `app` is passed to both callbacks. The composite yields `None`.
   - Constructing the factory does not load settings, enter either runtime, create clients, or invoke provider operations. Child lifespan modules retain their own runtime ownership. Ordinary nesting teardown is preserved; lifecycle exceptions are not caught or remapped.
   - This is not a reusable lifespan framework, service locator, or client-pooling refactor. There is no `app.state` assignment in this module.
-  - `create_app()` remains unchanged and continues to install `build_regulatory_intelligence_lifespan` directly. Installation of the composite is deferred.
-- **Consequences:** Both published lifespans can be owned together without replacing Regulatory behavior. Production `create_app()` installation, document-index `app.state` exposure, indexing HTTP routes, shared-client refactoring, and automatic indexing remain deferred. Direct provider SDK API-composition imports remain limited to the existing approved provider-composition modules.
+  - `create_app()` remained unchanged in Chunk 93 and continued to install `build_regulatory_intelligence_lifespan` directly. Installation of the composite was deferred to Chunk 94.
+- **Consequences:** Both published lifespans can be owned together without replacing Regulatory behavior. Direct provider SDK API-composition imports remain limited to the existing approved provider-composition modules.
 
 ---
+
+## ADR-104 — Production create_app installs the published composite lifespan without duplicating child nesting
+
+- **Status:** Accepted
+- **Context:** Chunk 93 published `build_production_lifespan` as the production-specific nesting seam, but `create_app()` still defaulted directly to `build_regulatory_intelligence_lifespan`. Reproducing child-lifespan `async with` nesting inside `app.py` would duplicate Chunk 93. Importing the child factories into `app.py` would collapse that composition boundary. Dropping the keyword-only `lifespan` override would force offline HTTP tests onto provider credentials. Exposing or executing the Document Vector Index service would pre-commit an indexing API that is not authorized.
+- **Decision:**
+  - Production `create_app()` defaults to `build_production_lifespan()` when no explicit `lifespan` is supplied.
+  - A caller-supplied `lifespan` still replaces that default exactly. If `lifespan is not None`, `build_production_lifespan()` is not called.
+  - `app.py` does not import `build_regulatory_intelligence_lifespan` or `build_document_vector_index_lifespan` and does not reproduce nested child composition.
+  - `create_app()` construction remains lazy: it may construct the composite callback, but it does not load Regulatory or document-index settings, create OpenAI/Qdrant clients, execute provider calls, or index anything.
+  - Regulatory query-router installation and lifespan-owned `app.state` exposure are unchanged. The Document Vector Index service remains unexposed and is not executed.
+- **Consequences:** Entering the real production application lifespan enters both published child runtimes through Chunk 93. Offline tests can still inject a no-op lifespan. Document-index `app.state` exposure, indexing HTTP routes, shared-client refactoring, and automatic indexing remain deferred.

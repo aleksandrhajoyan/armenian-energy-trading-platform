@@ -1,4 +1,4 @@
-"""Production create_app installs the Regulatory lifespan and exposes it on app.state."""
+"""Production create_app installs the composite lifespan and exposes Regulatory state."""
 
 from __future__ import annotations
 
@@ -13,12 +13,13 @@ from fastapi.testclient import TestClient
 
 from energy_trading.api import app as app_module
 from energy_trading.api.app import create_app
-from energy_trading.api.composition.regulatory_intelligence_lifespan import (
-    build_regulatory_intelligence_lifespan,
+from energy_trading.api.composition.production_lifespan import (
+    build_production_lifespan,
 )
 from tests.unit.api.helpers import make_test_settings, noop_lifespan
 
-_LIFESPAN_MODULE = "energy_trading.api.composition.regulatory_intelligence_lifespan"
+_REGULATORY_LIFESPAN_MODULE = "energy_trading.api.composition.regulatory_intelligence_lifespan"
+_DOCUMENT_INDEX_LIFESPAN_MODULE = "energy_trading.api.composition.document_vector_index_lifespan"
 _SERVICE_ATTR = "regulatory_intelligence_query_execution_service"
 
 
@@ -80,7 +81,7 @@ def _has_service(app: FastAPI) -> bool:
     return hasattr(app.state, _SERVICE_ATTR)
 
 
-def test_production_create_app_installs_chunk_76_lifespan(
+def test_production_create_app_installs_chunk_93_lifespan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     spy = _LifespanSpy()
@@ -90,7 +91,7 @@ def test_production_create_app_installs_chunk_76_lifespan(
         builder_calls.append(kwargs)
         return spy
 
-    monkeypatch.setattr(app_module, "build_regulatory_intelligence_lifespan", fake_builder)
+    monkeypatch.setattr(app_module, "build_production_lifespan", fake_builder)
     application = create_app(make_test_settings())
     assert builder_calls == [{}]
     assert spy.calls == []
@@ -107,15 +108,25 @@ def test_production_create_app_installs_chunk_76_lifespan(
     assert len(spy.calls) == 1
 
 
-def test_create_app_construction_does_not_enter_regulatory_runtime(
+def test_create_app_construction_does_not_enter_production_runtimes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    spy = _LoadedRuntimeSpy()
-    monkeypatch.setattr(f"{_LIFESPAN_MODULE}.loaded_regulatory_intelligence_runtime", spy)
+    regulatory = _LoadedRuntimeSpy()
+    document_index = _LoadedRuntimeSpy()
+    monkeypatch.setattr(
+        f"{_REGULATORY_LIFESPAN_MODULE}.loaded_regulatory_intelligence_runtime",
+        regulatory,
+    )
+    monkeypatch.setattr(
+        f"{_DOCUMENT_INDEX_LIFESPAN_MODULE}.loaded_document_vector_index_runtime",
+        document_index,
+    )
     application = create_app(make_test_settings())
     assert isinstance(application, FastAPI)
-    assert spy.calls == []
-    assert spy.events == []
+    assert regulatory.calls == []
+    assert regulatory.events == []
+    assert document_index.calls == []
+    assert document_index.events == []
 
 
 def test_explicit_lifespan_override_skips_production_builder(
@@ -124,7 +135,7 @@ def test_explicit_lifespan_override_skips_production_builder(
     def boom(**_kwargs: object) -> None:
         raise AssertionError("production builder must not be called")
 
-    monkeypatch.setattr(app_module, "build_regulatory_intelligence_lifespan", boom)
+    monkeypatch.setattr(app_module, "build_production_lifespan", boom)
     spy = _LifespanSpy()
     application = create_app(make_test_settings(), lifespan=spy)
     assert spy.calls == []
@@ -152,7 +163,7 @@ def test_production_default_is_not_noop(monkeypatch: pytest.MonkeyPatch) -> None
     def fake_builder(**_kwargs: object) -> _LifespanSpy:
         return sentinel
 
-    monkeypatch.setattr(app_module, "build_regulatory_intelligence_lifespan", fake_builder)
+    monkeypatch.setattr(app_module, "build_production_lifespan", fake_builder)
     application = create_app(make_test_settings())
     with TestClient(application):
         assert sentinel.events == ["enter"]
@@ -168,7 +179,18 @@ def test_create_app_exposes_chunk_75_service_on_app_state_during_lifespan(
     async def fake_loaded(**_kwargs: object) -> AsyncIterator[object]:
         yield service
 
-    monkeypatch.setattr(f"{_LIFESPAN_MODULE}.loaded_regulatory_intelligence_runtime", fake_loaded)
+    @asynccontextmanager
+    async def fake_document_index_loaded(**_kwargs: object) -> AsyncIterator[object]:
+        yield object()
+
+    monkeypatch.setattr(
+        f"{_REGULATORY_LIFESPAN_MODULE}.loaded_regulatory_intelligence_runtime",
+        fake_loaded,
+    )
+    monkeypatch.setattr(
+        f"{_DOCUMENT_INDEX_LIFESPAN_MODULE}.loaded_document_vector_index_runtime",
+        fake_document_index_loaded,
+    )
     application = create_app(make_test_settings())
     assert _has_service(application) is False
 
@@ -176,10 +198,12 @@ def test_create_app_exposes_chunk_75_service_on_app_state_during_lifespan(
     async def peek(request: Request) -> dict[str, str]:
         exposed = request.app.state.regulatory_intelligence_query_execution_service
         assert exposed is service
+        assert not hasattr(request.app.state, "document_vector_index_execution_service")
         return {"status": "ok"}
 
     with TestClient(application) as client:
         assert application.state.regulatory_intelligence_query_execution_service is service
+        assert not hasattr(application.state, "document_vector_index_execution_service")
         response = client.get("/peek")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
@@ -193,7 +217,7 @@ def test_startup_failure_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     spy = _LifespanSpy(entry_error=error)
     monkeypatch.setattr(
         app_module,
-        "build_regulatory_intelligence_lifespan",
+        "build_production_lifespan",
         lambda **_kwargs: spy,
     )
     application = create_app(make_test_settings())
@@ -209,7 +233,7 @@ def test_shutdown_failure_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     spy = _LifespanSpy(exit_error=error)
     monkeypatch.setattr(
         app_module,
-        "build_regulatory_intelligence_lifespan",
+        "build_production_lifespan",
         lambda **_kwargs: spy,
     )
     application = create_app(make_test_settings())
@@ -229,7 +253,5 @@ def test_lifespan_parameter_is_keyword_only() -> None:
         create_app(make_test_settings(), noop_lifespan)  # type: ignore[misc]
 
 
-def test_production_builder_identity_is_the_chunk_76_factory() -> None:
-    assert app_module.build_regulatory_intelligence_lifespan is (
-        build_regulatory_intelligence_lifespan
-    )
+def test_production_builder_identity_is_the_chunk_93_factory() -> None:
+    assert app_module.build_production_lifespan is build_production_lifespan
