@@ -1728,3 +1728,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Callers can later compose a local PDF path into the published extraction-to-index application service. OCR, URL/file-upload/directory acquisition, automatic/startup/background corpus ingestion, production wiring, collection management, reindex/replace/delete, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
 
 ---
+
+## ADR-113 — Settings-Loaded PDF Extraction-to-Index Runtime Composition
+
+- **Status:** Accepted
+- **Context:** Chunk 91 published `loaded_document_vector_index_runtime`, which loads typed settings and yields `DocumentVectorIndexExecutionService` while the existing managed runtime owns provider-client lifetime. Chunk 102 published `build_pdf_document_extraction_index_execution`, which constructs `PdfTextExtractionAdapter` plus `DocumentExtractionIndexExecutionService` from a local path, identities, and an already-constructed index execution service. Callers still had no settings-loaded composition that nested those two published seams without executing extraction/indexing, inventing PDF-specific settings, constructing OpenAI/Qdrant clients, duplicating settings loading, or wiring `create_app()`.
+- **Decision:**
+  - API owns `loaded_pdf_document_extraction_index_runtime` in `api/composition/pdf_document_extraction_index_loaded_runtime.py`.
+  - The function is a keyword-only async context manager. Inputs are `path: Path`, `document_id: str`, `source_name: str`, and the existing `env_file: str | Path | None = ".env"` contract from `loaded_document_vector_index_runtime`. The yielded type is `DocumentExtractionIndexExecutionService`.
+  - The context manager enters `loaded_document_vector_index_runtime(env_file=env_file)` exactly once, calls `build_pdf_document_extraction_index_execution` exactly once with the supplied path/identities and the exact yielded index execution service, and yields that builder result unchanged. Inner runtime teardown occurs after the outer yield, including when the Chunk 102 builder raises.
+  - Chunk 103 does not own provider clients, close clients, register cleanup, load settings itself, call `.extract()` or `.execute()`, or inspect the filesystem. Provider lifetime remains owned by the existing document-index loaded/managed chain. No PDF-specific environment variables are added.
+  - The runtime remains unwired from `create_app()`, FastAPI routes, production lifespan, `app.state`, dependency accessors, Regulatory runtime, and LangGraph. No lifespan factory, accessor, route, or startup execution is added.
+- **Consequences:** Callers can later obtain a constructed PDF extraction-to-index application service from settings plus a local path without entering real extraction or indexing in this composition layer. OCR, URL/file-upload/directory acquisition, automatic/startup/background corpus ingestion, production wiring, collection management, reindex/replace/delete, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
+
+---

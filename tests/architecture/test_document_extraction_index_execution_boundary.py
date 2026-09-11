@@ -540,9 +540,11 @@ def test_create_app_router_runtime_and_graph_remain_unwired() -> None:
         assert "DocumentExtractionIndexExecutionService" not in source
         assert "document_extraction_index_execution" not in source
     builder_module = COMPOSITION_ROOT / "pdf_document_extraction_index.py"
+    loaded_runtime_module = COMPOSITION_ROOT / "pdf_document_extraction_index_loaded_runtime.py"
     composition_init = COMPOSITION_ROOT / "__init__.py"
+    allowed_composition = {builder_module.resolve(), loaded_runtime_module.resolve()}
     for path in sorted(COMPOSITION_ROOT.rglob("*.py")):
-        if path.resolve() == builder_module.resolve():
+        if path.resolve() in allowed_composition:
             continue
         names = imported_names(path)
         assert "DocumentExtractionIndexExecutionService" not in names
