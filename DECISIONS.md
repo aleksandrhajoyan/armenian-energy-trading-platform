@@ -1642,3 +1642,16 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - The accessor is read-only. It does not assign or delete application state, enter or exit lifecycle, load settings, construct clients, or invoke the service.
   - There is no global singleton, service registry, service locator, or generic DI container. Production code does not wrap the accessor in `Depends(...)` and does not add an HTTP document-index route.
 - **Consequences:** Active FastAPI requests can resolve the lifespan-scoped document-index execution service through a typed reader. HTTP indexing transport, route installation, automatic indexing, corpus ingestion, PDF/OCR, and LangGraph remain deferred.
+
+---
+
+## ADR-107 — Document-index HTTP request transport is an API-owned already-normalized chunk contract
+
+- **Status:** Accepted
+- **Context:** Chunk 96 published a typed request-time accessor for the lifespan-scoped `DocumentVectorIndexExecutionService`. An HTTP indexing route still needs a public request body that FastAPI can validate. Reusing application `ExtractedDocumentChunk` as the HTTP model would leak application DTO ownership across the API boundary. Adding file-upload, path, URL, provider, embedding, or Qdrant fields would invent an acquisition/indexing surface that is not authorized. Adding a route, mapper, or success response in the same slice would pre-commit HTTP execution and response semantics while `execute(...)` still returns `None`.
+- **Decision:**
+  - The API layer owns frozen Pydantic request DTOs `DocumentVectorIndexChunkRequest` and `DocumentVectorIndexRequest` in `api/schemas`.
+  - Chunk fields are exactly the already-normalized extracted-chunk shape: `document_id`, `chunk_id`, `text`, `ordinal`, and optional `page_number`. The outer request field is exactly `chunks: tuple[DocumentVectorIndexChunkRequest, ...]`.
+  - Unknown fields are forbidden. The models do not accept raw files, bytes, paths, URLs, MIME types, OCR options, provider/model identifiers, vectors, embeddings, scores, or metadata bags.
+  - FastAPI transport does not accept `ExtractedDocumentChunk` as the public request model. No production mapper, route, accessor usage, `.execute(...)`, or response DTO is added in this slice.
+- **Consequences:** HTTP clients can be described against a narrow already-normalized chunk request contract. Indexing route installation, response semantics, document acquisition/PDF/OCR, automatic indexing, and LangGraph remain deferred.
