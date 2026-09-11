@@ -1572,3 +1572,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Callers can supply an explicit settings source and receive a lifecycle-owned `DocumentVectorIndexExecutionService`. FastAPI integration, document acquisition, PDF/OCR, actual corpus indexing, collection-management strategy, and Regulatory contract-phase integration remain absent. Direct provider SDK API-composition imports remain limited to the existing approved provider-composition modules. Chunk 90 continues to own client creation and cleanup.
 
 ---
+
+## ADR-102 — FastAPI lifecycle ownership is separated from document-index service exposure
+
+- **Status:** Accepted
+- **Context:** Chunk 91 can load typed document-index settings and own the managed runtime for an `async with` scope, but FastAPI process lifetime still had no dedicated seam. Installing that runtime into `create_app()` in the same slice would couple lifecycle ownership to HTTP application construction before the service-access mechanism is chosen. Storing the yielded service on `app.state`, yielding a Starlette lifespan-state dict, or inventing a generic lifespan/resource/DI framework would pre-commit a later architect-reviewed exposure path. Importing settings loaders, provider SDKs, or lower document-index layers in the FastAPI boundary would collapse Chunks 91/90/89/87/86.
+- **Decision:**
+  - FastAPI-compatible lifecycle ownership lives in a separate document-index-specific API composition module: `build_document_vector_index_lifespan` in `energy_trading.api.composition.document_vector_index_lifespan`.
+  - The factory is synchronous and keyword-only. It reuses the existing Chunk 91 `env_file: str | Path | None = ".env"` contract and returns a callable compatible with FastAPI's `lifespan=` argument: `Callable[[FastAPI], AbstractAsyncContextManager[None]]`.
+  - Constructing the returned callback loads no settings and enters no runtime. Only lifespan startup enters `loaded_document_vector_index_runtime`; lifespan shutdown exits it through ordinary async-context-manager semantics.
+  - The composed service yielded by Chunk 91 is intentionally unused. This boundary does not write it to `app.state`, does not yield a lifespan-state dictionary, does not create a request-state key, and does not invoke `.execute(...)`, `.embed(...)`, or `.index(...)`.
+  - The module may import FastAPI's application type and Chunk 91. It does not import settings loaders, settings objects, provider SDKs, client factories, adapters, or Chunks 90/89/87/86.
+  - `create_app()` is unchanged and does not install this lifespan. HTTP routes, health, middleware, error handling, and LangGraph remain unwired.
+  - Generic lifespan frameworks, service registries, DI containers, and resource managers are rejected.
+- **Consequences:** FastAPI-compatible lifecycle ownership can be proven independently of service exposure. `create_app()` installation, the service-access mechanism, route/dependency wiring, LangGraph routing, document acquisition, PDF/OCR, and actual corpus indexing remain deferred. Direct provider SDK API-composition imports remain limited to the existing approved provider-composition modules. Chunk 91 continues to own settings loading; Chunk 90 continues to own client lifetime.
+
+---
