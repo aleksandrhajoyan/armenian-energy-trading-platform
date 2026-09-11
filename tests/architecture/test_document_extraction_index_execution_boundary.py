@@ -211,7 +211,7 @@ ALLOWED_MODULE_IMPORTS = frozenset(
 
 ALLOWED_INIT_ANNOTATIONS = {
     "document_extraction_port": "DocumentExtractionPort",
-        "index_execution_service": "DocumentVectorIndexExecutionService",
+    "index_execution_service": "DocumentVectorIndexExecutionService",
 }
 
 UNWIRED_MODULES = (
@@ -539,7 +539,11 @@ def test_create_app_router_runtime_and_graph_remain_unwired() -> None:
         source = path.read_text(encoding="utf-8")
         assert "DocumentExtractionIndexExecutionService" not in source
         assert "document_extraction_index_execution" not in source
+    builder_module = COMPOSITION_ROOT / "pdf_document_extraction_index.py"
+    composition_init = COMPOSITION_ROOT / "__init__.py"
     for path in sorted(COMPOSITION_ROOT.rglob("*.py")):
+        if path.resolve() == builder_module.resolve():
+            continue
         names = imported_names(path)
         assert "DocumentExtractionIndexExecutionService" not in names
         modules = imported_modules(path)
@@ -547,6 +551,10 @@ def test_create_app_router_runtime_and_graph_remain_unwired() -> None:
             "energy_trading.application.orchestration.document_extraction_index_execution"
             not in modules
         )
+        source = path.read_text(encoding="utf-8")
+        assert "DocumentExtractionIndexExecutionService" not in source
+        if path.resolve() != composition_init.resolve():
+            assert "document_extraction_index_execution" not in source
 
 
 def test_api_composition_does_not_import_or_construct_the_execution_service() -> None:

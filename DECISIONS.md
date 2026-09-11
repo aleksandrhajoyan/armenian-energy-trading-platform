@@ -1714,3 +1714,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Callers that later compose this service can extract then conditionally index through published application boundaries. Automatic corpus ingestion, OCR, URL/HTTP acquisition, production wiring, collection management, reindex/delete/replace, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
 
 ---
+
+## ADR-112 — API PDF Extraction-to-Index Composition Root
+
+- **Status:** Accepted
+- **Context:** Chunk 100 published `PdfTextExtractionAdapter` for constructor-configured local text-layer PDFs. Chunk 101 published application-owned `DocumentExtractionIndexExecutionService` over `DocumentExtractionPort` plus `DocumentVectorIndexExecutionService`. Callers still had no API composition root that constructed that concrete PDF adapter into the published extraction-to-index service without inventing a generic document pipeline, executing extraction/indexing, loading settings, constructing OpenAI/Qdrant clients, or wiring `create_app()`.
+- **Decision:**
+  - API owns `build_pdf_document_extraction_index_execution` in `api/composition/pdf_document_extraction_index.py`.
+  - The function is synchronous and keyword-only. Inputs are `path: Path`, `document_id: str`, `source_name: str`, and an already-constructed `DocumentVectorIndexExecutionService`. The return type is `DocumentExtractionIndexExecutionService`.
+  - Construction sequence is exactly one `PdfTextExtractionAdapter(path=..., document_id=..., source_name=...)` then one `DocumentExtractionIndexExecutionService(adapter, index_execution_service)`. The supplied index execution service identity is preserved. The optional adapter test clock is not exposed.
+  - The builder does not call `.extract()` or `.execute()`, inspect file existence, open the PDF, embed, index, load settings, or construct provider clients. Construction therefore works when the supplied PDF path does not exist.
+  - The builder remains unwired from `create_app()`, FastAPI routes, production lifespan, `app.state`, dependency accessors, Regulatory runtime, document-index runtime lifecycle, and LangGraph. No owner/lifecycle, route, or startup execution is added.
+- **Consequences:** Callers can later compose a local PDF path into the published extraction-to-index application service. OCR, URL/file-upload/directory acquisition, automatic/startup/background corpus ingestion, production wiring, collection management, reindex/replace/delete, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
+
+---

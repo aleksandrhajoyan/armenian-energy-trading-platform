@@ -36,6 +36,7 @@ COMPOSITION_ROOT = API_ROOT / "composition"
 DOCUMENT_VECTOR_INDEX_EXECUTION_COMPOSITION = (
     COMPOSITION_ROOT / "document_vector_index_execution.py"
 )
+PDF_DOCUMENT_EXTRACTION_INDEX_COMPOSITION = COMPOSITION_ROOT / "pdf_document_extraction_index.py"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -493,6 +494,8 @@ def test_graph_runtime_and_providers_remain_unwired_to_the_execution_service() -
         assert "document_vector_index_execution" not in source
     for path in sorted(COMPOSITION_ROOT.rglob("*.py")):
         if path.resolve() == DOCUMENT_VECTOR_INDEX_EXECUTION_COMPOSITION.resolve():
+            continue
+        if path.resolve() == PDF_DOCUMENT_EXTRACTION_INDEX_COMPOSITION.resolve():
             continue
         if is_document_vector_index_provider_composition_module(path):
             continue
