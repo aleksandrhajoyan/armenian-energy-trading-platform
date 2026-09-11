@@ -17,6 +17,7 @@ from tests.architecture.import_inspection import (
     collect_import_violations,
     imported_modules,
     imported_names,
+    is_document_vector_index_loaded_runtime_module,
     is_document_vector_index_managed_runtime_module,
     is_document_vector_index_provider_composition_module,
     is_forbidden,
@@ -47,6 +48,7 @@ INDEX_CONFIGURED_RUNTIME_MODULE = (
 )
 MANAGED_RUNTIME_MODULE = API_ROOT / "composition" / "regulatory_intelligence_managed_runtime.py"
 INDEX_MANAGED_RUNTIME_MODULE = API_ROOT / "composition" / "document_vector_index_managed_runtime.py"
+INDEX_LOADED_RUNTIME_MODULE = API_ROOT / "composition" / "document_vector_index_loaded_runtime.py"
 LOADED_RUNTIME_MODULE = API_ROOT / "composition" / "regulatory_intelligence_loaded_runtime.py"
 QUERY_EMBEDDING_ADAPTER = (
     PRODUCTION_ROOT / "infrastructure" / "embeddings" / "openai_query_embedding.py"
@@ -204,6 +206,7 @@ def test_openai_sdk_imports_exist_only_in_approved_modules() -> None:
     assert leaked == []
     assert MANAGED_RUNTIME_MODULE.resolve() not in ALLOWED_OPENAI_SDK_MODULES
     assert INDEX_MANAGED_RUNTIME_MODULE.resolve() not in ALLOWED_OPENAI_SDK_MODULES
+    assert INDEX_LOADED_RUNTIME_MODULE.resolve() not in ALLOWED_OPENAI_SDK_MODULES
     assert LOADED_RUNTIME_MODULE.resolve() not in ALLOWED_OPENAI_SDK_MODULES
     assert "openai" in imported_modules(CLIENT_MODULE)
     assert "openai" not in imported_modules(OPENAI_SETTINGS)
@@ -213,6 +216,7 @@ def test_openai_sdk_imports_exist_only_in_approved_modules() -> None:
     assert "openai" in imported_modules(INDEX_CONFIGURED_RUNTIME_MODULE)
     assert "openai" not in imported_modules(MANAGED_RUNTIME_MODULE)
     assert "openai" not in imported_modules(INDEX_MANAGED_RUNTIME_MODULE)
+    assert "openai" not in imported_modules(INDEX_LOADED_RUNTIME_MODULE)
     assert "openai" not in imported_modules(LOADED_RUNTIME_MODULE)
 
 
@@ -432,6 +436,12 @@ def test_create_app_and_composition_do_not_construct_openai_client() -> None:
             assert "OpenAISettings" in names
             assert "create_openai_client" in names
             assert "load_openai_settings" not in names
+            continue
+        if is_document_vector_index_loaded_runtime_module(path):
+            assert "AsyncOpenAI" not in names
+            assert "OpenAISettings" not in names
+            assert "create_openai_client" not in names
+            assert "load_openai_settings" in names
             continue
         if is_regulatory_loaded_runtime_module(path):
             assert "AsyncOpenAI" not in names

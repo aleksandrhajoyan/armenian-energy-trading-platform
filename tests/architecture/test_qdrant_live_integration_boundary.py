@@ -8,12 +8,14 @@ from pathlib import Path
 from tests.architecture.import_inspection import (
     DOCUMENT_VECTOR_INDEX_INFRA_CLIENT_COMPOSITION_RELATIVES,
     DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
+    DOCUMENT_VECTOR_INDEX_QDRANT_SETTINGS_COMPOSITION_RELATIVES,
     REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
     REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
     REGULATORY_QDRANT_SETTINGS_COMPOSITION_RELATIVES,
     SRC_ROOT,
     collect_import_violations,
     imported_names,
+    is_document_vector_index_loaded_runtime_module,
     is_document_vector_index_managed_runtime_module,
     is_document_vector_index_provider_composition_module,
     is_document_vector_index_provider_runtime_module,
@@ -300,7 +302,7 @@ def test_create_app_still_does_not_wire_qdrant() -> None:
             ),
             exclude_relative_prefixes=(
                 *REGULATORY_QDRANT_SETTINGS_COMPOSITION_RELATIVES,
-                *DOCUMENT_VECTOR_INDEX_INFRA_CLIENT_COMPOSITION_RELATIVES,
+                *DOCUMENT_VECTOR_INDEX_QDRANT_SETTINGS_COMPOSITION_RELATIVES,
             ),
         )
         == []
@@ -340,6 +342,13 @@ def test_create_app_still_does_not_wire_qdrant() -> None:
             assert "QdrantDocumentVectorIndex" not in names
             assert "QdrantDocumentVectorSearch" not in names
             assert "create_qdrant_client" in names
+            continue
+        if is_document_vector_index_loaded_runtime_module(path):
+            assert "AsyncQdrantClient" not in names
+            assert "QdrantDocumentVectorConfig" not in names
+            assert "QdrantDocumentVectorIndex" not in names
+            assert "QdrantDocumentVectorSearch" not in names
+            assert "create_qdrant_client" not in names
             continue
         if is_regulatory_loaded_runtime_module(path):
             assert "AsyncQdrantClient" not in names

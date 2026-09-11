@@ -311,6 +311,7 @@ def test_create_app_remains_unwired() -> None:
     assert "load_document_vector_index_runtime_settings" not in source
     assert "ENERGY_DOCUMENT_INDEX_" not in source
     assert "managed_document_vector_index_runtime" not in source
+    assert "loaded_document_vector_index_runtime" not in source
 
 
 def test_chunk_87_builder_does_not_load_settings() -> None:
@@ -350,6 +351,17 @@ def test_chunk_89_and_chunk_90_consume_already_constructed_settings() -> None:
         source = path.read_text(encoding="utf-8")
         assert "load_document_vector_index_runtime_settings" not in source
         assert "ENERGY_DOCUMENT_INDEX_" not in source
+
+
+def test_chunk_91_loads_settings_through_the_published_loader() -> None:
+    loaded_module = API_ROOT / "composition" / "document_vector_index_loaded_runtime.py"
+    names = imported_names(loaded_module)
+    assert "load_document_vector_index_runtime_settings" in names
+    assert "DocumentVectorIndexRuntimeSettings" not in names
+    source = loaded_module.read_text(encoding="utf-8")
+    assert "load_document_vector_index_runtime_settings" in source
+    assert "DocumentVectorIndexRuntimeSettings(" not in source
+    assert "ENERGY_DOCUMENT_INDEX_" not in source
 
 
 def test_regulatory_runtime_settings_are_unchanged() -> None:

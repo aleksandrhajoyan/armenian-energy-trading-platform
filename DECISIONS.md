@@ -1533,7 +1533,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - It constructs exactly one `QdrantDocumentVectorConfig(collection_name=settings.qdrant_collection_name, vector_size=settings.qdrant_vector_size)`, then delegates exactly once to `build_document_vector_index_provider_runtime` with those clients, that config, and `settings.document_embedding_model`, and returns that `DocumentVectorIndexExecutionService` unchanged.
   - Construction is inert: no `.embed`, `.index`, or `.execute`; no settings/env loading; no client factories; no client close; no collection management; no direct adapter construction except `QdrantDocumentVectorConfig`; no direct Chunk 86 call.
   - The builder is exported from `api/composition/__init__.py`. It remains unwired from `create_app()`, FastAPI lifespan, LangGraph, and document extraction.
-- **Consequences:** Callers can assemble the published indexing stack from already-created provider clients plus already-constructed typed settings. Chunk 90 owns client lifetime separately from this adaptation seam. Settings-loaded indexing runtime, document acquisition, PDF/OCR, actual corpus indexing, collection-management strategy, and Regulatory contract-phase integration remain deferred.
+- **Consequences:** Callers can assemble the published indexing stack from already-created provider clients plus already-constructed typed settings. Chunk 90 owns client lifetime separately from this adaptation seam. Chunk 91 owns settings loading above Chunk 90. Document acquisition, PDF/OCR, actual corpus indexing, collection-management strategy, and Regulatory contract-phase integration remain deferred.
 
 ---
 
@@ -1552,6 +1552,23 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Entering the context performs no provider I/O. The yielded service is constructed, not executed.
   - FastAPI lifespan, `create_app()`, HTTP routes, app state, and LangGraph remain unwired.
   - Generic lifecycle managers, DI containers, resource registries, and provider registries are rejected.
-- **Consequences:** Callers can supply already-loaded typed settings and receive a lifecycle-owned `DocumentVectorIndexExecutionService`. Settings loading, FastAPI integration, document acquisition, PDF/OCR, actual corpus indexing, collection-management strategy, and Regulatory contract-phase integration remain absent. Direct provider SDK API-composition imports remain limited to the existing approved provider-composition modules.
+- **Consequences:** Callers can supply already-loaded typed settings and receive a lifecycle-owned `DocumentVectorIndexExecutionService`. Chunk 91 owns settings loading separately from this resource-lifetime seam. FastAPI integration, document acquisition, PDF/OCR, actual corpus indexing, collection-management strategy, and Regulatory contract-phase integration remain absent. Direct provider SDK API-composition imports remain limited to the existing approved provider-composition modules.
+
+---
+
+## ADR-101 — Document-index settings loading is composed above the managed runtime
+
+- **Status:** Accepted
+- **Context:** Chunk 90 can own document-index provider-client lifetime from already-loaded `OpenAISettings`, `QdrantSettings`, and `DocumentVectorIndexRuntimeSettings`, but callers still had to invoke the three existing typed loaders themselves. Folding environment discovery into the managed runtime would mix configuration loading with resource lifetime. Folding FastAPI lifespan into the same function would couple a reusable settings-to-runtime seam to one HTTP framework. A generic settings aggregator, runtime manager, DI container, or provider registry would invent an abstraction this repository does not own. Direct `os.environ` / `dotenv` parsing in API composition would bypass the published loaders.
+- **Decision:**
+  - Settings loading lives in a separate document-index-specific API composition module: `loaded_document_vector_index_runtime` in `energy_trading.api.composition.document_vector_index_loaded_runtime`.
+  - The callable is a keyword-only async context manager (`contextlib.asynccontextmanager`). It exposes one `env_file: str | Path | None = ".env"` argument matching the existing three loader contracts and forwards that exact value to each loader.
+  - It calls `load_openai_settings`, `load_qdrant_settings`, and `load_document_vector_index_runtime_settings` exactly once each, then delegates resource ownership and service construction to `managed_document_vector_index_runtime`.
+  - It does not instantiate settings classes as a substitute for loaders, construct clients, import OpenAI/Qdrant SDK types, call client factories, construct provider adapters, or invoke Chunks 89/87/86 directly.
+  - Loader validation failures propagate unchanged. An earlier loader failure does not fabricate settings or enter the managed runtime. Managed-runtime entry failures and consumer exceptions propagate according to normal context-manager semantics. This layer adds no `try/except` translation or suppression.
+  - Entering the context performs no provider I/O and does not call `.execute(...)`, `.embed(...)`, or `.index(...)`. The yielded object is the exact `DocumentVectorIndexExecutionService` produced by Chunk 90.
+  - FastAPI lifespan, `create_app()`, HTTP routes, app state, and LangGraph remain unwired.
+  - Generic settings aggregators, runtime/lifecycle managers, DI containers, and provider registries are rejected.
+- **Consequences:** Callers can supply an explicit settings source and receive a lifecycle-owned `DocumentVectorIndexExecutionService`. FastAPI integration, document acquisition, PDF/OCR, actual corpus indexing, collection-management strategy, and Regulatory contract-phase integration remain absent. Direct provider SDK API-composition imports remain limited to the existing approved provider-composition modules. Chunk 90 continues to own client creation and cleanup.
 
 ---
