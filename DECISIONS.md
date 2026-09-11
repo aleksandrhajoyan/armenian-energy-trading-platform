@@ -1680,3 +1680,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - The handler, DTOs, accessor, HTTP method, endpoint path, 204 mapping, and explicit `ExtractedDocumentChunk` projection remain unchanged. No second prefix is added in `create_app()`.
   - Construction remains lazy. The existing keyword-only `lifespan` seam remains. The published document-index lifespan still owns service lifecycle. `create_app()` still does not load document-index/OpenAI/Qdrant settings, construct clients, call composition builders, assign `app.state`, or invoke `.execute`.
 - **Consequences:** `POST /api/v1/document-vector-index/index` is reachable through the production factory when the default prefix is `/api/v1`. Execution still depends on the lifespan-scoped service. The request body remains already-normalized chunks only. Offline tests can inject a no-op lifespan and keep health credential-free; missing service state maps to the published 503. Corpus ingestion, PDF/OCR, automatic/background/startup indexing, reindex/replace/delete, Qdrant collection management, verified Armenian DAM rules, Regulatory LangGraph wiring, and Pricing & Sales remain deferred.
+
+---
+
+## ADR-110 — Concrete PDF text-layer extraction adapter, no OCR, unwired
+
+- **Status:** Accepted
+- **Context:** Chunk 12 published `DocumentExtractionPort` and canonical `ExtractedDocumentChunk` / `DocumentExtractionResult` contracts. Regulatory Intelligence and document-index HTTP still consume already-normalized chunks. Corpus ingestion cannot start from application-layer PDF parsing, OCR, or a generic document-loader framework without collapsing the ACL. A first concrete adapter is needed for PDFs that already contain a text layer, without wiring extraction into `create_app()`, indexing, OpenAI, Qdrant, or LangGraph.
+- **Decision:**
+  - Add exactly one production PDF library, `pypdf`, for text-layer extraction. Do not add OCR, Tesseract, cloud OCR, LangChain document loaders, or a second PDF library.
+  - Implement `PdfTextExtractionAdapter` in `infrastructure/adapters/unstructured/pdf_text_extraction.py`. It structurally satisfies `DocumentExtractionPort` without subclassing the Protocol.
+  - Constructor injection owns the local `.pdf` `Path`, opaque `document_id`, and `source_name`. Public `extract()` remains `async extract() -> DocumentExtractionResult` and offloads blocking parse/extraction through `asyncio.to_thread`.
+  - Chunking is deterministic and page-based: one chunk per non-empty normalized page; `chunk_id` is `<document_id>:page:<page_number>`; `ordinal` is zero-based among emitted chunks; `page_number` is one-based physical PDF page. Blank pages are skipped, not failures.
+  - A readable PDF with no extractable text returns empty chunks plus a sanitized `pdf_no_extractable_text` diagnostic and no DLQ, matching the published "document that yields no normalized text" result case. Invalid/corrupt/non-PDF bytes return empty chunks, a sanitized `pdf_invalid` diagnostic, and opaque `pdf://{source_name}/source` DLQ metadata. Missing/unreadable files raise sanitized `DependencyUnavailableError`. Page `extract_text` parser failures fail closed at document level.
+  - Filesystem paths, raw PDF bytes, parser exceptions, and OCR never appear on application DTOs, diagnostics, error messages, or `DLQRecord.payload_reference`. The adapter does not persist DLQ records.
+  - The adapter remains unwired from `create_app()`, Regulatory runtime, document-index runtime, `DocumentVectorIndexExecutionService`, LangGraph, OpenAI, and Qdrant. No HTTP extraction endpoint, settings, or extraction-to-index service is added.
+- **Consequences:** Local text-layer PDFs can be converted into existing canonical chunks in tests and future composition. OCR, scanned documents, URL/HTTP acquisition, automatic corpus ingestion, extraction-to-index orchestration, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
+
+---

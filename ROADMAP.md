@@ -138,6 +138,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
   - [x] **Chunk 97** — Document Vector Index HTTP Request Transport Contract — Offline, No Route
   - [x] **Chunk 98** — Document Vector Index HTTP Route Boundary — Unwired
   - [x] **Chunk 99** — Document Vector Index Production Router Installation
+  - [x] **Chunk 100** — Concrete PDF Text Extraction Infrastructure Adapter — No OCR, Unwired
 - [ ] Pricing & Sales Agent
 - [ ] Contract-phase graph slice
 
@@ -227,8 +228,8 @@ Do not implement trading-objective optimization now.
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 99
-- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 99 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize LangGraph wiring of Regulatory composition, PDF/OCR, actual RAG workflow, verified Armenian DAM rule extraction, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring.
+- **Completed:** Chunk 0 through Chunk 100
+- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 100 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize LangGraph wiring of Regulatory composition, OCR, actual RAG workflow, verified Armenian DAM rule extraction, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring. Do not mark raw document ingestion or corpus automation complete merely because a local PDF text adapter exists.
 
 ---
 
