@@ -50,14 +50,17 @@ FORBIDDEN_INNER_QDRANT = (
     "energy_trading.infrastructure.vector_store.qdrant",
 )
 PRODUCTION_COLLECTION_FORBIDDEN = (
-    "create_collection",
     "recreate_collection",
     "delete_collection",
+    "update_collection",
     "Distance.DOT",
     "Distance.COSINE",
     "Distance.EUCLID",
+    "Distance.MANHATTAN",
 )
-PRODUCTION_VECTOR_PARAMS_ALLOWED = frozenset({"collection_readiness.py"})
+PRODUCTION_VECTOR_PARAMS_ALLOWED = frozenset({"collection_readiness.py", "collection_creation.py"})
+PRODUCTION_DISTANCE_TYPE_ALLOWED = frozenset({"collection_creation.py"})
+PRODUCTION_CREATE_COLLECTION_ALLOWED = frozenset({"collection_creation.py"})
 
 
 def _compose_text() -> str:
@@ -227,6 +230,15 @@ def test_compose_has_no_api_or_admin_services() -> None:
         assert token not in text
 
 
+def _attribute_call_names(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            names.add(node.func.attr)
+    return names
+
+
 def test_production_qdrant_modules_do_not_provision_collections() -> None:
     for path in sorted(QDRANT_ROOT.rglob("*.py")):
         source = path.read_text(encoding="utf-8")
@@ -234,6 +246,18 @@ def test_production_qdrant_modules_do_not_provision_collections() -> None:
             assert fragment not in source
         if path.name not in PRODUCTION_VECTOR_PARAMS_ALLOWED:
             assert "VectorParams" not in source
+        if path.name not in PRODUCTION_DISTANCE_TYPE_ALLOWED:
+            assert "Distance" not in imported_names(path)
+        call_names = _attribute_call_names(path)
+        stripped = source.replace("create_qdrant_document_collection", "")
+        if path.name in PRODUCTION_CREATE_COLLECTION_ALLOWED:
+            assert "create_collection" in call_names
+            assert "recreate_collection" not in call_names
+            assert "delete_collection" not in call_names
+            assert "update_collection" not in call_names
+        else:
+            assert "create_collection" not in call_names
+            assert "create_collection" not in stripped
 
 
 def test_live_tests_own_ephemeral_collection_and_dot_metric() -> None:
