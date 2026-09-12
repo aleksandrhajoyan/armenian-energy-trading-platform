@@ -24,7 +24,6 @@ FORECASTING_MODULE = PRODUCTION_ROOT / "domain" / "models" / "forecasting.py"
 OBSERVATIONS_MODULE = PRODUCTION_ROOT / "domain" / "models" / "observations.py"
 GRAPH_MODULE = PRODUCTION_ROOT / "application" / "orchestration" / "graph.py"
 STATE_MODULE = PRODUCTION_ROOT / "application" / "orchestration" / "state.py"
-AGENTS_ROOT = PRODUCTION_ROOT / "application" / "agents"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 ML_ROOT = PRODUCTION_ROOT / "ml"
@@ -473,14 +472,7 @@ def test_api_composition_remains_unaware_of_consumer_load_forecast_model_port() 
     assert transport_leaks == []
 
 
-def test_no_production_consumer_load_forecast_agent_or_model_adapter() -> None:
-    agent_classes = [
-        f"{path.name}:{name}"
-        for path in sorted(AGENTS_ROOT.rglob("*.py"))
-        for name in _module_class_names(path)
-        if "ConsumerLoadForecast" in name
-    ]
-    assert agent_classes == []
+def test_no_production_consumer_load_forecast_model_adapter() -> None:
     production_impls: list[str] = []
     for path in _production_python_files():
         if path == PORT_MODULE:
@@ -488,7 +480,6 @@ def test_no_production_consumer_load_forecast_agent_or_model_adapter() -> None:
         for name in _module_class_names(path):
             if name in {
                 "ConsumerLoadForecastModelPort",
-                "ConsumerLoadForecastAgent",
                 "ConsumerLoadForecastPoint",
             } or name.endswith("ConsumerLoadForecastModel"):
                 production_impls.append(f"{path.relative_to(PRODUCTION_ROOT)}:{name}")

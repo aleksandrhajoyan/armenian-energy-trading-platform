@@ -297,6 +297,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
     )
     assert production_agent_modules == [
         "base.py",
+        "consumer_load_forecast.py",
         "generation_availability.py",
         "hydro_resources.py",
         "market_monitoring.py",

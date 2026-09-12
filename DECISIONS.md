@@ -2008,3 +2008,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application can type-check Consumer Load Forecast inference without owning a model. Phase 3 is not complete. The agent is not implemented. ML vendor remains unspecified.
 
 ---
+
+## ADR-129 — Consumer Load Forecast Agent Delegates Only Through the Typed Model Port
+
+- **Status:** Accepted
+- **Context:** ADR-128 published `ConsumerLoadForecastModelPort` and `ConsumerLoadForecastModelRequest` without an application agent. Phase 3 still needed a typed application invocation seam that could call that port without importing LightGBM/XGBoost, inventing a second request DTO, expanding `WorkflowState`, or creating a generic forecast-agent framework.
+- **Decision:**
+  - ADR-128 remains Accepted and is not superseded. ADR-036 (`AgentName` / `AgentPort`) and ADR-037 (`WorkflowState` as a frozen seven-field snapshot) remain Accepted.
+  - Chunk 119 adds application-owned `ConsumerLoadForecastAgent` in `application/agents`. It satisfies existing `AgentPort[ConsumerLoadForecastModelRequest, tuple[LoadForecastPoint, ...]]` structurally. No Consumer-specific Protocol, generic `ForecastAgentPort`, `AgentFactory`, or `AgentRegistry` is introduced.
+  - Canonical identity is existing `AgentName.CONSUMER_LOAD_FORECAST`. Constructor injection is exactly `ConsumerLoadForecastModelPort` with no default, factory, or concrete ML type.
+  - `async run(request)` awaits `model.forecast(request=request)` exactly once and returns that `tuple[LoadForecastPoint, ...]` unchanged. The published Chunk 118 request and canonical `LoadForecastPoint` result types are reused. There is no reconstruction, sorting, filtering, MW conversion, missing-point fill, retry, fallback, or exception translation.
+  - Concrete ML adapter, feature preparation, model lifecycle, workflow context, LangGraph Phase-3 wiring, API composition, and `WorkflowState` expansion remain deferred.
+- **Consequences:** Application can invoke Consumer Load Forecast through the existing agent contract without owning a model. Phase 3 is not complete. Numerical forecasting remains an outer ML concern.
+
+---
