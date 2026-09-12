@@ -2052,3 +2052,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application can invoke DAM Price Forecast through the existing agent contract without owning a model. Phase 3 is not complete. Numerical forecasting and currency conversion remain outer ML concerns.
 
 ---
+
+## ADR-132 — Forecasting Plan Composes Existing Typed Requests Without Choosing Execution Order
+
+- **Status:** Accepted
+- **Context:** ADR-128 through ADR-131 published two agent-specific forecast model request DTOs and two application agents that delegate through those ports. Phase 3 still lacked the smallest typed application contract that could say the prepared inputs belonging to one future forecasting-phase execution. Copying Phase 2's execution port, success aggregate, concurrent executor, or workflow wiring would have implied either parallelism or Consumer → DAM sequencing that has not been justified. A generic `ForecastModelPort` / `ModelPort` / `MLPort` would hide those agent-specific request contracts.
+- **Decision:**
+  - ADR-128, ADR-129, ADR-130, and ADR-131 remain Accepted and are not superseded. ADR-037 remains Accepted: `WorkflowState` stays the seven-field snapshot and is not expanded with forecast payloads.
+  - Chunk 122 adds application-owned frozen/slots `ForecastingPlan` in `application/orchestration/forecasting_plan.py`. Fields are exactly `consumer_load_request: ConsumerLoadForecastModelRequest` and `dam_price_request: DAMPriceForecastModelRequest`. The published Chunk 118 and Chunk 120 request DTOs remain the semantic authorities for their own inputs.
+  - Requests remain agent/model-specific. The plan does not introduce a generic forecast/model abstraction, `ForecastingExecutionPort`, success aggregate, executor, workflow context, workflow step, or LangGraph node.
+  - Supplied request objects are retained by identity. The plan does not reconstruct, normalize, copy, convert, or otherwise transform either request. It introduces no cross-request timestamp/horizon invariant, no shared-identity rule, and no dependency ordering.
+  - The plan does not execute either agent. It does not imply concurrency. It does not imply Consumer → DAM sequential dependency either. It stays outside `WorkflowState`.
+  - Execution boundary, success aggregate, workflow context, workflow step, LangGraph wiring, ML implementations, features, training, and runtime composition remain deferred.
+- **Consequences:** Application can type-check one forecasting-phase input pair without choosing how those requests will later run. Phase 3 is not complete. Neither forecasting agent is ML-backed in production.
+
+---
