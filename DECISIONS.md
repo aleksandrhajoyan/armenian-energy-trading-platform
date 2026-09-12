@@ -2082,3 +2082,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application can type-check one forecasting-phase success pair without choosing how those forecasts will later run. Phase 3 is not complete. Neither forecasting agent is ML-backed in production.
 
 ---
+
+## ADR-134 — Forecasting Execution Uses a Phase-Specific Async Application Port Without Choosing Execution Strategy
+
+- **Status:** Accepted
+- **Context:** ADR-128 through ADR-133 published two agent-specific forecast model request DTOs, two application agents that delegate through those ports, an unwired `ForecastingPlan` that pairs those requests, and an unwired `ForecastingSuccess` that pairs the canonical output tuples. Phase 3 still lacked the smallest typed application seam that could say a prepared plan may be executed asynchronously into that success aggregate. Copying Phase 2's concurrent executor, sequential ordering, workflow context, or LangGraph wiring would have implied either parallelism or Consumer → DAM sequencing that has not been justified. A generic `ExecutionPort[TPlan, TResult]` / `WorkflowExecutionPort` / `ForecastExecutionPort[T]` would hide those Phase-3-specific contracts.
+- **Decision:**
+  - ADR-128, ADR-129, ADR-130, ADR-131, ADR-132, and ADR-133 remain Accepted and are not superseded. ADR-037 remains Accepted: `WorkflowState` stays the seven-field snapshot and is not expanded with forecast payloads.
+  - Chunk 124 adds application-owned `ForecastingExecutionPort` in `application/orchestration/forecasting_execution.py`. It is a non-generic `typing.Protocol` whose only public operation is keyword-only `async execute(*, plan: ForecastingPlan) -> ForecastingSuccess`. There is no default for `plan`, no `*args` / `**kwargs`, no overloads, and no provider/runtime/model arguments.
+  - The port is Phase-3-specific. It does not introduce a generic execution abstraction, concurrency decision, sequential-order decision, or Consumer → DAM dependency decision. It does not encode retry, failure, degraded, timeout, or cancellation semantics.
+  - There is no concrete executor in this chunk. The protocol is satisfied structurally. It stays outside `WorkflowState`.
+  - Concrete executor, workflow context, workflow step, LangGraph wiring, ML implementations, features, training, and runtime composition remain deferred.
+- **Consequences:** Application can type-check one forecasting-phase execution seam without choosing how those forecasts will later run. Phase 3 is not complete. Neither forecasting agent is ML-backed in production.
+
+---
