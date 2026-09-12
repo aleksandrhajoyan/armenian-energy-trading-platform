@@ -6,6 +6,10 @@ from energy_trading.application.ports.consumer_load_forecast_model import (
     ConsumerLoadForecastModelRequest,
 )
 from energy_trading.application.ports.consumption_repository import ConsumptionRepositoryPort
+from energy_trading.application.ports.dam_price_forecast_model import (
+    DAMPriceForecastModelPort,
+    DAMPriceForecastModelRequest,
+)
 from energy_trading.application.ports.dlq import DeadLetterQueuePort
 from energy_trading.application.ports.document_embedding import (
     DocumentChunkEmbedding,
@@ -48,6 +52,8 @@ __all__ = [
     "ConsumerLoadForecastModelPort",
     "ConsumerLoadForecastModelRequest",
     "ConsumptionRepositoryPort",
+    "DAMPriceForecastModelPort",
+    "DAMPriceForecastModelRequest",
     "DeadLetterQueuePort",
     "DocumentChunkEmbedding",
     "DocumentEmbeddingPort",

@@ -444,6 +444,9 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "MarketMonitoringAgent" not in names
     assert "RegulatoryIntelligenceAgent" not in names
     assert "ConsumerLoadForecastAgent" not in names
+    assert "DAMPriceForecastAgent" not in names
+    assert "DAMPriceForecastModelPort" not in names
+    assert "DAMPriceForecastModelRequest" not in names
     assert "RegulatoryIntelligenceQueryExecutionService" not in names
     assert "RegulatoryIntelligenceWorkflowStep" not in names
     assert "RegulatoryIntelligenceWorkflowRequest" not in names
@@ -647,6 +650,7 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
             "MarketMonitoringAgent",
             "RegulatoryIntelligenceAgent",
             "ConsumerLoadForecastAgent",
+            "DAMPriceForecastAgent",
             "RegulatoryIntelligenceWorkflowStep",
             "RegulatoryIntelligenceQueryExecutionService",
             "RegulatoryIntelligenceWorkflowContextPort",

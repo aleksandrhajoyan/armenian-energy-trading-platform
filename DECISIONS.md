@@ -2022,3 +2022,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application can invoke Consumer Load Forecast through the existing agent contract without owning a model. Phase 3 is not complete. Numerical forecasting remains an outer ML concern.
 
 ---
+
+## ADR-130 — DAM Price Forecasting Starts with a Market- and Currency-Explicit Typed ML Port
+
+- **Status:** Accepted
+- **Context:** Chunk 119 published `ConsumerLoadForecastAgent` over ADR-128's load-forecast model port. DAM Price Forecast still had no application↔ML seam. Phase 3 needed a typed inference boundary that could identify both the target market and the target price currency independently of historical observations, reuse canonical market-price types, and avoid inventing a generic ML framework, a second money type, or currency conversion.
+- **Decision:**
+  - ADR-128 and ADR-129 remain Accepted and are not superseded. ADR-001, ADR-008, and ADR-012 remain Accepted: application owns forecasting ports; future `energy_trading.ml` adapters structurally implement them; LLMs must not calculate the numeric forecast. ADR-037 remains Accepted: `WorkflowState` stays the seven-field snapshot.
+  - Chunk 120 introduces one narrow Protocol, `DAMPriceForecastModelPort`, in `energy_trading.application.ports`. It is DAM-specific. There is no generic `ModelPort`, `ForecastModelPort`, `MLPort`, predictor hierarchy, registry, or factory. The authorized domain-specific model-port set is exactly `ConsumerLoadForecastModelPort` and `DAMPriceForecastModelPort`.
+  - The request DTO is frozen/slots `DAMPriceForecastModelRequest` with exactly `market_id: EntityId`, `currency: CurrencyCode`, `history: tuple[MarketPriceRecord, ...]`, and explicit `target_timestamps: tuple[UtcDateTime, ...]`. Canonical `EntityId` identifies the target market independently of whether historical observations are supplied. Canonical `CurrencyCode` — the same constrained type used by `EnergyPrice.currency` — identifies the target forecast currency independently of history. Empty history remains structurally permitted. When history is present, every `MarketPriceRecord.market_id` must match the request market and every `MarketPriceRecord.price.currency` must match the request currency; mixed-market or mixed-currency history fails closed. Market identity and currency are never inferred from an arbitrary first observation. An integer `horizon=24` is not a substitute. This boundary does not convert currencies or normalize one currency into another.
+  - Historical observations reuse `MarketPriceRecord`. Forecast points reuse `PriceForecastPoint`. No duplicate market-price observation class, price-forecast point class, or currency abstraction is introduced.
+  - The only public operation is keyword-only `async forecast(*, request) -> tuple[PriceForecastPoint, ...]`. An empty result tuple is a valid successful outcome. Concrete CPU scheduling (`asyncio.to_thread`) is deferred until a production adapter exists.
+  - DataFrames, ndarrays, sklearn/LightGBM/XGBoost types, pickle/ONNX, `Any`, `dict`, `Mapping`, and `TypedDict` payloads must not appear on the application/domain side of this boundary. A future adapter may use those types internally.
+  - Concrete ML technology, `DAMPriceForecastAgent`, feature preparation, workflow context, LangGraph Phase-3 wiring, API composition, persistence, and `WorkflowState` expansion are deferred.
+- **Consequences:** Application can type-check DAM Price Forecast inference without owning a model or an agent. Phase 3 is not complete. The DAM agent is not implemented. ML vendor remains unspecified. Currency conversion remains out of scope for this boundary.
+
+---
