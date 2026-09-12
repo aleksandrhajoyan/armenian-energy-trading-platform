@@ -36,6 +36,9 @@ from energy_trading.api.composition.production_lifespan import (
 from energy_trading.api.composition.regulatory_intelligence import (
     build_regulatory_intelligence_query_execution,
 )
+from energy_trading.api.composition.regulatory_intelligence_collection_readiness import (
+    verify_configured_regulatory_intelligence_collection_ready,
+)
 from energy_trading.api.composition.regulatory_intelligence_configured_runtime import (
     build_regulatory_intelligence_configured_runtime,
 )
@@ -70,4 +73,5 @@ __all__ = [
     "loaded_regulatory_intelligence_runtime",
     "managed_document_vector_index_runtime",
     "managed_regulatory_intelligence_runtime",
+    "verify_configured_regulatory_intelligence_collection_ready",
 ]

@@ -2,9 +2,11 @@
 
 Chunk 110 is the authorized mapper-to-ensure composition. Chunk 111 authorizes
 the existing document-index loaded runtime to load distance settings and the
-existing managed runtime to receive those already-constructed settings. The
-mapper, create_app, production/document-index/Regulatory lifespans, HTTP, and
-LangGraph remain unwired from mapping.
+existing managed runtime to receive those already-constructed settings.
+Chunk 112 is the authorized mapper-to-verify composition for Regulatory
+collection readiness and remains unwired from runtime. The mapper, create_app,
+production/document-index/Regulatory lifespans, HTTP, and LangGraph remain
+unwired from mapping.
 """
 
 from __future__ import annotations
