@@ -525,6 +525,8 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "energy_trading.application.agents.news_intelligence" not in modules
     assert "energy_trading.application.agents.market_monitoring" not in modules
     assert "energy_trading.application.agents.regulatory_intelligence" not in modules
+    assert "energy_trading.application.agents.consumer_load_forecast" not in modules
+    assert "energy_trading.application.agents.dam_price_forecast" not in modules
     assert (
         "energy_trading.application.orchestration.regulatory_intelligence_query_execution"
         not in modules

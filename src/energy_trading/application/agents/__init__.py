@@ -2,7 +2,7 @@
 
 Shared invocation contract plus concrete Weather, Hydro, Generation
 Availability, News Intelligence, Market Monitoring, Regulatory
-Intelligence, and Consumer Load Forecast agents.
+Intelligence, Consumer Load Forecast, and DAM Price Forecast agents.
 """
 
 from energy_trading.application.agents.base import AgentName, AgentPort

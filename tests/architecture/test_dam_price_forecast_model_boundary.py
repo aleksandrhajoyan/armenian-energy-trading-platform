@@ -30,7 +30,6 @@ STATE_MODULE = PRODUCTION_ROOT / "application" / "orchestration" / "state.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 ML_ROOT = PRODUCTION_ROOT / "ml"
-AGENTS_ROOT = PRODUCTION_ROOT / "application" / "agents"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -526,7 +525,7 @@ def test_api_composition_remains_unaware_of_dam_price_forecast_model_port() -> N
     assert transport_leaks == []
 
 
-def test_no_production_dam_price_forecast_agent_or_model_adapter() -> None:
+def test_no_production_dam_price_forecast_model_adapter() -> None:
     production_impls: list[str] = []
     for path in _production_python_files():
         if path == PORT_MODULE:
@@ -534,19 +533,11 @@ def test_no_production_dam_price_forecast_agent_or_model_adapter() -> None:
         for name in _module_class_names(path):
             if name in {
                 "DAMPriceForecastModelPort",
-                "DAMPriceForecastAgent",
                 "DAMPriceForecastPoint",
                 "DAMMarketPriceRecord",
             } or name.endswith("DAMPriceForecastModel"):
                 production_impls.append(f"{path.relative_to(PRODUCTION_ROOT)}:{name}")
     assert production_impls == []
-    agent_classes = [
-        name
-        for path in AGENTS_ROOT.rglob("*.py")
-        for name in _module_class_names(path)
-        if name == "DAMPriceForecastAgent"
-    ]
-    assert agent_classes == []
     if ML_ROOT.exists():
         ml_files = sorted(path.name for path in ML_ROOT.rglob("*.py"))
         assert ml_files == []

@@ -2038,3 +2038,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application can type-check DAM Price Forecast inference without owning a model or an agent. Phase 3 is not complete. The DAM agent is not implemented. ML vendor remains unspecified. Currency conversion remains out of scope for this boundary.
 
 ---
+
+## ADR-131 — DAM Price Forecast Agent Delegates Only Through the Typed Model Port
+
+- **Status:** Accepted
+- **Context:** ADR-130 published `DAMPriceForecastModelPort` and `DAMPriceForecastModelRequest` without an application agent. Phase 3 still needed a typed application invocation seam that could call that port without importing LightGBM/XGBoost, inventing a second request DTO, converting currencies, expanding `WorkflowState`, or creating a generic forecast-agent framework.
+- **Decision:**
+  - ADR-130 remains Accepted and is not superseded. ADR-036 (`AgentName` / `AgentPort`) and ADR-037 (`WorkflowState` as a frozen seven-field snapshot) remain Accepted.
+  - Chunk 121 adds application-owned `DAMPriceForecastAgent` in `application/agents`. It satisfies existing `AgentPort[DAMPriceForecastModelRequest, tuple[PriceForecastPoint, ...]]` structurally. No DAM-specific Protocol, generic `ForecastAgentPort`, `AgentFactory`, or `AgentRegistry` is introduced.
+  - Canonical identity is existing `AgentName.DAM_PRICE_FORECAST`. Constructor injection is exactly `DAMPriceForecastModelPort` with no default, factory, or concrete ML type.
+  - `async run(request)` awaits `model.forecast(request=request)` exactly once and returns that `tuple[PriceForecastPoint, ...]` unchanged. The published Chunk 120 request and canonical `PriceForecastPoint` result types are reused. There is no reconstruction, sorting, filtering, currency conversion, missing-timestamp fill, retry, fallback, or exception translation.
+  - Concrete ML adapter, feature preparation, model lifecycle, workflow context, LangGraph Phase-3 wiring, API composition, and `WorkflowState` expansion remain deferred.
+- **Consequences:** Application can invoke DAM Price Forecast through the existing agent contract without owning a model. Phase 3 is not complete. Numerical forecasting and currency conversion remain outer ML concerns.
+
+---
