@@ -1992,4 +1992,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Production/API/FastAPI graph composition, concrete Regulatory context storage, and future Phase-1 continuation after Regulatory remain separately reviewed chunks.
 - **Consequences:** Contract/running workflows can now execute Regulatory through the published adapter and then stop. Ingestion/running workflows still run the existing Phase 2 slice. Phase 1 is not complete. Parent Regulatory capability remains incomplete.
 
+## ADR-128 — Consumer Load Forecasting Starts with a Typed Application-Owned ML Port
+
+- **Status:** Accepted
+- **Context:** Phase 3 Consumer Load Forecasting needs a first application↔ML seam before any agent, trainer, or vendor adapter. A generic `ModelPort` / `ForecastModelPort` / `MLPort` would hide quantity semantics and invite DataFrame or ndarray leakage. Canonical historical consumption already exists as `ConsumptionRecord` with `value_mw`. Canonical forecast output already exists as `LoadForecastPoint` with `value_mw`. Inventing a second history schema or a `ConsumerLoadForecastPoint` duplicate would split the published MW contract.
+- **Decision:**
+  - ADR-001, ADR-008, and ADR-012 remain Accepted and are not superseded. Application owns forecasting ports; future `energy_trading.ml` adapters structurally implement them. LLMs must not calculate the numeric forecast. Power remains MW and is not equated with MWh.
+  - ADR-037 remains Accepted: `WorkflowState` stays the seven-field snapshot and is not expanded with forecast payloads.
+  - Chunk 118 introduces one narrow Protocol, `ConsumerLoadForecastModelPort`, in `energy_trading.application.ports`. There is no generic ML framework, registry, factory, or predictor hierarchy.
+  - The request DTO is frozen/slots `ConsumerLoadForecastModelRequest` with exactly `consumer_id: EntityId`, `history: tuple[ConsumptionRecord, ...]`, and explicit `target_timestamps: tuple[UtcDateTime, ...]`. Canonical `EntityId` identifies the target consumer independently of whether historical observations are supplied. Empty history remains structurally permitted. When history is present, every `ConsumptionRecord.consumer_id` must match the request consumer; mixed-consumer history fails closed. Consumer identity is never inferred from an arbitrary first observation. An integer `horizon=24` is not a substitute. Hyperparameters, model paths/versions, providers, feature registries, weather/hydro/news features, Redis keys, and database IDs are excluded.
+  - Historical observations reuse `ConsumptionRecord`. Forecast points reuse `LoadForecastPoint`. The quantity on both sides is load/power in MW (`value_mw`), not interval energy in MWh. This chunk does not convert MW↔MWh.
+  - The only public operation is keyword-only `async forecast(*, request) -> tuple[LoadForecastPoint, ...]`. Concrete CPU scheduling (`asyncio.to_thread`) is deferred until a production adapter exists.
+  - DataFrames, ndarrays, sklearn/LightGBM/XGBoost types, pickle/ONNX, `Any`, `dict`, `Mapping`, and `TypedDict` payloads must not appear on the application/domain side of this boundary. A future adapter may use those types internally.
+  - Concrete ML technology, `ConsumerLoadForecastAgent`, feature preparation, workflow context, LangGraph wiring, API composition, persistence, and `WorkflowState` expansion are deferred.
+- **Consequences:** Application can type-check Consumer Load Forecast inference without owning a model. Phase 3 is not complete. The agent is not implemented. ML vendor remains unspecified.
+
 ---
