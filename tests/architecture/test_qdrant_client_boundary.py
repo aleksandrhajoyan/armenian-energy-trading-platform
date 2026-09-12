@@ -7,11 +7,9 @@ from pathlib import Path
 
 from tests.architecture.import_inspection import (
     DOCUMENT_VECTOR_INDEX_INFRA_CLIENT_COMPOSITION_RELATIVES,
-    DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
-    DOCUMENT_VECTOR_INDEX_QDRANT_SETTINGS_COMPOSITION_RELATIVES,
+    QDRANT_CLIENT_API_ALLOWLIST_RELATIVES,
+    QDRANT_SETTINGS_API_ALLOWLIST_RELATIVES,
     REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
-    REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
-    REGULATORY_QDRANT_SETTINGS_COMPOSITION_RELATIVES,
     SRC_ROOT,
     collect_import_violations,
     imported_names,
@@ -19,6 +17,7 @@ from tests.architecture.import_inspection import (
     is_document_vector_index_managed_runtime_module,
     is_document_vector_index_provider_composition_module,
     is_document_vector_index_provider_runtime_module,
+    is_qdrant_document_vector_distance_mapper_module,
     is_regulatory_loaded_runtime_module,
     is_regulatory_managed_runtime_module,
     is_regulatory_provider_composition_module,
@@ -137,10 +136,7 @@ def test_inner_layers_do_not_import_qdrant() -> None:
         collect_import_violations(
             API_ROOT,
             ("qdrant_client",),
-            exclude_relative_prefixes=(
-                *REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
-                *DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
-            ),
+            exclude_relative_prefixes=QDRANT_CLIENT_API_ALLOWLIST_RELATIVES,
         )
         == []
     )
@@ -193,10 +189,7 @@ def test_create_app_does_not_wire_qdrant() -> None:
         collect_import_violations(
             API_ROOT,
             ("qdrant_client",),
-            exclude_relative_prefixes=(
-                *REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
-                *DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
-            ),
+            exclude_relative_prefixes=QDRANT_CLIENT_API_ALLOWLIST_RELATIVES,
         )
         == []
     )
@@ -208,10 +201,7 @@ def test_create_app_does_not_wire_qdrant() -> None:
                 "energy_trading.infrastructure.vector_store.qdrant",
                 "energy_trading.shared.config.qdrant",
             ),
-            exclude_relative_prefixes=(
-                *REGULATORY_QDRANT_SETTINGS_COMPOSITION_RELATIVES,
-                *DOCUMENT_VECTOR_INDEX_QDRANT_SETTINGS_COMPOSITION_RELATIVES,
-            ),
+            exclude_relative_prefixes=QDRANT_SETTINGS_API_ALLOWLIST_RELATIVES,
         )
         == []
     )
@@ -276,6 +266,21 @@ def test_create_app_does_not_wire_qdrant() -> None:
             assert "load_qdrant_settings" in names
             assert "QdrantDocumentVectorIndex" not in names
             assert "QdrantDocumentVectorSearch" not in names
+            continue
+        if is_qdrant_document_vector_distance_mapper_module(path):
+            assert "Distance" in names
+            assert "QdrantDocumentVectorDistance" in names
+            assert "AsyncQdrantClient" not in names
+            assert "QdrantDocumentVectorConfig" not in names
+            assert "QdrantSettings" not in names
+            assert "create_qdrant_client" not in names
+            assert "load_qdrant_settings" not in names
+            assert "load_qdrant_document_vector_distance_settings" not in names
+            assert "QdrantDocumentVectorIndex" not in names
+            assert "QdrantDocumentVectorSearch" not in names
+            assert "create_qdrant_document_collection" not in names
+            assert "verify_qdrant_document_collection_ready" not in names
+            assert "ensure_qdrant_document_collection_ready" not in names
             continue
         assert "AsyncQdrantClient" not in names
         assert "QdrantSettings" not in names

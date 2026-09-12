@@ -113,6 +113,19 @@ REGULATORY_QDRANT_SETTINGS_COMPOSITION_RELATIVES = (
     *REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
     REGULATORY_LOADED_RUNTIME_RELATIVE,
 )
+QDRANT_DOCUMENT_VECTOR_DISTANCE_MAPPER_RELATIVE = (
+    "energy_trading/api/composition/qdrant_document_vector_distance.py"
+)
+QDRANT_CLIENT_API_ALLOWLIST_RELATIVES = (
+    *REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
+    *DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
+    QDRANT_DOCUMENT_VECTOR_DISTANCE_MAPPER_RELATIVE,
+)
+QDRANT_SETTINGS_API_ALLOWLIST_RELATIVES = (
+    *REGULATORY_QDRANT_SETTINGS_COMPOSITION_RELATIVES,
+    *DOCUMENT_VECTOR_INDEX_QDRANT_SETTINGS_COMPOSITION_RELATIVES,
+    QDRANT_DOCUMENT_VECTOR_DISTANCE_MAPPER_RELATIVE,
+)
 
 
 def is_api_composition_module(path: Path) -> bool:
@@ -155,6 +168,10 @@ def is_regulatory_managed_runtime_module(path: Path) -> bool:
 
 def is_regulatory_loaded_runtime_module(path: Path) -> bool:
     return path.relative_to(SRC_ROOT).as_posix() == REGULATORY_LOADED_RUNTIME_RELATIVE
+
+
+def is_qdrant_document_vector_distance_mapper_module(path: Path) -> bool:
+    return path.relative_to(SRC_ROOT).as_posix() == QDRANT_DOCUMENT_VECTOR_DISTANCE_MAPPER_RELATIVE
 
 
 def http_transport_api_paths(api_root: Path) -> list[Path]:

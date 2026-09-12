@@ -7,9 +7,8 @@ from pathlib import Path
 
 from tests.architecture.import_inspection import (
     DOCUMENT_VECTOR_INDEX_INFRA_CLIENT_COMPOSITION_RELATIVES,
-    DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
+    QDRANT_CLIENT_API_ALLOWLIST_RELATIVES,
     REGULATORY_INFRA_CLIENT_COMPOSITION_RELATIVES,
-    REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
     SRC_ROOT,
     collect_import_violations,
     imported_modules,
@@ -117,10 +116,7 @@ def test_inner_layers_do_not_import_qdrant() -> None:
         collect_import_violations(
             API_ROOT,
             ("qdrant_client",),
-            exclude_relative_prefixes=(
-                *REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
-                *DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
-            ),
+            exclude_relative_prefixes=QDRANT_CLIENT_API_ALLOWLIST_RELATIVES,
         )
         == []
     )
@@ -226,10 +222,7 @@ def test_create_app_does_not_wire_document_vector_adapters() -> None:
                 "qdrant_client",
                 "energy_trading.infrastructure.vector_store.qdrant.document_vector",
             ),
-            exclude_relative_prefixes=(
-                *REGULATORY_PROVIDER_COMPOSITION_RELATIVES,
-                *DOCUMENT_VECTOR_INDEX_PROVIDER_COMPOSITION_RELATIVES,
-            ),
+            exclude_relative_prefixes=QDRANT_CLIENT_API_ALLOWLIST_RELATIVES,
         )
         == []
     )

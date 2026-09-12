@@ -1830,3 +1830,24 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Explicit callers can non-destructively ensure a document collection when they already know the vector size and have chosen a Qdrant distance. Automatic startup/API/LangGraph provisioning, production distance policy, collection migration, payload indexes, race retries, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
 
 ---
+
+## ADR-119 — Explicit Qdrant Document-Vector Distance Configuration
+
+- **Status:** Accepted
+- **Context:** ADR-005/032/033/034/115/116/117/118 remain the Qdrant direction: official async client, insert-only document adapters, test-only live-fixture provisioning, create-only mutation, verify-only readiness, and create-if-missing / verify-if-present ensure. Chunks 106–108 all require an explicit Qdrant `Distance` argument and must not default COSINE/DOT/EUCLID/MANHATTAN. Callers had no validated configuration contract for that metric and no outer mapping from a provider-neutral value onto the Qdrant SDK enum. Putting distance on connection `QdrantSettings` would make it globally mandatory for unrelated HTTP-client consumers. Hardcoding a production metric in infrastructure or composition would select architecture policy that ADR-118 deferred.
+- **Decision:**
+  - ADR-005, ADR-032, ADR-033, ADR-034, ADR-115, ADR-116, ADR-117, and ADR-118 remain Accepted and are not superseded.
+  - Chunk 109 introduces explicit validated distance configuration. Canonical values are exactly `cosine`, `dot`, `euclid`, and `manhattan`. There are no aliases (`cos`, `l2`, `euclidean`, `inner-product`, `ip`, `default`, `auto`) and no default.
+  - Shared/provider-neutral config owns `QdrantDocumentVectorDistance` and `QdrantDocumentVectorDistanceSettings` in `shared/config/qdrant.py`. The required field is `document_vector_distance` loaded from `QDRANT_DOCUMENT_VECTOR_DISTANCE`. This module does not depend on the Qdrant SDK.
+  - The setting is a narrow extra contract, not a new field on `QdrantSettings`, `DocumentVectorIndexRuntimeSettings`, or `RegulatoryIntelligenceRuntimeSettings`. Connection settings remain usable without a metric.
+  - Outer composition owns `map_qdrant_document_vector_distance(*, distance: QdrantDocumentVectorDistance) -> Distance` in `api/composition/qdrant_document_vector_distance.py`. Mapping is deterministic and explicit: `cosine` → `Distance.COSINE`, `dot` → `Distance.DOT`, `euclid` → `Distance.EUCLID`, `manhattan` → `Distance.MANHATTAN`. Unknown values fail closed rather than selecting a metric.
+  - Concrete Qdrant `Distance` members are allowed in production only inside that mapping table. Chunk 106–108 primitives still must not hardcode those members.
+  - No ensure/runtime/startup wiring occurs. The mapper does not call create, verify, or ensure. `create_app()`, production/document-index/Regulatory lifespans and runtimes, PDF extraction/index execution, HTTP routers, and LangGraph remain unwired. No production metric is selected by architecture. Deployment supplies the choice.
+  - Role separation:
+    - Chunk 106 = create mechanism
+    - Chunk 107 = verify mechanism
+    - Chunk 108 = ensure orchestration
+    - Chunk 109 = explicit distance configuration + provider mapping
+- **Consequences:** Callers can validate a document-vector distance independently of Qdrant connection settings and translate it to the SDK enum without inventing a default. Automatic provisioning, production distance policy, collection migration, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
+
+---
