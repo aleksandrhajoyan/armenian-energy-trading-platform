@@ -1810,3 +1810,23 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Explicit callers can preflight an already-provisioned document collection against both vector size and a chosen Qdrant metric without mutating Qdrant or selecting a production default. Automatic production collection provisioning, production distance policy, payload-index provisioning, automatic startup checks, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
 
 ---
+
+## ADR-118 — Non-Destructive Qdrant Document Collection Ensure
+
+- **Status:** Accepted
+- **Context:** ADR-005/032/033/034/115/116/117 remain the Qdrant direction: official async client, insert-only document adapters, test-only live-fixture provisioning, create-only collection mutation with explicit `Distance`, and verify-only readiness with explicit expected `Distance`. Callers had no infrastructure-only way to create a missing unnamed dense document collection or verify a present one without inventing collection managers, defaulting a production metric, reconciling races, or wiring startup/HTTP/LangGraph.
+- **Decision:**
+  - ADR-005, ADR-032, ADR-033, ADR-034, ADR-115, ADR-116, and ADR-117 remain Accepted and are not superseded.
+  - Chunk 106 remains create-only. Chunk 107 remains verify-only. Chunk 108 is create-if-missing / verify-if-present orchestration and must not duplicate create or verify logic.
+  - Infrastructure owns `ensure_qdrant_document_collection_ready` in `infrastructure/vector_store/qdrant/collection_ensure.py`. It is a keyword-only async function, not an application port and not a manager/registry/lifecycle/provisioner service.
+  - Inputs are an already-created `AsyncQdrantClient`, existing `QdrantDocumentVectorConfig`, and an explicit caller-supplied Qdrant `Distance`. The function does not construct or close the client, load settings, or inspect the environment.
+  - Control flow is one `collection_exists(collection_name=config.collection_name)` probe. `False` awaits `create_qdrant_document_collection` once with the same `client`, `config`, and `distance`, then returns `None`. `True` awaits `verify_qdrant_document_collection_ready` once with those same values, then returns `None`. Successful creation is not followed by readiness in this chunk.
+  - The caller-supplied `Distance` is forwarded unchanged. Production does not default COSINE/DOT/EUCLID/MANHATTAN, does not translate metrics, and does not add distance to settings or `QdrantDocumentVectorConfig`.
+  - An incompatible existing collection (wrong size, wrong distance, named vectors, sparse-only/malformed metadata, or verifier provider failure) fails closed through Chunk 107. Ensure does not delete, recreate, update, repair, migrate, rename, alias, or retry creation.
+  - Existence-probe provider failures (`UnexpectedResponse`, `ResponseHandlingException`, `ResourceExhaustedResponse`) become sanitized `DependencyUnavailableError("Document vector collection availability could not be determined.")` with causal chaining. Create and verify `DependencyUnavailableError` values propagate unchanged. Ensure does not catch and wrap those delegate errors.
+  - Concurrent create/disappear races are not reconciled. A 409 after a `False` probe remains the Chunk 106 creation failure. A vanished collection after a `True` probe remains the Chunk 107 readiness/provider failure. There is no distributed lock, Redis lock, advisory lock, second existence check, or retry.
+  - The ensure module may import Qdrant `Distance` because it is Qdrant infrastructure. It must not import or construct `VectorParams` and must not call `create_collection` or `get_collection` directly. The only direct client operation is `collection_exists`.
+  - Index/search adapters remain unchanged and do not call this function. Chunk 106 creation and Chunk 107 readiness must not import ensure. `create_app()`, production/document-index/Regulatory lifespans and runtimes, Chunk 104 execution, HTTP routers, and LangGraph remain unwired. Production still performs zero automatic collection provisioning.
+- **Consequences:** Explicit callers can non-destructively ensure a document collection when they already know the vector size and have chosen a Qdrant distance. Automatic startup/API/LangGraph provisioning, production distance policy, collection migration, payload indexes, race retries, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
+
+---

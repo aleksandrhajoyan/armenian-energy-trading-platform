@@ -59,8 +59,12 @@ PRODUCTION_COLLECTION_FORBIDDEN = (
     "Distance.MANHATTAN",
 )
 PRODUCTION_VECTOR_PARAMS_ALLOWED = frozenset({"collection_readiness.py", "collection_creation.py"})
-PRODUCTION_DISTANCE_TYPE_ALLOWED = frozenset({"collection_readiness.py", "collection_creation.py"})
+PRODUCTION_DISTANCE_TYPE_ALLOWED = frozenset(
+    {"collection_readiness.py", "collection_creation.py", "collection_ensure.py"}
+)
 PRODUCTION_CREATE_COLLECTION_ALLOWED = frozenset({"collection_creation.py"})
+PRODUCTION_GET_COLLECTION_ALLOWED = frozenset({"collection_readiness.py"})
+PRODUCTION_COLLECTION_EXISTS_ALLOWED = frozenset({"collection_ensure.py"})
 
 
 def _compose_text() -> str:
@@ -258,6 +262,17 @@ def test_production_qdrant_modules_do_not_provision_collections() -> None:
         else:
             assert "create_collection" not in call_names
             assert "create_collection" not in stripped
+        if path.name in PRODUCTION_GET_COLLECTION_ALLOWED:
+            assert "get_collection" in call_names
+        else:
+            assert "get_collection" not in call_names
+        if path.name in PRODUCTION_COLLECTION_EXISTS_ALLOWED:
+            assert "collection_exists" in call_names
+            assert "VectorParams" not in source
+            assert "create_collection" not in call_names
+            assert "get_collection" not in call_names
+        else:
+            assert "collection_exists" not in call_names
 
 
 def test_live_tests_own_ephemeral_collection_and_dot_metric() -> None:
