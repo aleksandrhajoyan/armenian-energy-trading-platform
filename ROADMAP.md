@@ -143,6 +143,7 @@ Phase 3 foundation is complete at the roadmap/contract level. That checkbox is n
   - [x] **Chunk 102** — PDF Extraction-to-Index Composition Root — API-owned, Unwired
   - [x] **Chunk 103** — Settings-Loaded PDF Extraction-to-Index Runtime Composition — Offline, Unwired
   - [x] **Chunk 104** — One-Shot Loaded PDF Extraction-to-Index Execution — Explicit-call only, Unwired
+  - [x] **Chunk 105** — Qdrant Document Collection Readiness Verification — Verify-only, Unwired
 - [ ] Pricing & Sales Agent
 - [ ] Contract-phase graph slice
 
@@ -232,8 +233,8 @@ Do not implement trading-objective optimization now.
 
 ## Current pointer
 
-- **Completed:** Chunk 0 through Chunk 104
-- **Next:** next Phase 5 Regulatory + Pricing slice or remaining Phase 4 parallel-ingestion work after Chunk 104 Architect review. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize LangGraph wiring of Regulatory composition, OCR, actual RAG workflow, verified Armenian DAM rule extraction, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring. Do not mark raw document ingestion or corpus automation complete merely because an unwired explicit one-shot PDF extraction-to-index execute function exists. Chunk 104 is implemented/validated locally but unpublished; the latest published checkpoint remains Chunk 103.
+- **Completed:** Chunk 0 through Chunk 105
+- **Next:** determined after Chunk 105 Architect review/publication. Do not mark the parent Regulatory Intelligence capability complete. Do not mark Pricing & Sales started. Do not mark production Qdrant collection provisioning complete. Do not mark production distance selection complete. Do not mark the parent Weather, Hydro, Generation Availability, News Intelligence, or Market Monitoring agent capabilities complete. Do not mark the parent Parallel Phase 2 join complete. Do not pre-authorize LangGraph wiring of Regulatory composition, OCR, actual RAG workflow, verified Armenian DAM rule extraction, production/durable workflow-context implementation, general multi-failure selection, retry-capable attempt tracking, increment/reset semantics, retry/fallback execution, LangGraph wiring of lower-level failure internals, Phase 3 execution, or API/composition graph wiring. Do not mark raw document ingestion or corpus automation complete merely because an unwired explicit one-shot PDF extraction-to-index execute function exists. Chunk 105 is implemented/validated locally but unpublished; the latest published checkpoint remains Chunk 104.
 
 ---
 

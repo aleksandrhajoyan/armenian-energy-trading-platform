@@ -502,7 +502,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - The service is opt-in. Process health and `create_app()` do not require Qdrant. Default pytest does not contact Qdrant.
   - Live tests live under `tests/integration/infrastructure/vector_store/qdrant/`, use marker `qdrant_integration`, and require `ENERGY_RUN_QDRANT_INTEGRATION=1`. They use `QdrantSettings` and `create_qdrant_client()`, poll `get_collections()` with a bounded 30-second timeout, and accept only `127.0.0.1`/`localhost`. They never print the API key.
   - Temporary test collections are uniquely named per fixture and deleted in cleanup. Test-only vector configuration is size `3` and `models.Distance.DOT`. That fixture metric does **not** select a production embedding distance and is not added to `QdrantSettings` or `QdrantDocumentVectorConfig` defaults.
-  - Production Qdrant modules still do not create, recreate, or delete collections and still do not reference `VectorParams` or distance enums. Production collection provisioning remains deferred.
+  - Production Qdrant modules still do not create, recreate, or delete collections and still do not reference distance enums. Chunk 105 may inspect `VectorParams` in the read-only collection-readiness verifier to confirm unnamed dense-vector dimension; it must not construct `VectorParams` or import `Distance`. Production collection provisioning remains deferred.
   - Application ports/contracts remain unchanged. `create_app()` remains unwired. Qdrant inference remains disabled. Query-text embedding, RAG, and agents remain deferred.
   - Default `uv run pytest` stays service-independent. testcontainers and the Docker SDK are not used.
 - **Consequences:** Developers can prove the published document index/search adapters against a compatible local Qdrant without starting TimescaleDB, Redis, or the API. Production distance selection, collection bootstrap, embedding models, and API composition remain later chunks.
@@ -1754,5 +1754,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Runtime-entry failures and `execute()` failures propagate unchanged. Inner runtime teardown still occurs after a failed `execute()`. There is no local `try/except`, retry, fallback, result reconstruction, or new diagnostic.
   - The function remains unwired from `create_app()`, FastAPI routes, production lifespan, `app.state`, dependency accessors, Regulatory runtime, LangGraph, scheduler, background tasks, and n8n. No automatic/startup/background caller is installed.
 - **Consequences:** An explicit external caller can now run one local text-layer PDF through extraction → embedding → vector-index execution. OCR, URL/file-upload/directory acquisition, automatic/startup/background corpus ingestion, production trigger wiring, collection management, reindex/replace/delete, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
+
+---
+
+## ADR-115 — Qdrant Document Collection Readiness Verification
+
+- **Status:** Accepted
+- **Context:** ADR-005/032/033/034 remain the Qdrant direction: official async client, insert-only document adapters, and test-only collection provisioning. Index and search still assume a future-provisioned collection. Callers had no infrastructure-only way to verify that an already-created collection exists and exposes the unnamed dense-vector size expected by those adapters without inventing collection managers, choosing a production distance, or wiring startup/HTTP/LangGraph.
+- **Decision:**
+  - ADR-005, ADR-032, ADR-033, and ADR-034 remain Accepted and are not superseded. This chunk does not provision collections and does not select a production distance.
+  - Infrastructure owns `verify_qdrant_document_collection_ready` in `infrastructure/vector_store/qdrant/collection_readiness.py`. It is a keyword-only async function, not an application port and not a manager/registry/lifecycle service.
+  - Inputs are an already-created `AsyncQdrantClient` plus existing `QdrantDocumentVectorConfig`. The function does not construct or close the client, load settings, or inspect the environment.
+  - Readiness is one `get_collection(collection_name=config.collection_name)` metadata lookup. Compatible unnamed dense configuration is SDK `VectorParams` whose `size` equals `config.vector_size`. The function returns `None`.
+  - Named-vector mappings, sparse-only/missing dense configuration, malformed metadata, missing collections, and provider call failures fail closed as sanitized `DependencyUnavailableError`. The verifier does not select a named vector.
+  - The module may import/inspect `VectorParams` to recognize the unnamed dense shape. It must not construct `VectorParams`, must not import or reference `Distance`, and must not create, update, or delete collections or payload indexes.
+  - Index/search adapters remain unchanged and do not call this verifier. `create_app()`, production/document-index/Regulatory lifespans and runtimes, Chunk 104 execution, HTTP routers, and LangGraph remain unwired. No automatic startup readiness occurs.
+- **Consequences:** Explicit callers can preflight an already-provisioned document collection without mutating Qdrant or choosing a distance. Production collection creation, production distance selection, payload-index provisioning, automatic startup checks, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
 
 ---

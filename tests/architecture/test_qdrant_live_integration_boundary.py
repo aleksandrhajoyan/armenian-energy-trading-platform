@@ -53,11 +53,11 @@ PRODUCTION_COLLECTION_FORBIDDEN = (
     "create_collection",
     "recreate_collection",
     "delete_collection",
-    "VectorParams",
     "Distance.DOT",
     "Distance.COSINE",
     "Distance.EUCLID",
 )
+PRODUCTION_VECTOR_PARAMS_ALLOWED = frozenset({"collection_readiness.py"})
 
 
 def _compose_text() -> str:
@@ -232,6 +232,8 @@ def test_production_qdrant_modules_do_not_provision_collections() -> None:
         source = path.read_text(encoding="utf-8")
         for fragment in PRODUCTION_COLLECTION_FORBIDDEN:
             assert fragment not in source
+        if path.name not in PRODUCTION_VECTOR_PARAMS_ALLOWED:
+            assert "VectorParams" not in source
 
 
 def test_live_tests_own_ephemeral_collection_and_dot_metric() -> None:
