@@ -513,7 +513,7 @@ def test_graph_and_runtime_remain_unwired_to_the_workflow_step() -> None:
     }
     assert "workflow_entry" in string_constants
     assert "parallel_ingestion" in string_constants
-    assert "regulatory_intelligence" not in string_constants
+    assert "regulatory_intelligence" in string_constants
     assert "contract" not in string_constants
 
 

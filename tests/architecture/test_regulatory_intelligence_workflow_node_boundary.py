@@ -171,8 +171,7 @@ WORKFLOW_STATE_FIELDS = (
     "diagnostics",
 )
 
-UNWIRED_GRAPH_AND_RUNTIME = (
-    GRAPH_MODULE,
+UNWIRED_API_AND_RUNTIME = (
     API_APP,
     API_ROOT / "composition" / "production_lifespan.py",
     API_ROOT / "composition" / "regulatory_intelligence_lifespan.py",
@@ -459,15 +458,14 @@ def test_workflow_state_shape_is_unchanged_and_does_not_import_the_adapter() -> 
     assert "regulatory_intelligence_result" not in source
 
 
-def test_graph_remains_unwired_from_regulatory_node_adapter() -> None:
+def test_graph_may_import_node_adapter_but_not_context_or_step() -> None:
     names = imported_names(GRAPH_MODULE)
-    assert "RegulatoryIntelligenceWorkflowNodeAdapter" not in names
+    assert "RegulatoryIntelligenceWorkflowNodeAdapter" in names
     assert "RegulatoryIntelligenceWorkflowContextPort" not in names
     assert "RegulatoryIntelligenceWorkflowStep" not in names
     modules = imported_modules(GRAPH_MODULE)
     assert (
-        "energy_trading.application.orchestration.regulatory_intelligence_workflow_node"
-        not in modules
+        "energy_trading.application.orchestration.regulatory_intelligence_workflow_node" in modules
     )
     assert "energy_trading.application.orchestration.regulatory_intelligence_context" not in modules
     assert (
@@ -475,8 +473,6 @@ def test_graph_remains_unwired_from_regulatory_node_adapter() -> None:
         not in modules
     )
     source = GRAPH_MODULE.read_text(encoding="utf-8")
-    assert "RegulatoryIntelligenceWorkflowNodeAdapter" not in source
-    assert "regulatory_intelligence_workflow_node" not in source
     assert "RegulatoryIntelligenceWorkflowContextPort" not in source
     assert "regulatory_intelligence_context" not in source
     assert "RegulatoryIntelligenceWorkflowStep" not in source
@@ -489,7 +485,7 @@ def test_graph_remains_unwired_from_regulatory_node_adapter() -> None:
     }
     assert "workflow_entry" in string_constants
     assert "parallel_ingestion" in string_constants
-    assert "regulatory_intelligence" not in string_constants
+    assert "regulatory_intelligence" in string_constants
     add_node_count = 0
     add_edge_count = 0
     add_conditional_edges_count = 0
@@ -503,9 +499,9 @@ def test_graph_remains_unwired_from_regulatory_node_adapter() -> None:
             add_edge_count += 1
         elif name == "add_conditional_edges":
             add_conditional_edges_count += 1
-    assert add_node_count == 3
+    assert add_node_count == 4
     assert add_edge_count == 3
-    assert add_conditional_edges_count == 1
+    assert add_conditional_edges_count == 2
 
 
 def test_context_and_step_modules_do_not_import_the_node_adapter() -> None:
@@ -527,7 +523,7 @@ def test_api_runtime_and_http_remain_unaware_of_the_node_adapter() -> None:
         "energy_trading.application.orchestration.regulatory_intelligence_workflow_node",
     )
     assert collect_http_api_import_violations(API_ROOT, forbidden_wiring) == []
-    for path in (*UNWIRED_GRAPH_AND_RUNTIME, *http_transport_api_paths(API_ROOT)):
+    for path in (*UNWIRED_API_AND_RUNTIME, *http_transport_api_paths(API_ROOT)):
         names = imported_names(path)
         assert "RegulatoryIntelligenceWorkflowNodeAdapter" not in names
         modules = imported_modules(path)

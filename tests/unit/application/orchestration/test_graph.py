@@ -51,8 +51,14 @@ _FORBIDDEN_BUSINESS_NODES = frozenset(
     }
 )
 
-_APPLICATION_NODES = (
+_PHASE2_PATH_NODES = (
     "workflow_entry",
+    "parallel_ingestion",
+    "parallel_ingestion_success_transition",
+)
+_ALL_APPLICATION_NODES = (
+    "workflow_entry",
+    "regulatory_intelligence",
     "parallel_ingestion",
     "parallel_ingestion_success_transition",
 )
@@ -67,11 +73,24 @@ _INVALID_POST_PHASE2_ROUTE_MESSAGE = (
 _SENTINEL_TEXT = "secret provider payload not for clients"
 
 
+class _UnusedRegulatoryIntelligenceNode:
+    """Test-only stand-in that must not run on the Phase 2 graph path."""
+
+    async def run(self, state: WorkflowState) -> WorkflowState:
+        msg = "Regulatory node must not run on the Phase 2 graph path"
+        raise AssertionError(msg)
+
+
 class _RecordingParallelIngestionStep:
     """Test-only stand-in for the injected Phase 2 workflow step."""
 
-    def __init__(self, error: BaseException | None = None) -> None:
+    def __init__(
+        self,
+        error: BaseException | None = None,
+        result: WorkflowState | None = None,
+    ) -> None:
         self.error = error
+        self.result = result
         self.calls = 0
         self.received: list[WorkflowState] = []
 
@@ -80,6 +99,8 @@ class _RecordingParallelIngestionStep:
         self.received.append(state)
         if self.error is not None:
             raise self.error
+        if self.result is not None:
+            return self.result
         return state
 
 
@@ -196,6 +217,7 @@ def _compile(
         | ParallelIngestionFailureRuntimeHandlingService
     ) = handler if handler is not None else _RecordingParallelIngestionFailureRuntimeHandler()
     compiled = build_workflow_graph(
+        regulatory_intelligence_node=_UnusedRegulatoryIntelligenceNode(),  # type: ignore[arg-type]
         parallel_ingestion_step=injected_step,
         parallel_ingestion_failure_runtime_handler=injected_handler,
     )
@@ -210,15 +232,27 @@ def test_installed_langgraph_satisfies_project_constraint() -> None:
     assert installed.startswith("1.2.")
 
 
-def test_build_workflow_graph_requires_both_keyword_only_dependencies() -> None:
+def test_build_workflow_graph_requires_three_keyword_only_dependencies() -> None:
+    regulatory = _UnusedRegulatoryIntelligenceNode()
     step = _RecordingParallelIngestionStep()
     handler = _RecordingParallelIngestionFailureRuntimeHandler()
     with pytest.raises(TypeError):
         build_workflow_graph()  # type: ignore[call-arg]
     with pytest.raises(TypeError):
-        build_workflow_graph(parallel_ingestion_step=step)  # type: ignore[call-arg]
+        build_workflow_graph(  # type: ignore[call-arg]
+            parallel_ingestion_step=step,
+            parallel_ingestion_failure_runtime_handler=handler,
+        )
     with pytest.raises(TypeError):
-        build_workflow_graph(parallel_ingestion_failure_runtime_handler=handler)  # type: ignore[call-arg]
+        build_workflow_graph(  # type: ignore[call-arg]
+            regulatory_intelligence_node=regulatory,
+            parallel_ingestion_failure_runtime_handler=handler,
+        )
+    with pytest.raises(TypeError):
+        build_workflow_graph(  # type: ignore[call-arg]
+            regulatory_intelligence_node=regulatory,
+            parallel_ingestion_step=step,
+        )
 
 
 def test_build_workflow_graph_returns_compiled_langgraph() -> None:
@@ -242,17 +276,19 @@ def test_graph_contains_workflow_entry_parallel_ingestion_and_transition_nodes()
     compiled, _step, _handler = _compile()
     representation = compiled.get_graph()
     application_nodes = {node_id for node_id in representation.nodes if node_id not in {START, END}}
-    assert application_nodes == set(_APPLICATION_NODES)
+    assert application_nodes == set(_ALL_APPLICATION_NODES)
 
 
 def test_topology_routes_success_to_transition_and_failure_to_end() -> None:
     compiled, _step, _handler = _compile()
     representation = compiled.get_graph()
-    assert set(representation.nodes) == {START, *_APPLICATION_NODES, END}
+    assert set(representation.nodes) == {START, *_ALL_APPLICATION_NODES, END}
     edges = {(edge.source, edge.target) for edge in representation.edges}
     assert edges == {
         (START, "workflow_entry"),
+        ("workflow_entry", "regulatory_intelligence"),
         ("workflow_entry", "parallel_ingestion"),
+        ("regulatory_intelligence", END),
         ("parallel_ingestion", "parallel_ingestion_success_transition"),
         ("parallel_ingestion", END),
         ("parallel_ingestion_success_transition", END),
@@ -263,6 +299,8 @@ def test_topology_routes_success_to_transition_and_failure_to_end() -> None:
         if getattr(edge, "conditional", False)
     }
     assert conditional == {
+        ("workflow_entry", "regulatory_intelligence"),
+        ("workflow_entry", "parallel_ingestion"),
         ("parallel_ingestion", "parallel_ingestion_success_transition"),
         ("parallel_ingestion", END),
     }
@@ -284,9 +322,13 @@ def test_graph_has_exactly_one_phase2_conditional_routing_seam() -> None:
         if getattr(edge, "conditional", False) or getattr(edge, "data", None) is not None
     ]
     sources = {edge.source for edge in conditional}
-    assert sources == {"parallel_ingestion"}
-    destinations = {edge.target for edge in conditional}
-    assert destinations == {"parallel_ingestion_success_transition", END}
+    assert sources == {"workflow_entry", "parallel_ingestion"}
+    phase2_destinations = {
+        edge.target for edge in conditional if edge.source == "parallel_ingestion"
+    }
+    assert phase2_destinations == {"parallel_ingestion_success_transition", END}
+    entry_destinations = {edge.target for edge in conditional if edge.source == "workflow_entry"}
+    assert entry_destinations == {"regulatory_intelligence", "parallel_ingestion"}
 
 
 async def test_ainvoke_successful_path_ends_forecasting_running() -> None:
@@ -341,7 +383,7 @@ async def test_astream_runs_entry_then_ingestion_then_transition() -> None:
     node_order: list[str] = []
     async for chunk in compiled.astream(original, stream_mode="updates"):
         node_order.extend(chunk.keys())
-    assert node_order == list(_APPLICATION_NODES)
+    assert node_order == list(_PHASE2_PATH_NODES)
     assert step.calls == 1
     assert isinstance(handler, _RecordingParallelIngestionFailureRuntimeHandler)
     assert handler.calls == 0
@@ -541,17 +583,20 @@ async def test_unattributed_group_fails_closed_without_success_transition() -> N
 
 
 async def test_unexpected_post_phase2_state_fails_closed_without_success_or_failure_route() -> None:
-    original = _state(phase=WorkflowPhase.CONTRACT, status=WorkflowStatus.PENDING)
-    compiled, step, handler = _compile()
+    original = _state(phase=WorkflowPhase.INGESTION, status=WorkflowStatus.RUNNING)
+    unexpected = _state(phase=WorkflowPhase.CONTRACT, status=WorkflowStatus.PENDING)
+    step = _RecordingParallelIngestionStep(result=unexpected)
+    compiled, injected, handler = _compile(step)
     node_order: list[str] = []
     with pytest.raises(InvalidRequestError) as captured:
         async for chunk in compiled.astream(original, stream_mode="updates"):
             node_order.extend(chunk.keys())
     assert captured.value.code == "invalid_request"
     assert captured.value.message == _INVALID_POST_PHASE2_ROUTE_MESSAGE
+    assert injected is step
     assert step.calls == 1
     assert isinstance(handler, _RecordingParallelIngestionFailureRuntimeHandler)
     assert handler.calls == 0
     assert "parallel_ingestion_success_transition" not in node_order
-    assert original.phase is WorkflowPhase.CONTRACT
-    assert original.status is WorkflowStatus.PENDING
+    assert original.phase is WorkflowPhase.INGESTION
+    assert original.status is WorkflowStatus.RUNNING

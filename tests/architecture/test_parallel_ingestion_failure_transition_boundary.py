@@ -469,7 +469,7 @@ def test_graph_does_not_import_or_call_the_failure_transition() -> None:
             success_calls += 1
         elif name == "fail_parallel_ingestion":
             failure_calls += 1
-    assert add_node_count == 3
+    assert add_node_count == 4
     assert add_edge_count == 3
     assert success_calls == 1
     assert failure_calls == 0

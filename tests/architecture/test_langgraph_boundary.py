@@ -115,6 +115,7 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
         "energy_trading.application.orchestration.parallel_ingestion_failure_runtime_handling",
         "energy_trading.application.orchestration.parallel_ingestion_transition",
         "energy_trading.application.orchestration.parallel_ingestion_workflow",
+        "energy_trading.application.orchestration.regulatory_intelligence_workflow_node",
         "energy_trading.application.orchestration.state",
         "END",
         "START",
@@ -123,6 +124,7 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
         "InvalidRequestError",
         "ParallelIngestionFailureRuntimeHandlingService",
         "ParallelIngestionWorkflowStep",
+        "RegulatoryIntelligenceWorkflowNodeAdapter",
         "WorkflowPhase",
         "WorkflowState",
         "WorkflowStatus",
@@ -445,7 +447,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "RegulatoryIntelligenceWorkflowStep" not in names
     assert "RegulatoryIntelligenceWorkflowRequest" not in names
     assert "RegulatoryIntelligenceWorkflowContextPort" not in names
-    assert "RegulatoryIntelligenceWorkflowNodeAdapter" not in names
+    assert "RegulatoryIntelligenceWorkflowNodeAdapter" in names
     modules = imported_modules(GRAPH_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion_workflow" in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_transition" in modules
@@ -529,8 +531,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     )
     assert "energy_trading.application.orchestration.regulatory_intelligence_context" not in modules
     assert (
-        "energy_trading.application.orchestration.regulatory_intelligence_workflow_node"
-        not in modules
+        "energy_trading.application.orchestration.regulatory_intelligence_workflow_node" in modules
     )
 
 
@@ -578,16 +579,20 @@ def test_graph_factory_requires_injected_step_and_runtime_failure_handler() -> N
     assert factory.args.kwarg is None
     assert factory.args.posonlyargs == []
     assert [arg.arg for arg in factory.args.kwonlyargs] == [
+        "regulatory_intelligence_node",
         "parallel_ingestion_step",
         "parallel_ingestion_failure_runtime_handler",
     ]
-    step_annotation = factory.args.kwonlyargs[0].annotation
-    handler_annotation = factory.args.kwonlyargs[1].annotation
+    regulatory_annotation = factory.args.kwonlyargs[0].annotation
+    step_annotation = factory.args.kwonlyargs[1].annotation
+    handler_annotation = factory.args.kwonlyargs[2].annotation
+    assert regulatory_annotation is not None
     assert step_annotation is not None
     assert handler_annotation is not None
+    assert ast.unparse(regulatory_annotation) == "RegulatoryIntelligenceWorkflowNodeAdapter"
     assert ast.unparse(step_annotation) == "ParallelIngestionWorkflowStep"
     assert ast.unparse(handler_annotation) == "ParallelIngestionFailureRuntimeHandlingService"
-    assert factory.args.kw_defaults == [None, None]
+    assert factory.args.kw_defaults == [None, None, None]
 
 
 def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
@@ -599,6 +604,7 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
         if isinstance(node, ast.Constant) and isinstance(node.value, str)
     }
     assert "workflow_entry" in string_constants
+    assert "regulatory_intelligence" in string_constants
     assert "parallel_ingestion" in string_constants
     assert "parallel_ingestion_success_transition" in string_constants
     assert "parallel_ingestion_failure_transition" not in string_constants
@@ -645,9 +651,9 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
             "RegulatoryIntelligenceWorkflowNodeAdapter",
         }:
             constructed.append(name)
-    assert add_node_count == 3
+    assert add_node_count == 4
     assert add_edge_count == 3
-    assert add_conditional_edges_count == 1
+    assert add_conditional_edges_count == 2
     assert transition_calls == 1
     assert handler_calls == 1
     assert constructed == []
@@ -682,8 +688,8 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "parallel_ingestion_initial_failure_policy" not in source
     assert "RegulatoryIntelligenceWorkflowContextPort" not in source
     assert "regulatory_intelligence_context" not in source
-    assert "RegulatoryIntelligenceWorkflowNodeAdapter" not in source
-    assert "regulatory_intelligence_workflow_node" not in source
+    assert "RegulatoryIntelligenceWorkflowNodeAdapter" in source
+    assert "regulatory_intelligence_workflow_node" in source
     assert "RegulatoryIntelligenceWorkflowStep" not in source
     assert "regulatory_intelligence_workflow_step" not in source
     assert "ParallelIngestionFailureRuntimeHandlingService" in source

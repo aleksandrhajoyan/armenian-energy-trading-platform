@@ -1976,3 +1976,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application code can now coordinate Regulatory context plus the workflow step without knowing LangGraph or storage. Regulatory Intelligence is still not on the graph. Parent Regulatory capability remains incomplete.
 
 ---
+
+## ADR-127 — Regulatory LangGraph Wiring Uses a Terminal Contract-Phase Slice
+
+- **Status:** Accepted
+- **Context:** ADR-126 published framework-neutral `RegulatoryIntelligenceWorkflowNodeAdapter` without LangGraph topology. The existing application graph still entered only at ingestion/running and executed Parallel Ingestion. Wiring Regulatory required a reviewed entry router, but Pricing & Sales does not exist and inventing `CONTRACT → INGESTION` would freeze an incomplete Phase-1 policy.
+- **Decision:**
+  - ADR-037, ADR-124, ADR-125, and ADR-126 remain Accepted and are not superseded.
+  - Chunk 117 extends `build_workflow_graph` with keyword-only `regulatory_intelligence_node: RegulatoryIntelligenceWorkflowNodeAdapter` beside the existing Phase 2 step and runtime failure handler. There are no defaults and no registry/factory/container. The graph receives an already-constructed adapter and does not construct it.
+  - `workflow_entry` remains an async no-op. `_route_after_workflow_entry` routes exactly `CONTRACT` / `RUNNING` to `regulatory_intelligence` and `INGESTION` / `RUNNING` to `parallel_ingestion`. Every other phase/status combination fails closed with `InvalidRequestError`.
+  - The Regulatory graph node is `return await regulatory_intelligence_node.run(state)` exactly once. There is no `try/except`, retry, fallback, phase mutation, or result reconstruction. Direct adapter exceptions propagate unchanged.
+  - The Regulatory slice is terminal: adapter success returns the original `CONTRACT` / `RUNNING` `WorkflowState` and the graph ends. There is no Pricing & Sales node and no CONTRACT→INGESTION transition.
+  - Existing Phase-2 success/failure routing is preserved. `WorkflowState` remains the seven-field snapshot. Request/result stay outside that snapshot through the already-published context port.
+  - `graph.py` may import the Chunk 116 adapter only. It must not import the context port, workflow step, query-execution service, agent, or API/infrastructure/provider/config modules. LangGraph imports remain isolated to `graph.py`; the adapter itself remains framework-neutral.
+  - Production/API/FastAPI graph composition, concrete Regulatory context storage, and future Phase-1 continuation after Regulatory remain separately reviewed chunks.
+- **Consequences:** Contract/running workflows can now execute Regulatory through the published adapter and then stop. Ingestion/running workflows still run the existing Phase 2 slice. Phase 1 is not complete. Parent Regulatory capability remains incomplete.
+
+---

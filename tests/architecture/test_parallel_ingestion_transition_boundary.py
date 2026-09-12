@@ -398,7 +398,7 @@ def test_graph_delegates_to_published_transition_without_reimplementing_policy()
             add_edge_count += 1
         elif name == "advance_after_parallel_ingestion":
             transition_calls += 1
-    assert add_node_count == 3
+    assert add_node_count == 4
     assert add_edge_count == 3
     assert transition_calls == 1
     identifiers = _identifier_names(GRAPH_MODULE)
