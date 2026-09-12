@@ -119,6 +119,7 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "OpenAISettings",
         "QdrantSettings",
         "DocumentVectorIndexRuntimeSettings",
+        "QdrantDocumentVectorDistanceSettings",
     }
 )
 
@@ -177,6 +178,11 @@ RUNTIME_CALL_NAMES = frozenset(
         "OpenAISettings",
         "QdrantSettings",
         "DocumentVectorIndexRuntimeSettings",
+        "ensure_configured_document_vector_index_collection_ready",
+        "map_qdrant_document_vector_distance",
+        "ensure_qdrant_document_collection_ready",
+        "create_qdrant_document_collection",
+        "verify_qdrant_document_collection_ready",
     }
 )
 
@@ -234,6 +240,7 @@ def test_builder_imports_only_approved_surfaces() -> None:
     assert "load_openai_settings" in names
     assert "load_qdrant_settings" in names
     assert "load_document_vector_index_runtime_settings" in names
+    assert "load_qdrant_document_vector_distance_settings" in names
     assert "managed_document_vector_index_runtime" in names
     assert "DocumentVectorIndexExecutionService" in names
     assert "asynccontextmanager" in names
@@ -245,8 +252,11 @@ def test_builder_imports_only_approved_surfaces() -> None:
     assert "OpenAISettings" not in names
     assert "QdrantSettings" not in names
     assert "DocumentVectorIndexRuntimeSettings" not in names
+    assert "QdrantDocumentVectorDistanceSettings" not in names
     assert "create_openai_client" not in names
     assert "create_qdrant_client" not in names
+    assert "ensure_configured_document_vector_index_collection_ready" not in names
+    assert "map_qdrant_document_vector_distance" not in names
     assert "OpenAIDocumentEmbeddingAdapter" not in names
     assert "QdrantDocumentVectorIndex" not in names
     assert "QdrantDocumentVectorConfig" not in names
@@ -324,11 +334,12 @@ def test_builder_loads_settings_then_delegates_to_chunk_90() -> None:
         "load_openai_settings",
         "load_qdrant_settings",
         "load_document_vector_index_runtime_settings",
+        "load_qdrant_document_vector_distance_settings",
         "managed_document_vector_index_runtime",
     ]
     statements = [node for node in builder.body if not isinstance(node, ast.Expr)]
-    assert len(statements) == 4
-    first, second, third, fourth = statements
+    assert len(statements) == 5
+    first, second, third, fourth, fifth = statements
     assert isinstance(first, ast.Assign)
     assert isinstance(first.value, ast.Call)
     assert _call_name(first.value) == "load_openai_settings"
@@ -347,9 +358,15 @@ def test_builder_loads_settings_then_delegates_to_chunk_90() -> None:
     assert {keyword.arg: ast.unparse(keyword.value) for keyword in third.value.keywords} == {
         "env_file": "env_file"
     }
-    assert isinstance(fourth, ast.AsyncWith)
-    assert len(fourth.items) == 1
-    item = fourth.items[0]
+    assert isinstance(fourth, ast.Assign)
+    assert isinstance(fourth.value, ast.Call)
+    assert _call_name(fourth.value) == "load_qdrant_document_vector_distance_settings"
+    assert {keyword.arg: ast.unparse(keyword.value) for keyword in fourth.value.keywords} == {
+        "env_file": "env_file"
+    }
+    assert isinstance(fifth, ast.AsyncWith)
+    assert len(fifth.items) == 1
+    item = fifth.items[0]
     assert isinstance(item.context_expr, ast.Call)
     assert _call_name(item.context_expr) == "managed_document_vector_index_runtime"
     keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in item.context_expr.keywords}
@@ -357,11 +374,12 @@ def test_builder_loads_settings_then_delegates_to_chunk_90() -> None:
         "openai_settings": "openai_settings",
         "qdrant_settings": "qdrant_settings",
         "document_vector_index_settings": "document_vector_index_settings",
+        "distance_settings": "distance_settings",
     }
     assert item.optional_vars is not None
     assert isinstance(item.optional_vars, ast.Name)
     assert item.optional_vars.id == "service"
-    inner = list(fourth.body)
+    inner = list(fifth.body)
     assert len(inner) == 1
     assert isinstance(inner[0], ast.Expr)
     assert isinstance(inner[0].value, ast.Yield)
@@ -374,6 +392,8 @@ def test_builder_loads_settings_then_delegates_to_chunk_90() -> None:
     assert "AsyncQdrantClient(" not in source
     assert "create_openai_client" not in source
     assert "create_qdrant_client" not in source
+    assert "ensure_configured_document_vector_index_collection_ready" not in source
+    assert "map_qdrant_document_vector_distance" not in source
     assert "os.environ" not in source
     assert "getenv" not in source
     assert "dotenv" not in source
@@ -440,6 +460,7 @@ def test_http_create_app_does_not_invoke_the_loaded_runtime() -> None:
     assert "load_openai_settings" not in names
     assert "load_qdrant_settings" not in names
     assert "load_document_vector_index_runtime_settings" not in names
+    assert "load_qdrant_document_vector_distance_settings" not in names
     app_source = API_APP.read_text(encoding="utf-8")
     assert "loaded_document_vector_index_runtime" not in app_source
     assert "loaded_document_vector_index_runtime" not in MANAGED_RUNTIME_MODULE.read_text(

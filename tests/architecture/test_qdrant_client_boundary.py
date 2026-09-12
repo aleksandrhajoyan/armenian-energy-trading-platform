@@ -245,8 +245,10 @@ def test_create_app_does_not_wire_qdrant() -> None:
             assert "AsyncQdrantClient" not in names
             assert "QdrantDocumentVectorConfig" not in names
             assert "QdrantSettings" in names
+            assert "QdrantDocumentVectorDistanceSettings" in names
             assert "create_qdrant_client" in names
             assert "load_qdrant_settings" not in names
+            assert "load_qdrant_document_vector_distance_settings" not in names
             assert "QdrantDocumentVectorIndex" not in names
             assert "QdrantDocumentVectorSearch" not in names
             continue
@@ -256,6 +258,7 @@ def test_create_app_does_not_wire_qdrant() -> None:
             assert "QdrantSettings" not in names
             assert "create_qdrant_client" not in names
             assert "load_qdrant_settings" in names
+            assert "load_qdrant_document_vector_distance_settings" in names
             assert "QdrantDocumentVectorIndex" not in names
             assert "QdrantDocumentVectorSearch" not in names
             continue

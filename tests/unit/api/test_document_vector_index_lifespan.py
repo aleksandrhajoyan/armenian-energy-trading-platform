@@ -371,6 +371,9 @@ def test_lifespan_module_does_not_call_lower_layers_or_execute() -> None:
     assert "load_openai_settings" not in source
     assert "load_qdrant_settings" not in source
     assert "load_document_vector_index_runtime_settings" not in source
+    assert "load_qdrant_document_vector_distance_settings" not in source
+    assert "ensure_configured_document_vector_index_collection_ready" not in source
+    assert "map_qdrant_document_vector_distance" not in source
     assert "create_openai_client" not in source
     assert "create_qdrant_client" not in source
     assert "AsyncOpenAI(" not in source

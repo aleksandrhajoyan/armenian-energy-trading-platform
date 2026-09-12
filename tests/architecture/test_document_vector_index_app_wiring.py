@@ -107,6 +107,9 @@ def test_create_app_imports_document_vector_index_router_only() -> None:
     assert "load_openai_settings" not in names
     assert "load_qdrant_settings" not in names
     assert "load_document_vector_index_runtime_settings" not in names
+    assert "load_qdrant_document_vector_distance_settings" not in names
+    assert "ensure_configured_document_vector_index_collection_ready" not in names
+    assert "map_qdrant_document_vector_distance" not in names
     assert "create_openai_client" not in names
     assert "create_qdrant_client" not in names
     assert "openai" not in names
@@ -145,6 +148,9 @@ def test_create_app_includes_document_index_router_once_with_api_prefix() -> Non
     assert "load_openai_settings" not in source
     assert "load_qdrant_settings" not in source
     assert "load_document_vector_index_runtime_settings" not in source
+    assert "load_qdrant_document_vector_distance_settings" not in source
+    assert "ensure_configured_document_vector_index_collection_ready" not in source
+    assert "map_qdrant_document_vector_distance" not in source
     assert "create_openai_client" not in source
     assert "create_qdrant_client" not in source
     assert "langgraph" not in source.lower()

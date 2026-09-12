@@ -56,6 +56,7 @@ FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure.persistence",
     "energy_trading.api.composition.document_vector_index_configured_runtime",
     "energy_trading.api.composition.document_vector_index_managed_runtime",
+    "energy_trading.api.composition.document_vector_index_collection_ensure",
     "energy_trading.api.composition.document_vector_index_runtime",
     "energy_trading.api.composition.document_vector_index_execution",
     "starlette",
@@ -167,6 +168,7 @@ RUNTIME_CALL_NAMES = frozenset(
         "load_openai_settings",
         "load_qdrant_settings",
         "load_document_vector_index_runtime_settings",
+        "load_qdrant_document_vector_distance_settings",
         "AsyncOpenAI",
         "AsyncQdrantClient",
         "create_openai_client",
@@ -185,6 +187,8 @@ RUNTIME_CALL_NAMES = frozenset(
         "OpenAISettings",
         "QdrantSettings",
         "DocumentVectorIndexRuntimeSettings",
+        "ensure_configured_document_vector_index_collection_ready",
+        "map_qdrant_document_vector_distance",
     }
 )
 
@@ -264,6 +268,9 @@ def test_builder_imports_only_approved_surfaces() -> None:
     assert "load_openai_settings" not in names
     assert "load_qdrant_settings" not in names
     assert "load_document_vector_index_runtime_settings" not in names
+    assert "load_qdrant_document_vector_distance_settings" not in names
+    assert "ensure_configured_document_vector_index_collection_ready" not in names
+    assert "map_qdrant_document_vector_distance" not in names
     assert "managed_document_vector_index_runtime" not in names
     assert "build_document_vector_index_configured_runtime" not in names
     assert "build_document_vector_index_provider_runtime" not in names

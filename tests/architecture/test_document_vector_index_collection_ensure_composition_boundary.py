@@ -33,7 +33,6 @@ UNWIRED_RUNTIME_MODULES = (
     COMPOSITION_ROOT / "production_lifespan.py",
     COMPOSITION_ROOT / "document_vector_index_lifespan.py",
     COMPOSITION_ROOT / "document_vector_index_loaded_runtime.py",
-    COMPOSITION_ROOT / "document_vector_index_managed_runtime.py",
     COMPOSITION_ROOT / "document_vector_index_configured_runtime.py",
     COMPOSITION_ROOT / "document_vector_index_runtime.py",
     COMPOSITION_ROOT / "document_vector_index_execution.py",

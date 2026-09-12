@@ -1866,7 +1866,26 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - It awaits `ensure_qdrant_document_collection_ready` once with the exact injected client, the newly constructed config, and the mapped Qdrant `Distance`, then returns `None`.
   - It does not call `create_qdrant_document_collection`, `verify_qdrant_document_collection_ready`, or `collection_exists` directly. Published sanitized errors, including `DependencyUnavailableError`, propagate unchanged.
   - Concrete Qdrant `Distance.COSINE` / `DOT` / `EUCLID` / `MANHATTAN` remain confined to the Chunk 109 mapper. This composition imports `AsyncQdrantClient` only as an injected type.
-  - `create_app()`, production/document-index/Regulatory runtimes and lifespans, PDF extraction/index execution, HTTP routers, API dependencies, and LangGraph remain unwired. Production still performs zero automatic collection provisioning. Regulatory collection provisioning is out of scope. Collection migration, delete/recreate/update, race retry/locking, payload indexes, aliases, schema versioning, OCR, automatic corpus scanning/indexing, and Pricing & Sales remain deferred.
-- **Consequences:** Explicit callers can provision or verify the document-index collection from already-constructed settings without inventing a default metric or a generic collection manager. Automatic startup provisioning, production distance policy, and production lifespan wiring remain deferred. Regulatory Intelligence parent capability remains incomplete.
+  - `create_app()`, production/document-index/Regulatory lifespans, PDF extraction/index execution, HTTP routers, API dependencies, and LangGraph do not call this function directly. Chunk 111 later authorized the existing document-index managed runtime to await it on the managed Qdrant client. Regulatory collection provisioning remains out of scope. Collection migration, delete/recreate/update, race retry/locking, payload indexes, aliases, schema versioning, OCR, automatic corpus scanning/indexing, and Pricing & Sales remain deferred.
+- **Consequences:** Explicit callers can provision or verify the document-index collection from already-constructed settings without inventing a default metric or a generic collection manager. Regulatory Intelligence parent capability remains incomplete.
+
+---
+
+## ADR-121 — Document Vector Index Managed Runtime Owns Collection Readiness
+
+- **Status:** Accepted
+- **Context:** ADR-005/032/033/034/115/116/117/118/119/120 remain the Qdrant direction: official async client, insert-only document adapters, test-only live-fixture provisioning, create-only mutation, verify-only readiness, create-if-missing / verify-if-present ensure, explicit provider-neutral distance configuration with no default, and a configured document-index ensure composition. Chunk 110 left that composition unwired from runtime. A second standalone provisioning client or generic collection manager would duplicate the existing managed Qdrant client and violate single-ownership lifecycle discipline.
+- **Decision:**
+  - ADR-005, ADR-032, ADR-033, ADR-034, ADR-115, ADR-116, ADR-117, ADR-118, ADR-119, and ADR-120 remain Accepted and are not superseded.
+  - Chunk 111 extends the existing document-index runtime rather than introducing a new lifecycle abstraction.
+  - `loaded_document_vector_index_runtime` loads exactly one additional typed settings object through the published loader `load_qdrant_document_vector_distance_settings`, using the same existing `env_file` argument already forwarded to `load_openai_settings`, `load_qdrant_settings`, and `load_document_vector_index_runtime_settings`.
+  - `managed_document_vector_index_runtime` receives those four already-constructed settings objects. It does not load environment values.
+  - After constructing the existing OpenAI and Qdrant clients and registering their cleanup immediately, the managed runtime awaits `ensure_configured_document_vector_index_collection_ready` once with that exact managed Qdrant client, the injected `DocumentVectorIndexRuntimeSettings`, and the injected `QdrantDocumentVectorDistanceSettings`.
+  - Only after successful ensure does it delegate to `build_document_vector_index_configured_runtime` and yield `DocumentVectorIndexExecutionService`.
+  - If collection ensure raises, the exact exception propagates unchanged, the configured builder is not called, no service is yielded, and both already-created clients still close according to existing `AsyncExitStack` cleanup. There is no local wrap, translation, retry, or fallback.
+  - There is no second Qdrant client, no standalone provisioning runtime, and no direct call to mapper / Chunk 108 / create / verify from the managed or loaded runtime.
+  - `create_app()`, `production_lifespan.py`, and `document_vector_index_lifespan.py` are not given a second ensure call. Production application lifespan therefore performs Document Vector Index collection provisioning indirectly through the already-published chain: production lifespan → document-index lifespan → loaded runtime → managed runtime.
+  - Regulatory collection automatic provisioning, shared Regulatory/index collection identity or vector-size policy, collection migration, recreate/update/delete, race retry/locking, aliases, payload indexes, schema versioning, OCR, automatic corpus scanning/indexing, Pricing & Sales, and Regulatory LangGraph wiring remain out of scope. There is no default distance.
+- **Consequences:** Entering the existing Document Vector Index runtime now provisions or verifies that collection on the same managed Qdrant client before the indexing service is yielded. Failure remains fail-closed with ordinary cleanup. Not all Qdrant collections are automatically provisioned.
 
 ---

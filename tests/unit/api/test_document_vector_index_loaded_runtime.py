@@ -17,7 +17,10 @@ from energy_trading.shared.config.document_vector_index import (
     load_document_vector_index_runtime_settings,
 )
 from energy_trading.shared.config.openai import load_openai_settings
-from energy_trading.shared.config.qdrant import load_qdrant_settings
+from energy_trading.shared.config.qdrant import (
+    load_qdrant_document_vector_distance_settings,
+    load_qdrant_settings,
+)
 
 _LOADED_MODULE = "energy_trading.api.composition.document_vector_index_loaded_runtime"
 _EXPLICIT_ENV_FILE = Path("sentinel-chunk91.env")
@@ -32,6 +35,7 @@ _ENV_KEYS = (
     "ENERGY_DOCUMENT_INDEX_DOCUMENT_EMBEDDING_MODEL",
     "ENERGY_DOCUMENT_INDEX_QDRANT_COLLECTION_NAME",
     "ENERGY_DOCUMENT_INDEX_QDRANT_VECTOR_SIZE",
+    "QDRANT_DOCUMENT_VECTOR_DISTANCE",
 )
 
 
@@ -90,11 +94,14 @@ def _patch_loaded_runtime(
     openai_settings: object | None = None,
     qdrant_settings: object | None = None,
     document_vector_index_settings: object | None = None,
+    distance_settings: object | None = None,
     openai_error: BaseException | None = None,
     qdrant_error: BaseException | None = None,
     document_index_error: BaseException | None = None,
+    distance_error: BaseException | None = None,
     managed: _ManagedRuntimeSpy | None = None,
 ) -> tuple[
+    list[dict[str, object]],
     list[dict[str, object]],
     list[dict[str, object]],
     list[dict[str, object]],
@@ -104,6 +111,7 @@ def _patch_loaded_runtime(
     openai_calls: list[dict[str, object]] = []
     qdrant_calls: list[dict[str, object]] = []
     document_index_calls: list[dict[str, object]] = []
+    distance_calls: list[dict[str, object]] = []
     call_order: list[str] = []
     spy = managed or _ManagedRuntimeSpy(service=object())
     openai_result = object() if openai_settings is None else openai_settings
@@ -111,6 +119,7 @@ def _patch_loaded_runtime(
     document_index_result = (
         object() if document_vector_index_settings is None else document_vector_index_settings
     )
+    distance_result = object() if distance_settings is None else distance_settings
 
     def fake_openai(**kwargs: object) -> object:
         openai_calls.append(kwargs)
@@ -133,14 +142,25 @@ def _patch_loaded_runtime(
             raise document_index_error
         return document_index_result
 
+    def fake_distance(**kwargs: object) -> object:
+        distance_calls.append(kwargs)
+        call_order.append("distance")
+        if distance_error is not None:
+            raise distance_error
+        return distance_result
+
     monkeypatch.setattr(f"{_LOADED_MODULE}.load_openai_settings", fake_openai)
     monkeypatch.setattr(f"{_LOADED_MODULE}.load_qdrant_settings", fake_qdrant)
     monkeypatch.setattr(
         f"{_LOADED_MODULE}.load_document_vector_index_runtime_settings",
         fake_document_index,
     )
+    monkeypatch.setattr(
+        f"{_LOADED_MODULE}.load_qdrant_document_vector_distance_settings",
+        fake_distance,
+    )
     monkeypatch.setattr(f"{_LOADED_MODULE}.managed_document_vector_index_runtime", spy)
-    return openai_calls, qdrant_calls, document_index_calls, call_order, spy
+    return openai_calls, qdrant_calls, document_index_calls, distance_calls, call_order, spy
 
 
 def test_callable_is_async_context_manager_factory() -> None:
@@ -160,16 +180,22 @@ def test_signature_is_keyword_only_with_existing_env_file_contract() -> None:
     document_index_env = inspect.signature(load_document_vector_index_runtime_settings).parameters[
         "env_file"
     ]
+    distance_env = inspect.signature(load_qdrant_document_vector_distance_settings).parameters[
+        "env_file"
+    ]
     assert parameter.annotation == openai_env.annotation
     assert parameter.annotation == qdrant_env.annotation
     assert parameter.annotation == document_index_env.annotation
+    assert parameter.annotation == distance_env.annotation
     assert parameter.default == openai_env.default
     assert parameter.default == qdrant_env.default
     assert parameter.default == document_index_env.default
+    assert parameter.default == distance_env.default
     assert parameter.default == ".env"
     assert "openai_settings" not in signature.parameters
     assert "qdrant_settings" not in signature.parameters
     assert "document_vector_index_settings" not in signature.parameters
+    assert "distance_settings" not in signature.parameters
     assert "openai_client" not in signature.parameters
     assert "qdrant_client" not in signature.parameters
     assert "create_openai_client" not in signature.parameters
@@ -177,46 +203,56 @@ def test_signature_is_keyword_only_with_existing_env_file_contract() -> None:
     assert "load_openai_settings" not in signature.parameters
     assert "load_qdrant_settings" not in signature.parameters
     assert "load_document_vector_index_runtime_settings" not in signature.parameters
+    assert "load_qdrant_document_vector_distance_settings" not in signature.parameters
+    assert "ensure_configured_document_vector_index_collection_ready" not in signature.parameters
 
 
 async def test_each_settings_loader_is_called_once_with_explicit_env_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    openai_calls, qdrant_calls, document_index_calls, call_order, spy = _patch_loaded_runtime(
-        monkeypatch
+    openai_calls, qdrant_calls, document_index_calls, distance_calls, call_order, spy = (
+        _patch_loaded_runtime(monkeypatch)
     )
     async with loaded_document_vector_index_runtime(env_file=_EXPLICIT_ENV_FILE):
         pass
     assert openai_calls == [{"env_file": _EXPLICIT_ENV_FILE}]
     assert qdrant_calls == [{"env_file": _EXPLICIT_ENV_FILE}]
     assert document_index_calls == [{"env_file": _EXPLICIT_ENV_FILE}]
+    assert distance_calls == [{"env_file": _EXPLICIT_ENV_FILE}]
     assert openai_calls[0]["env_file"] is _EXPLICIT_ENV_FILE
     assert qdrant_calls[0]["env_file"] is _EXPLICIT_ENV_FILE
     assert document_index_calls[0]["env_file"] is _EXPLICIT_ENV_FILE
-    assert call_order == ["openai", "qdrant", "document-index"]
+    assert distance_calls[0]["env_file"] is _EXPLICIT_ENV_FILE
+    assert call_order == ["openai", "qdrant", "document-index", "distance"]
     assert len(spy.calls) == 1
 
 
 async def test_default_env_file_is_forwarded_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    openai_calls, qdrant_calls, document_index_calls, _, _spy = _patch_loaded_runtime(monkeypatch)
+    openai_calls, qdrant_calls, document_index_calls, distance_calls, _, _spy = (
+        _patch_loaded_runtime(monkeypatch)
+    )
     async with loaded_document_vector_index_runtime():
         pass
     assert openai_calls == [{"env_file": ".env"}]
     assert qdrant_calls == [{"env_file": ".env"}]
     assert document_index_calls == [{"env_file": ".env"}]
+    assert distance_calls == [{"env_file": ".env"}]
 
 
 async def test_none_env_file_is_forwarded_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    openai_calls, qdrant_calls, document_index_calls, _, _spy = _patch_loaded_runtime(monkeypatch)
+    openai_calls, qdrant_calls, document_index_calls, distance_calls, _, _spy = (
+        _patch_loaded_runtime(monkeypatch)
+    )
     async with loaded_document_vector_index_runtime(env_file=None):
         pass
     assert openai_calls == [{"env_file": None}]
     assert qdrant_calls == [{"env_file": None}]
     assert document_index_calls == [{"env_file": None}]
+    assert distance_calls == [{"env_file": None}]
 
 
 async def test_exact_settings_identity_is_forwarded_to_managed_runtime(
@@ -225,11 +261,15 @@ async def test_exact_settings_identity_is_forwarded_to_managed_runtime(
     openai_settings = object()
     qdrant_settings = object()
     document_vector_index_settings = object()
-    _openai_calls, _qdrant_calls, _document_index_calls, _order, spy = _patch_loaded_runtime(
-        monkeypatch,
-        openai_settings=openai_settings,
-        qdrant_settings=qdrant_settings,
-        document_vector_index_settings=document_vector_index_settings,
+    distance_settings = object()
+    _openai_calls, _qdrant_calls, _document_index_calls, _distance_calls, _order, spy = (
+        _patch_loaded_runtime(
+            monkeypatch,
+            openai_settings=openai_settings,
+            qdrant_settings=qdrant_settings,
+            document_vector_index_settings=document_vector_index_settings,
+            distance_settings=distance_settings,
+        )
     )
     async with loaded_document_vector_index_runtime(env_file=None):
         pass
@@ -237,6 +277,7 @@ async def test_exact_settings_identity_is_forwarded_to_managed_runtime(
     assert spy.calls[0]["openai_settings"] is openai_settings
     assert spy.calls[0]["qdrant_settings"] is qdrant_settings
     assert spy.calls[0]["document_vector_index_settings"] is document_vector_index_settings
+    assert spy.calls[0]["distance_settings"] is distance_settings
 
 
 async def test_yields_exact_managed_runtime_service(
@@ -290,9 +331,11 @@ async def test_openai_loader_failure_does_not_enter_managed_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     error = RuntimeError("openai-loader-failed")
-    openai_calls, qdrant_calls, document_index_calls, call_order, spy = _patch_loaded_runtime(
-        monkeypatch,
-        openai_error=error,
+    openai_calls, qdrant_calls, document_index_calls, distance_calls, call_order, spy = (
+        _patch_loaded_runtime(
+            monkeypatch,
+            openai_error=error,
+        )
     )
     with pytest.raises(RuntimeError) as captured:
         async with loaded_document_vector_index_runtime(env_file=None):
@@ -301,6 +344,7 @@ async def test_openai_loader_failure_does_not_enter_managed_runtime(
     assert openai_calls == [{"env_file": None}]
     assert qdrant_calls == []
     assert document_index_calls == []
+    assert distance_calls == []
     assert call_order == ["openai"]
     assert spy.calls == []
     assert spy.events == []
@@ -310,9 +354,11 @@ async def test_qdrant_loader_failure_does_not_enter_managed_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     error = RuntimeError("qdrant-loader-failed")
-    openai_calls, qdrant_calls, document_index_calls, call_order, spy = _patch_loaded_runtime(
-        monkeypatch,
-        qdrant_error=error,
+    openai_calls, qdrant_calls, document_index_calls, distance_calls, call_order, spy = (
+        _patch_loaded_runtime(
+            monkeypatch,
+            qdrant_error=error,
+        )
     )
     with pytest.raises(RuntimeError) as captured:
         async with loaded_document_vector_index_runtime(env_file=None):
@@ -321,6 +367,7 @@ async def test_qdrant_loader_failure_does_not_enter_managed_runtime(
     assert openai_calls == [{"env_file": None}]
     assert qdrant_calls == [{"env_file": None}]
     assert document_index_calls == []
+    assert distance_calls == []
     assert call_order == ["openai", "qdrant"]
     assert spy.calls == []
     assert spy.events == []
@@ -330,9 +377,11 @@ async def test_document_index_loader_failure_does_not_enter_managed_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     error = RuntimeError("document-index-loader-failed")
-    openai_calls, qdrant_calls, document_index_calls, call_order, spy = _patch_loaded_runtime(
-        monkeypatch,
-        document_index_error=error,
+    openai_calls, qdrant_calls, document_index_calls, distance_calls, call_order, spy = (
+        _patch_loaded_runtime(
+            monkeypatch,
+            document_index_error=error,
+        )
     )
     with pytest.raises(RuntimeError) as captured:
         async with loaded_document_vector_index_runtime(env_file=None):
@@ -341,7 +390,31 @@ async def test_document_index_loader_failure_does_not_enter_managed_runtime(
     assert openai_calls == [{"env_file": None}]
     assert qdrant_calls == [{"env_file": None}]
     assert document_index_calls == [{"env_file": None}]
+    assert distance_calls == []
     assert call_order == ["openai", "qdrant", "document-index"]
+    assert spy.calls == []
+    assert spy.events == []
+
+
+async def test_distance_loader_failure_does_not_enter_managed_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error = RuntimeError("distance-loader-failed")
+    openai_calls, qdrant_calls, document_index_calls, distance_calls, call_order, spy = (
+        _patch_loaded_runtime(
+            monkeypatch,
+            distance_error=error,
+        )
+    )
+    with pytest.raises(RuntimeError) as captured:
+        async with loaded_document_vector_index_runtime(env_file=None):
+            raise AssertionError("context body must not run")
+    assert captured.value is error
+    assert openai_calls == [{"env_file": None}]
+    assert qdrant_calls == [{"env_file": None}]
+    assert document_index_calls == [{"env_file": None}]
+    assert distance_calls == [{"env_file": None}]
+    assert call_order == ["openai", "qdrant", "document-index", "distance"]
     assert spy.calls == []
     assert spy.events == []
 
@@ -351,9 +424,11 @@ async def test_managed_runtime_entry_failure_propagates_unchanged(
 ) -> None:
     error = RuntimeError("managed-entry-failed")
     spy = _ManagedRuntimeSpy(service=object(), entry_error=error)
-    openai_calls, qdrant_calls, document_index_calls, call_order, _ = _patch_loaded_runtime(
-        monkeypatch,
-        managed=spy,
+    openai_calls, qdrant_calls, document_index_calls, distance_calls, call_order, _ = (
+        _patch_loaded_runtime(
+            monkeypatch,
+            managed=spy,
+        )
     )
     with pytest.raises(RuntimeError) as captured:
         async with loaded_document_vector_index_runtime(env_file=None):
@@ -362,7 +437,8 @@ async def test_managed_runtime_entry_failure_propagates_unchanged(
     assert openai_calls == [{"env_file": None}]
     assert qdrant_calls == [{"env_file": None}]
     assert document_index_calls == [{"env_file": None}]
-    assert call_order == ["openai", "qdrant", "document-index"]
+    assert distance_calls == [{"env_file": None}]
+    assert call_order == ["openai", "qdrant", "document-index", "distance"]
     assert len(spy.calls) == 1
     assert spy.events == ["enter-failed"]
 
@@ -383,9 +459,16 @@ def test_module_does_not_construct_clients_or_own_cleanup() -> None:
     assert "os.environ" not in source
     assert "getenv" not in source
     assert "dotenv" not in source
+    assert "ensure_configured_document_vector_index_collection_ready" not in source
+    assert "map_qdrant_document_vector_distance" not in source
+    assert "ensure_qdrant_document_collection_ready" not in source
+    assert "create_qdrant_document_collection" not in source
+    assert "verify_qdrant_document_collection_ready" not in source
     assert not hasattr(module, "openai_client")
     assert not hasattr(module, "qdrant_client")
     assert not hasattr(module, "create_openai_client")
     assert not hasattr(module, "create_qdrant_client")
     assert not hasattr(module, "AsyncOpenAI")
     assert not hasattr(module, "AsyncQdrantClient")
+    assert not hasattr(module, "ensure_configured_document_vector_index_collection_ready")
+    assert not hasattr(module, "map_qdrant_document_vector_distance")

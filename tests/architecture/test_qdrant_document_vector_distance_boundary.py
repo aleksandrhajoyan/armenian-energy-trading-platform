@@ -1,8 +1,10 @@
 """Chunk 109 Qdrant document-vector distance configuration stays explicit.
 
-Chunk 110 is the authorized mapper-to-ensure composition. Production runtime,
-lifespan, HTTP, and LangGraph surfaces remain unwired from distance settings
-and mapping.
+Chunk 110 is the authorized mapper-to-ensure composition. Chunk 111 authorizes
+the existing document-index loaded runtime to load distance settings and the
+existing managed runtime to receive those already-constructed settings. The
+mapper, create_app, production/document-index/Regulatory lifespans, HTTP, and
+LangGraph remain unwired from mapping.
 """
 
 from __future__ import annotations
@@ -37,8 +39,6 @@ UNWIRED_MODULES = (
     COMPOSITION_INIT,
     API_ROOT / "composition" / "production_lifespan.py",
     API_ROOT / "composition" / "document_vector_index_lifespan.py",
-    API_ROOT / "composition" / "document_vector_index_loaded_runtime.py",
-    API_ROOT / "composition" / "document_vector_index_managed_runtime.py",
     API_ROOT / "composition" / "document_vector_index_configured_runtime.py",
     API_ROOT / "composition" / "document_vector_index_runtime.py",
     API_ROOT / "composition" / "document_vector_index_execution.py",

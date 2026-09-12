@@ -1,9 +1,9 @@
 """Settings-loaded document vector index managed runtime composition.
 
-This module loads the three published typed settings objects through their
+This module loads the four published typed settings objects through their
 existing loaders, then delegates resource ownership to
 ``managed_document_vector_index_runtime``. It does not construct clients,
-import provider SDKs, or invoke provider operations.
+import provider SDKs, or invoke collection ensure.
 
 Ownership:
 
@@ -12,7 +12,10 @@ Ownership:
 * Existing Qdrant settings loader: discovers ``QdrantSettings``.
 * Existing document-index runtime settings loader: discovers
   ``DocumentVectorIndexRuntimeSettings``.
-* Chunk 90 managed runtime: owns client lifetime and service construction.
+* Existing document-vector distance settings loader: discovers
+  ``QdrantDocumentVectorDistanceSettings``.
+* Chunk 90 managed runtime: owns client lifetime, collection ensure, and
+  service construction.
 * Document-index FastAPI lifespan consumes this runtime. Production
   ``create_app()`` reaches it indirectly through ``build_production_lifespan``.
   The exact yielded execution service is exposed by
@@ -20,7 +23,8 @@ Ownership:
   and LangGraph remain deferred.
 
 Entering the context loads settings and yields a service. It does not execute
-indexing.
+indexing. Collection ensure is owned by the managed runtime because that
+runtime owns the Qdrant client.
 """
 
 from collections.abc import AsyncIterator
@@ -37,7 +41,10 @@ from energy_trading.shared.config.document_vector_index import (
     load_document_vector_index_runtime_settings,
 )
 from energy_trading.shared.config.openai import load_openai_settings
-from energy_trading.shared.config.qdrant import load_qdrant_settings
+from energy_trading.shared.config.qdrant import (
+    load_qdrant_document_vector_distance_settings,
+    load_qdrant_settings,
+)
 
 
 @asynccontextmanager
@@ -47,16 +54,18 @@ async def loaded_document_vector_index_runtime(
 ) -> AsyncIterator[DocumentVectorIndexExecutionService]:
     """Yield a wired document vector index service from loaded settings.
 
-    The three existing typed loaders remain authoritative. This function does
+    The four existing typed loaders remain authoritative. This function does
     not parse environment values itself or invoke provider operations.
     """
 
     openai_settings = load_openai_settings(env_file=env_file)
     qdrant_settings = load_qdrant_settings(env_file=env_file)
     document_vector_index_settings = load_document_vector_index_runtime_settings(env_file=env_file)
+    distance_settings = load_qdrant_document_vector_distance_settings(env_file=env_file)
     async with managed_document_vector_index_runtime(
         openai_settings=openai_settings,
         qdrant_settings=qdrant_settings,
         document_vector_index_settings=document_vector_index_settings,
+        distance_settings=distance_settings,
     ) as service:
         yield service
