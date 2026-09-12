@@ -21,6 +21,7 @@ forecasting success,
 forecasting execution,
 forecasting workflow context port,
 forecasting workflow step,
+forecasting success transition,
 and
 LangGraph runtime.
 """
@@ -50,6 +51,9 @@ from energy_trading.application.orchestration.forecasting_execution import (
 )
 from energy_trading.application.orchestration.forecasting_plan import ForecastingPlan
 from energy_trading.application.orchestration.forecasting_success import ForecastingSuccess
+from energy_trading.application.orchestration.forecasting_transition import (
+    advance_after_forecasting,
+)
 from energy_trading.application.orchestration.forecasting_workflow import ForecastingWorkflowStep
 from energy_trading.application.orchestration.graph import build_workflow_graph
 from energy_trading.application.orchestration.parallel_ingestion import (
@@ -179,6 +183,7 @@ __all__ = [
     "WorkflowPhase",
     "WorkflowState",
     "WorkflowStatus",
+    "advance_after_forecasting",
     "advance_after_parallel_ingestion",
     "build_parallel_ingestion_failure_policy_context",
     "build_workflow_graph",

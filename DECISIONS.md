@@ -2125,3 +2125,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application can compose Phase-3 context and execution without choosing how forecasting is implemented. Phase 3 is not complete. Neither forecasting agent is ML-backed in production.
 
 ---
+
+## ADR-137 — Forecasting Success Advances Through a Separate Pure State Transition
+
+- **Status:** Accepted
+- **Context:** ADR-128 through ADR-136 remain Accepted and are not superseded. They published two agent-specific forecast model request DTOs, two application agents that delegate through those ports, an unwired `ForecastingPlan`, an unwired `ForecastingSuccess`, an unwired `ForecastingExecutionPort`, an unwired `ForecastingWorkflowContextPort`, and an unwired `ForecastingWorkflowStep` that composes resolve → execute → record and returns the original `WorkflowState` unchanged. A successful workflow step therefore still leaves control state at `FORECASTING`/`RUNNING`. Embedding the next-phase mutation inside that step would mix payload orchestration with control-state policy. A generic `Transition[T]` or workflow state machine would hide the Phase-3-specific source and destination.
+- **Decision:**
+  - ADR-128, ADR-129, ADR-130, ADR-131, ADR-132, ADR-133, ADR-134, ADR-135, and ADR-136 remain Accepted and are not superseded. ADR-037 remains Accepted: `WorkflowState` stays the seven-field snapshot and is not expanded with forecast payloads or transition metadata.
+  - `ForecastingWorkflowStep` remains responsible only for resolve → execute → record. It does not mutate phase or status.
+  - Chunk 127 adds application-owned `advance_after_forecasting(state: WorkflowState) -> WorkflowState` in `application/orchestration/forecasting_transition.py`. The function is synchronous, pure, and not a service class.
+  - Valid source is exactly `WorkflowPhase.FORECASTING` / `WorkflowStatus.RUNNING`. Destination is `WorkflowPhase.RISK_AND_BID` / `WorkflowStatus.RUNNING`, matching the current five-phase workflow model.
+  - The function returns a new immutable `WorkflowState` via `dataclasses.replace`. Control identity (`workflow_id`, `portfolio_id`, `delivery_date`, `correlation_id`) and diagnostics are preserved, diagnostics by identity. The input snapshot is not mutated.
+  - Invalid source phase or status raises the existing `InvalidRequestError` with a static message. There is no Phase-3 failure transition, retry, fallback, or degraded state.
+  - There is no LangGraph wiring, concrete executor, context adapter, ML adapter, or API/runtime composition in this chunk. Forecast payloads stay outside `WorkflowState`.
+- **Consequences:** Application can advance a successful forecasting control snapshot to the next canonical phase without executing forecasts or expanding workflow state. Phase 3 is not complete. Graph routing of this transition remains deferred.
+
+---
