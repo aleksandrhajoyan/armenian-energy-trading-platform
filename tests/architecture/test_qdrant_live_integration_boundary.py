@@ -13,6 +13,7 @@ from tests.architecture.import_inspection import (
     SRC_ROOT,
     collect_import_violations,
     imported_names,
+    is_document_vector_index_collection_ensure_composition_module,
     is_document_vector_index_loaded_runtime_module,
     is_document_vector_index_managed_runtime_module,
     is_document_vector_index_provider_composition_module,
@@ -392,6 +393,13 @@ def test_create_app_still_does_not_wire_qdrant() -> None:
             assert "Distance" in names
             assert "AsyncQdrantClient" not in names
             assert "QdrantDocumentVectorConfig" not in names
+            assert "QdrantDocumentVectorIndex" not in names
+            assert "QdrantDocumentVectorSearch" not in names
+            assert "create_qdrant_client" not in names
+            continue
+        if is_document_vector_index_collection_ensure_composition_module(path):
+            assert "AsyncQdrantClient" in names
+            assert "QdrantDocumentVectorConfig" in names
             assert "QdrantDocumentVectorIndex" not in names
             assert "QdrantDocumentVectorSearch" not in names
             assert "create_qdrant_client" not in names

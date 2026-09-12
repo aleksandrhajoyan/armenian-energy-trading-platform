@@ -1,4 +1,9 @@
-"""Chunk 109 Qdrant document-vector distance configuration stays explicit and unwired."""
+"""Chunk 109 Qdrant document-vector distance configuration stays explicit.
+
+Chunk 110 is the authorized mapper-to-ensure composition. Production runtime,
+lifespan, HTTP, and LangGraph surfaces remain unwired from distance settings
+and mapping.
+"""
 
 from __future__ import annotations
 
@@ -266,7 +271,7 @@ def test_collection_primitives_remain_unaware_of_configured_distance() -> None:
         assert "map_qdrant_document_vector_distance" not in source
 
 
-def test_configured_distance_and_mapper_remain_unwired() -> None:
+def test_configured_distance_and_mapper_remain_unwired_from_runtime() -> None:
     for path in UNWIRED_MODULES:
         names = imported_names(path)
         modules = imported_modules(path)

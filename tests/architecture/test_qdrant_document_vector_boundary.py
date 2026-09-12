@@ -13,6 +13,7 @@ from tests.architecture.import_inspection import (
     collect_import_violations,
     imported_modules,
     imported_names,
+    is_document_vector_index_collection_ensure_composition_module,
     is_document_vector_index_provider_composition_module,
     is_document_vector_index_provider_runtime_module,
     is_regulatory_provider_composition_module,
@@ -259,6 +260,12 @@ def test_create_app_does_not_wire_document_vector_adapters() -> None:
                 assert "QdrantDocumentVectorSearch" in names
             else:
                 assert "QdrantDocumentVectorSearch" not in names
+            continue
+        if is_document_vector_index_collection_ensure_composition_module(path):
+            assert "QdrantDocumentVectorConfig" in names
+            assert "AsyncQdrantClient" in names
+            assert "QdrantDocumentVectorIndex" not in names
+            assert "QdrantDocumentVectorSearch" not in names
             continue
         assert "QdrantDocumentVectorIndex" not in names
         assert "QdrantDocumentVectorSearch" not in names

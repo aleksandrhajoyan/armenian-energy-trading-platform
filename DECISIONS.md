@@ -1848,6 +1848,25 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
     - Chunk 107 = verify mechanism
     - Chunk 108 = ensure orchestration
     - Chunk 109 = explicit distance configuration + provider mapping
+    - Chunk 110 = configured document-index ensure composition (unwired)
 - **Consequences:** Callers can validate a document-vector distance independently of Qdrant connection settings and translate it to the SDK enum without inventing a default. Automatic provisioning, production distance policy, collection migration, and Pricing & Sales remain deferred. Regulatory Intelligence parent capability remains incomplete.
+
+---
+
+## ADR-120 — Configured Document-Index Qdrant Collection Ensure Composition
+
+- **Status:** Accepted
+- **Context:** ADR-005/032/033/034/115/116/117/118/119 remain the Qdrant direction: official async client, insert-only document adapters, test-only live-fixture provisioning, create-only mutation, verify-only readiness, create-if-missing / verify-if-present ensure, and explicit provider-neutral distance configuration with no default. Callers who already hold an `AsyncQdrantClient`, `DocumentVectorIndexRuntimeSettings`, and `QdrantDocumentVectorDistanceSettings` had no API composition seam that constructed `QdrantDocumentVectorConfig`, mapped the configured metric through Chunk 109, and delegated once to Chunk 108. Wiring that path into production lifespan, managed runtime, settings loaders, or `create_app()` would select automatic provisioning that those ADRs deferred.
+- **Decision:**
+  - ADR-005, ADR-032, ADR-033, ADR-034, ADR-115, ADR-116, ADR-117, ADR-118, and ADR-119 remain Accepted and are not superseded.
+  - Chunk 110 introduces API composition `ensure_configured_document_vector_index_collection_ready` in `api/composition/document_vector_index_collection_ensure.py`. It is a keyword-only async function, not a manager, registry, factory hierarchy, or DI container.
+  - Inputs are an already-created `AsyncQdrantClient`, already-constructed `DocumentVectorIndexRuntimeSettings`, and already-constructed `QdrantDocumentVectorDistanceSettings`. The function does not load environment or settings, does not accept `env_file`, and does not construct or close clients.
+  - It constructs exactly one existing `QdrantDocumentVectorConfig` from `runtime_settings.qdrant_collection_name` and `runtime_settings.qdrant_vector_size`. The document-embedding model does not participate.
+  - It maps `distance_settings.document_vector_distance` through published `map_qdrant_document_vector_distance` once. It does not locally reproduce the mapping table or default COSINE or any other metric.
+  - It awaits `ensure_qdrant_document_collection_ready` once with the exact injected client, the newly constructed config, and the mapped Qdrant `Distance`, then returns `None`.
+  - It does not call `create_qdrant_document_collection`, `verify_qdrant_document_collection_ready`, or `collection_exists` directly. Published sanitized errors, including `DependencyUnavailableError`, propagate unchanged.
+  - Concrete Qdrant `Distance.COSINE` / `DOT` / `EUCLID` / `MANHATTAN` remain confined to the Chunk 109 mapper. This composition imports `AsyncQdrantClient` only as an injected type.
+  - `create_app()`, production/document-index/Regulatory runtimes and lifespans, PDF extraction/index execution, HTTP routers, API dependencies, and LangGraph remain unwired. Production still performs zero automatic collection provisioning. Regulatory collection provisioning is out of scope. Collection migration, delete/recreate/update, race retry/locking, payload indexes, aliases, schema versioning, OCR, automatic corpus scanning/indexing, and Pricing & Sales remain deferred.
+- **Consequences:** Explicit callers can provision or verify the document-index collection from already-constructed settings without inventing a default metric or a generic collection manager. Automatic startup provisioning, production distance policy, and production lifespan wiring remain deferred. Regulatory Intelligence parent capability remains incomplete.
 
 ---
