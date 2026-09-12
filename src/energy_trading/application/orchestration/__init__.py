@@ -15,6 +15,7 @@ preparation, document vector index execution, document extraction-to-index
 execution, Regulatory Intelligence query
 execution, Regulatory Intelligence workflow step,
 Regulatory Intelligence workflow context port,
+Regulatory Intelligence workflow node adapter,
 and
 LangGraph runtime.
 """
@@ -112,6 +113,9 @@ from energy_trading.application.orchestration.regulatory_intelligence_context im
 from energy_trading.application.orchestration.regulatory_intelligence_query_execution import (
     RegulatoryIntelligenceQueryExecutionService,
 )
+from energy_trading.application.orchestration.regulatory_intelligence_workflow_node import (
+    RegulatoryIntelligenceWorkflowNodeAdapter,
+)
 from energy_trading.application.orchestration.regulatory_intelligence_workflow_step import (
     RegulatoryIntelligenceWorkflowRequest,
     RegulatoryIntelligenceWorkflowStep,
@@ -149,6 +153,7 @@ __all__ = [
     "ParallelIngestionWorkflowStep",
     "RegulatoryIntelligenceQueryExecutionService",
     "RegulatoryIntelligenceWorkflowContextPort",
+    "RegulatoryIntelligenceWorkflowNodeAdapter",
     "RegulatoryIntelligenceWorkflowRequest",
     "RegulatoryIntelligenceWorkflowStep",
     "StrictSingleParallelIngestionFailureSelector",

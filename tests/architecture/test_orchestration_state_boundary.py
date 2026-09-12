@@ -338,6 +338,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
         "ParallelIngestionWorkflowStep",
         "RegulatoryIntelligenceWorkflowContextPort",
         "RegulatoryIntelligenceQueryExecutionService",
+        "RegulatoryIntelligenceWorkflowNodeAdapter",
         "RegulatoryIntelligenceWorkflowRequest",
         "RegulatoryIntelligenceWorkflowStep",
         "WorkflowPhase",

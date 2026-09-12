@@ -1961,3 +1961,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** A later Regulatory node can use typed workflow context instead of stuffing phase-specific input/output into `WorkflowState`. Concrete context storage, LangGraph wiring, and Chief Orchestrator remain future work.
 
 ---
+
+## ADR-126 — Regulatory Graph-Node Coordination Remains Framework-Neutral
+
+- **Status:** Accepted
+- **Context:** ADR-124 published `RegulatoryIntelligenceWorkflowStep`. ADR-125 published `RegulatoryIntelligenceWorkflowContextPort` so a future Regulatory node could obtain a typed `RegulatoryIntelligenceWorkflowRequest` and record the existing `RegulatoryIntelligenceResult` without expanding the seven-field `WorkflowState`. Wiring that sequence directly into LangGraph, adding request/result slots to the snapshot, or inventing a generic `WorkflowNodePort` / `WorkflowContextPort` would freeze topology and storage policy before they are reviewed.
+- **Decision:**
+  - ADR-037 (`WorkflowState` as a frozen seven-field snapshot), ADR-124, and ADR-125 remain Accepted and are not superseded.
+  - Chunk 116 adds application-owned `RegulatoryIntelligenceWorkflowNodeAdapter` in `application/orchestration`. Constructor injection is exactly the published context port and workflow step.
+  - `async run(self, state: WorkflowState) -> WorkflowState` coordinates `resolve_request → workflow_step.run → record_result` and returns the original `WorkflowState` object unchanged. Request and result objects are forwarded by identity. There is no reconstruction, mutation, retry, fallback, or local `try/except`.
+  - No Regulatory request/result field, payload dictionary, `Any`, `Mapping`, `TypedDict`, or generic node/context/step port is introduced. The adapter is not a concrete context backend and does not merge with `ParallelIngestionWorkflowContextPort`.
+  - The adapter does not import LangGraph. `graph.py` remains `START → workflow_entry → parallel_ingestion` then success or terminal-failure routing and does not import or inject the adapter, context port, or workflow step. There is no Phase-1 transition.
+  - Storage/backend implementation, Pricing & Sales, and an authoritative Armenian query-generation policy remain separately reviewed chunks. Future topology wiring of this adapter remains a separately reviewed chunk.
+- **Consequences:** Application code can now coordinate Regulatory context plus the workflow step without knowing LangGraph or storage. Regulatory Intelligence is still not on the graph. Parent Regulatory capability remains incomplete.
+
+---

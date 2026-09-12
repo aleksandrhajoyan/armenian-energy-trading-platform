@@ -45,6 +45,9 @@ INITIAL_FAILURE_POLICY_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_initial
 FAILURE_RUNTIME_HANDLING_MODULE = (
     ORCHESTRATION_ROOT / "parallel_ingestion_failure_runtime_handling.py"
 )
+REGULATORY_INTELLIGENCE_WORKFLOW_NODE_MODULE = (
+    ORCHESTRATION_ROOT / "regulatory_intelligence_workflow_node.py"
+)
 AGENTS_ROOT = PRODUCTION_ROOT / "application" / "agents"
 AGENT_BASE = AGENTS_ROOT / "base.py"
 PORTS_ROOT = PRODUCTION_ROOT / "application" / "ports"
@@ -353,6 +356,17 @@ def test_failure_runtime_handling_module_remains_langgraph_free() -> None:
     )
 
 
+def test_regulatory_intelligence_workflow_node_module_remains_langgraph_free() -> None:
+    names = imported_names(REGULATORY_INTELLIGENCE_WORKFLOW_NODE_MODULE)
+    assert "langgraph" not in names
+    assert "langchain" not in names
+    assert "langchain_core" not in names
+    modules = imported_modules(REGULATORY_INTELLIGENCE_WORKFLOW_NODE_MODULE)
+    assert not any(
+        is_forbidden(module, ("langgraph", "langchain", "langchain_core")) for module in modules
+    )
+
+
 def test_agent_base_remains_langgraph_free() -> None:
     assert (
         collect_import_violations(AGENTS_ROOT, ("langgraph", "langchain", "langchain_core")) == []
@@ -431,6 +445,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "RegulatoryIntelligenceWorkflowStep" not in names
     assert "RegulatoryIntelligenceWorkflowRequest" not in names
     assert "RegulatoryIntelligenceWorkflowContextPort" not in names
+    assert "RegulatoryIntelligenceWorkflowNodeAdapter" not in names
     modules = imported_modules(GRAPH_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion_workflow" in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_transition" in modules
@@ -513,6 +528,10 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
         not in modules
     )
     assert "energy_trading.application.orchestration.regulatory_intelligence_context" not in modules
+    assert (
+        "energy_trading.application.orchestration.regulatory_intelligence_workflow_node"
+        not in modules
+    )
 
 
 def test_graph_module_excludes_forbidden_runtime_features() -> None:
@@ -623,6 +642,7 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
             "RegulatoryIntelligenceWorkflowStep",
             "RegulatoryIntelligenceQueryExecutionService",
             "RegulatoryIntelligenceWorkflowContextPort",
+            "RegulatoryIntelligenceWorkflowNodeAdapter",
         }:
             constructed.append(name)
     assert add_node_count == 3
@@ -662,6 +682,10 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "parallel_ingestion_initial_failure_policy" not in source
     assert "RegulatoryIntelligenceWorkflowContextPort" not in source
     assert "regulatory_intelligence_context" not in source
+    assert "RegulatoryIntelligenceWorkflowNodeAdapter" not in source
+    assert "regulatory_intelligence_workflow_node" not in source
+    assert "RegulatoryIntelligenceWorkflowStep" not in source
+    assert "regulatory_intelligence_workflow_step" not in source
     assert "ParallelIngestionFailureRuntimeHandlingService" in source
     assert "parallel_ingestion_failure_runtime_handling" in source
     assert "add_conditional_edges" in source
