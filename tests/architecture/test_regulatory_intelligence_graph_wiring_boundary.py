@@ -142,7 +142,7 @@ def test_graph_imports_published_node_adapter_only() -> None:
     assert leaked_modules == []
 
 
-def test_factory_requires_three_injected_dependencies_without_defaults() -> None:
+def test_factory_requires_four_injected_dependencies_without_defaults() -> None:
     tree = ast.parse(GRAPH_MODULE.read_text(encoding="utf-8"), filename=str(GRAPH_MODULE))
     factory = next(
         node
@@ -157,14 +157,16 @@ def test_factory_requires_three_injected_dependencies_without_defaults() -> None
         "regulatory_intelligence_node",
         "parallel_ingestion_step",
         "parallel_ingestion_failure_runtime_handler",
+        "forecasting_step",
     ]
     annotations = [ast.unparse(arg.annotation) for arg in factory.args.kwonlyargs]
     assert annotations == [
         "RegulatoryIntelligenceWorkflowNodeAdapter",
         "ParallelIngestionWorkflowStep",
         "ParallelIngestionFailureRuntimeHandlingService",
+        "ForecastingWorkflowStep",
     ]
-    assert factory.args.kw_defaults == [None, None, None]
+    assert factory.args.kw_defaults == [None, None, None, None]
 
 
 def test_graph_does_not_construct_the_node_adapter() -> None:
@@ -225,7 +227,7 @@ def test_regulatory_node_delegates_once_to_adapter_run_without_try_except() -> N
     assert _call_name(returned.value.value) == "run"
 
 
-def test_entry_routing_recognizes_only_contract_running_and_ingestion_running() -> None:
+def test_entry_routing_recognizes_contract_ingestion_and_forecasting_running() -> None:
     tree = ast.parse(GRAPH_MODULE.read_text(encoding="utf-8"), filename=str(GRAPH_MODULE))
     router = next(
         node
@@ -236,14 +238,16 @@ def test_entry_routing_recognizes_only_contract_running_and_ingestion_running() 
     assert "WorkflowPhase.CONTRACT" in source
     assert "WorkflowStatus.RUNNING" in source
     assert "WorkflowPhase.INGESTION" in source
+    assert "WorkflowPhase.FORECASTING" in source
     assert "InvalidRequestError" in source
     assert "advance_after_parallel_ingestion" not in source
+    assert "advance_after_forecasting" not in source
     assert "PricingAndSales" not in source
     raises = [node for node in ast.walk(router) if isinstance(node, ast.Raise)]
     assert len(raises) == 1
 
 
-def test_topology_is_four_nodes_three_direct_edges_two_conditional_registrations() -> None:
+def test_topology_keeps_terminal_regulatory_slice_with_forecasting_branch() -> None:
     source = GRAPH_MODULE.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(GRAPH_MODULE))
     string_constants = {
@@ -255,6 +259,7 @@ def test_topology_is_four_nodes_three_direct_edges_two_conditional_registrations
     assert "regulatory_intelligence" in string_constants
     assert "parallel_ingestion" in string_constants
     assert "parallel_ingestion_success_transition" in string_constants
+    assert "forecasting" in string_constants
     add_node_count = 0
     add_edge_count = 0
     add_conditional_edges_count = 0
@@ -268,11 +273,12 @@ def test_topology_is_four_nodes_three_direct_edges_two_conditional_registrations
             add_edge_count += 1
         elif name == "add_conditional_edges":
             add_conditional_edges_count += 1
-    assert add_node_count == 4
-    assert add_edge_count == 3
+    assert add_node_count == 5
+    assert add_edge_count == 4
     assert add_conditional_edges_count == 2
     assert "advance_after_regulatory" not in source
     assert "advance_after_contract" not in source
+    assert "advance_after_forecasting" not in source
     assert "CONTRACT → INGESTION" not in source
     assert "PricingAndSales" not in source
     assert "PricingAndSalesAgent" not in source

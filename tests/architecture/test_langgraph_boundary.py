@@ -118,6 +118,7 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
         "langgraph.graph",
         "langgraph.graph.state",
         "energy_trading.application.errors",
+        "energy_trading.application.orchestration.forecasting_workflow",
         "energy_trading.application.orchestration.parallel_ingestion_failure_runtime_handling",
         "energy_trading.application.orchestration.parallel_ingestion_transition",
         "energy_trading.application.orchestration.parallel_ingestion_workflow",
@@ -128,6 +129,7 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
         "StateGraph",
         "CompiledStateGraph",
         "InvalidRequestError",
+        "ForecastingWorkflowStep",
         "ParallelIngestionFailureRuntimeHandlingService",
         "ParallelIngestionWorkflowStep",
         "RegulatoryIntelligenceWorkflowNodeAdapter",
@@ -523,7 +525,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "ForecastingSuccess" not in names
     assert "ForecastingExecutionPort" not in names
     assert "ForecastingWorkflowContextPort" not in names
-    assert "ForecastingWorkflowStep" not in names
+    assert "ForecastingWorkflowStep" in names
     assert "advance_after_forecasting" not in names
     assert "RegulatoryIntelligenceQueryExecutionService" not in names
     assert "RegulatoryIntelligenceWorkflowStep" not in names
@@ -546,7 +548,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "energy_trading.application.orchestration.forecasting_success" not in modules
     assert "energy_trading.application.orchestration.forecasting_execution" not in modules
     assert "energy_trading.application.orchestration.forecasting_context" not in modules
-    assert "energy_trading.application.orchestration.forecasting_workflow" not in modules
+    assert "energy_trading.application.orchestration.forecasting_workflow" in modules
     assert "energy_trading.application.orchestration.forecasting_transition" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_context" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_executor" not in modules
@@ -672,17 +674,63 @@ def test_graph_factory_requires_injected_step_and_runtime_failure_handler() -> N
         "regulatory_intelligence_node",
         "parallel_ingestion_step",
         "parallel_ingestion_failure_runtime_handler",
+        "forecasting_step",
     ]
     regulatory_annotation = factory.args.kwonlyargs[0].annotation
     step_annotation = factory.args.kwonlyargs[1].annotation
     handler_annotation = factory.args.kwonlyargs[2].annotation
+    forecasting_annotation = factory.args.kwonlyargs[3].annotation
     assert regulatory_annotation is not None
     assert step_annotation is not None
     assert handler_annotation is not None
+    assert forecasting_annotation is not None
     assert ast.unparse(regulatory_annotation) == "RegulatoryIntelligenceWorkflowNodeAdapter"
     assert ast.unparse(step_annotation) == "ParallelIngestionWorkflowStep"
     assert ast.unparse(handler_annotation) == "ParallelIngestionFailureRuntimeHandlingService"
-    assert factory.args.kw_defaults == [None, None, None]
+    assert ast.unparse(forecasting_annotation) == "ForecastingWorkflowStep"
+    assert factory.args.kw_defaults == [None, None, None, None]
+
+
+def test_forecasting_node_delegates_once_to_step_run_without_try_except() -> None:
+    tree = ast.parse(GRAPH_MODULE.read_text(encoding="utf-8"), filename=str(GRAPH_MODULE))
+    class_def = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name == "_ForecastingNode"
+    )
+    call_method = next(
+        node
+        for node in class_def.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "__call__"
+    )
+    except_handlers = [
+        node for node in ast.walk(call_method) if isinstance(node, ast.ExceptHandler)
+    ]
+    assert except_handlers == []
+    control = [
+        type(node).__name__
+        for node in ast.walk(call_method)
+        if isinstance(node, (ast.If, ast.IfExp, ast.Match, ast.For, ast.While, ast.Try, ast.With))
+    ]
+    assert control == []
+    run_calls = [
+        node
+        for node in ast.walk(call_method)
+        if isinstance(node, ast.Call)
+        and (
+            (isinstance(node.func, ast.Name) and node.func.id == "run")
+            or (isinstance(node.func, ast.Attribute) and node.func.attr == "run")
+        )
+    ]
+    assert len(run_calls) == 1
+    run_call = run_calls[0]
+    assert [ast.unparse(arg) for arg in run_call.args] == ["state"]
+    statements = [node for node in call_method.body if not isinstance(node, ast.Expr)]
+    assert len(statements) == 1
+    returned = statements[0]
+    assert isinstance(returned, ast.Return)
+    assert isinstance(returned.value, ast.Await)
+    assert isinstance(returned.value.value, ast.Call)
 
 
 def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
@@ -697,6 +745,7 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "regulatory_intelligence" in string_constants
     assert "parallel_ingestion" in string_constants
     assert "parallel_ingestion_success_transition" in string_constants
+    assert "forecasting" in string_constants
     assert "parallel_ingestion_failure_transition" not in string_constants
     add_node_count = 0
     add_edge_count = 0
@@ -746,8 +795,8 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
             "advance_after_forecasting",
         }:
             constructed.append(name)
-    assert add_node_count == 4
-    assert add_edge_count == 3
+    assert add_node_count == 5
+    assert add_edge_count == 4
     assert add_conditional_edges_count == 2
     assert transition_calls == 1
     assert handler_calls == 1
@@ -785,8 +834,8 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "regulatory_intelligence_context" not in source
     assert "ForecastingWorkflowContextPort" not in source
     assert "forecasting_context" not in source
-    assert "ForecastingWorkflowStep" not in source
-    assert "forecasting_workflow" not in source
+    assert "ForecastingWorkflowStep" in source
+    assert "forecasting_workflow" in source
     assert "advance_after_forecasting" not in source
     assert "forecasting_transition" not in source
     assert "RegulatoryIntelligenceWorkflowNodeAdapter" in source

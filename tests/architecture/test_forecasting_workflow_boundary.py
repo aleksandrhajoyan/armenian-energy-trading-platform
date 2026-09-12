@@ -428,12 +428,19 @@ def test_context_and_execution_ports_remain_unwired_to_the_workflow_step() -> No
         source = path.read_text(encoding="utf-8")
         assert "ForecastingWorkflowStep" not in source
     graph_names = imported_names(GRAPH_MODULE)
-    assert "ForecastingWorkflowStep" not in graph_names
+    assert "ForecastingWorkflowStep" in graph_names
+    assert "ForecastingWorkflowContextPort" not in graph_names
+    assert "ForecastingExecutionPort" not in graph_names
     graph_modules = imported_modules(GRAPH_MODULE)
-    assert "energy_trading.application.orchestration.forecasting_workflow" not in graph_modules
+    assert "energy_trading.application.orchestration.forecasting_workflow" in graph_modules
+    assert "energy_trading.application.orchestration.forecasting_context" not in graph_modules
+    assert "energy_trading.application.orchestration.forecasting_execution" not in graph_modules
     graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
-    assert "ForecastingWorkflowStep" not in graph_source
-    assert "forecasting_workflow" not in graph_source
+    assert "ForecastingWorkflowStep" in graph_source
+    assert "forecasting_workflow" in graph_source
+    assert "ForecastingWorkflowContextPort" not in graph_source
+    assert "ForecastingExecutionPort" not in graph_source
+    assert "advance_after_forecasting" not in graph_source
 
 
 def test_api_composition_does_not_import_or_construct_workflow_step() -> None:

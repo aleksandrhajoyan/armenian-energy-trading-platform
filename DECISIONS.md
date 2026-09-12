@@ -2141,3 +2141,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application can advance a successful forecasting control snapshot to the next canonical phase without executing forecasts or expanding workflow state. Phase 3 is not complete. Graph routing of this transition remains deferred.
 
 ---
+
+## ADR-138 — Forecasting LangGraph invocation does not choose execution order or apply the success transition
+
+- **Status:** Accepted
+- **Context:** ADR-128 through ADR-137 remain Accepted and are not superseded. They published two agent-specific forecast model request DTOs, two application agents that delegate through those ports, an unwired `ForecastingPlan`, an unwired `ForecastingSuccess`, an unwired `ForecastingExecutionPort`, an unwired `ForecastingWorkflowContextPort`, an application-owned `ForecastingWorkflowStep` that composes resolve → execute → record and returns the original `WorkflowState` unchanged, and a separate pure success transition `advance_after_forecasting` from `FORECASTING`/`RUNNING` to `RISK_AND_BID`/`RUNNING`. Phase 2 previously separated workflow-step invocation from success-transition wiring. Embedding execution-order choice, Consumer → DAM sequencing, or the next-phase mutation inside the graph node would mix routing with forecasting strategy and control-state policy. A generic node wrapper, router registry, or `WorkflowStep` hierarchy would hide the Phase-3-specific injected type.
+- **Decision:**
+  - ADR-128, ADR-129, ADR-130, ADR-131, ADR-132, ADR-133, ADR-134, ADR-135, ADR-136, and ADR-137 remain Accepted and are not superseded. ADR-037 remains Accepted: `WorkflowState` stays the seven-field snapshot and is not expanded with forecast payloads.
+  - Chunk 128 extends existing `build_workflow_graph` with one additional required keyword-only dependency: `forecasting_step: ForecastingWorkflowStep`. There is no default. The factory does not construct the step.
+  - Entry routing now recognizes `FORECASTING` / `RUNNING` → node `forecasting`. Contract/running and ingestion/running routes are unchanged. Every other phase/status combination still fails closed as `InvalidRequestError`.
+  - Node `forecasting` awaits the injected `forecasting_step.run(state)` exactly once and returns that `WorkflowState`. There is no `try/except`, retry, fallback, payload inspection, or `WorkflowState` reconstruction.
+  - Execution strategy remains behind `ForecastingExecutionPort`. The graph does not import `ForecastingPlan`, `ForecastingSuccess`, `ForecastingExecutionPort`, `ForecastingWorkflowContextPort`, forecast agents, or forecast model ports. It does not use `asyncio.gather`, `TaskGroup`, or any forecasting concurrency primitive.
+  - `advance_after_forecasting` remains a separate published function and is not imported or invoked by `graph.py`. A successful Phase-3 graph run therefore terminates still at `FORECASTING` / `RUNNING`.
+  - There is no forecasting failure policy, Risk & Bid node, Settlement node, CONTRACT→INGESTION transition, or five-phase end-to-end graph in this chunk.
+- **Consequences:** LangGraph can invoke the already-composed Phase-3 workflow step on the all-success path without choosing how forecasts execute or advancing control state. Phase 3 is not complete. There is still no concrete forecasting executor or context implementation. Graph wiring of `advance_after_forecasting` remains deferred.
+
+---

@@ -40,7 +40,6 @@ _FORBIDDEN_BUSINESS_NODES = frozenset(
         "generation",
         "news",
         "market",
-        "forecasting",
         "load_forecast",
         "price_forecast",
         "risk",
@@ -56,11 +55,24 @@ _PHASE2_PATH_NODES = (
     "parallel_ingestion",
     "parallel_ingestion_success_transition",
 )
+_PHASE3_PATH_NODES = (
+    "workflow_entry",
+    "forecasting",
+)
+_CONTRACT_PATH_NODES = (
+    "workflow_entry",
+    "regulatory_intelligence",
+)
 _ALL_APPLICATION_NODES = (
     "workflow_entry",
     "regulatory_intelligence",
     "parallel_ingestion",
     "parallel_ingestion_success_transition",
+    "forecasting",
+)
+_INVALID_ENTRY_ROUTE_MESSAGE = (
+    "Workflow entry routing requires contract running, ingestion running, "
+    "or forecasting running status."
 )
 
 _UNATTRIBUTED_FAILURE_MESSAGE = "Parallel-ingestion failure group contains an unattributed failure."
@@ -74,11 +86,27 @@ _SENTINEL_TEXT = "secret provider payload not for clients"
 
 
 class _UnusedRegulatoryIntelligenceNode:
-    """Test-only stand-in that must not run on the Phase 2 graph path."""
+    """Test-only stand-in that must not run on the Phase 2 or Phase 3 graph path."""
 
     async def run(self, state: WorkflowState) -> WorkflowState:
-        msg = "Regulatory node must not run on the Phase 2 graph path"
+        msg = "Regulatory node must not run on the Phase 2 or Phase 3 graph path"
         raise AssertionError(msg)
+
+
+class _RecordingRegulatoryIntelligenceNode:
+    """Test-only stand-in for the injected Regulatory node adapter."""
+
+    def __init__(self, error: BaseException | None = None) -> None:
+        self.error = error
+        self.calls = 0
+        self.received: list[WorkflowState] = []
+
+    async def run(self, state: WorkflowState) -> WorkflowState:
+        self.calls += 1
+        self.received.append(state)
+        if self.error is not None:
+            raise self.error
+        return state
 
 
 class _RecordingParallelIngestionStep:
@@ -133,6 +161,37 @@ class _RecordingParallelIngestionFailureRuntimeHandler:
             msg = "recording failure-runtime handler requires a result or an error"
             raise AssertionError(msg)
         return self._result
+
+
+class _UnusedForecastingStep:
+    """Test-only stand-in that must not run on Contract or Phase 2 graph paths."""
+
+    async def run(self, state: WorkflowState) -> WorkflowState:
+        msg = "Forecasting step must not run on the Contract or Phase 2 graph path"
+        raise AssertionError(msg)
+
+
+class _RecordingForecastingStep:
+    """Test-only stand-in for the injected Phase 3 workflow step."""
+
+    def __init__(
+        self,
+        error: BaseException | None = None,
+        result: WorkflowState | None = None,
+    ) -> None:
+        self.error = error
+        self.result = result
+        self.calls = 0
+        self.received: list[WorkflowState] = []
+
+    async def run(self, state: WorkflowState) -> WorkflowState:
+        self.calls += 1
+        self.received.append(state)
+        if self.error is not None:
+            raise self.error
+        if self.result is not None:
+            return self.result
+        return state
 
 
 def _parse_version(value: str) -> tuple[int, ...]:
@@ -205,23 +264,36 @@ def _compile(
         | ParallelIngestionFailureRuntimeHandlingService
         | None
     ) = None,
+    *,
+    regulatory: (
+        _UnusedRegulatoryIntelligenceNode | _RecordingRegulatoryIntelligenceNode | None
+    ) = None,
+    forecasting_step: _UnusedForecastingStep | _RecordingForecastingStep | None = None,
 ) -> tuple[
     CompiledStateGraph[WorkflowState, None, WorkflowState, WorkflowState],
     _RecordingParallelIngestionStep,
     _RecordingParallelIngestionFailureRuntimeHandler
     | ParallelIngestionFailureRuntimeHandlingService,
+    _UnusedForecastingStep | _RecordingForecastingStep,
 ]:
     injected_step = step if step is not None else _RecordingParallelIngestionStep()
     injected_handler: (
         _RecordingParallelIngestionFailureRuntimeHandler
         | ParallelIngestionFailureRuntimeHandlingService
     ) = handler if handler is not None else _RecordingParallelIngestionFailureRuntimeHandler()
+    injected_regulatory = (
+        regulatory if regulatory is not None else _UnusedRegulatoryIntelligenceNode()
+    )
+    injected_forecasting: _UnusedForecastingStep | _RecordingForecastingStep = (
+        forecasting_step if forecasting_step is not None else _UnusedForecastingStep()
+    )
     compiled = build_workflow_graph(
-        regulatory_intelligence_node=_UnusedRegulatoryIntelligenceNode(),  # type: ignore[arg-type]
+        regulatory_intelligence_node=injected_regulatory,  # type: ignore[arg-type]
         parallel_ingestion_step=injected_step,
         parallel_ingestion_failure_runtime_handler=injected_handler,
+        forecasting_step=injected_forecasting,  # type: ignore[arg-type]
     )
-    return compiled, injected_step, injected_handler
+    return compiled, injected_step, injected_handler, injected_forecasting
 
 
 def test_installed_langgraph_satisfies_project_constraint() -> None:
@@ -232,55 +304,67 @@ def test_installed_langgraph_satisfies_project_constraint() -> None:
     assert installed.startswith("1.2.")
 
 
-def test_build_workflow_graph_requires_three_keyword_only_dependencies() -> None:
+def test_build_workflow_graph_requires_four_keyword_only_dependencies() -> None:
     regulatory = _UnusedRegulatoryIntelligenceNode()
     step = _RecordingParallelIngestionStep()
     handler = _RecordingParallelIngestionFailureRuntimeHandler()
+    forecasting = _UnusedForecastingStep()
     with pytest.raises(TypeError):
         build_workflow_graph()  # type: ignore[call-arg]
     with pytest.raises(TypeError):
         build_workflow_graph(  # type: ignore[call-arg]
             parallel_ingestion_step=step,
             parallel_ingestion_failure_runtime_handler=handler,
+            forecasting_step=forecasting,
         )
     with pytest.raises(TypeError):
         build_workflow_graph(  # type: ignore[call-arg]
             regulatory_intelligence_node=regulatory,
             parallel_ingestion_failure_runtime_handler=handler,
+            forecasting_step=forecasting,
         )
     with pytest.raises(TypeError):
         build_workflow_graph(  # type: ignore[call-arg]
             regulatory_intelligence_node=regulatory,
             parallel_ingestion_step=step,
+            forecasting_step=forecasting,
+        )
+    with pytest.raises(TypeError):
+        build_workflow_graph(  # type: ignore[call-arg]
+            regulatory_intelligence_node=regulatory,
+            parallel_ingestion_step=step,
+            parallel_ingestion_failure_runtime_handler=handler,
         )
 
 
 def test_build_workflow_graph_returns_compiled_langgraph() -> None:
-    compiled, _step, _handler = _compile()
+    compiled, _step, _handler, _forecasting = _compile()
     assert isinstance(compiled, CompiledStateGraph)
 
 
 def test_repeated_factory_calls_create_independent_graphs() -> None:
-    first, _first_step, _first_handler = _compile()
-    second, _second_step, _second_handler = _compile()
+    first, _first_step, _first_handler, _first_forecasting = _compile()
+    second, _second_step, _second_handler, _second_forecasting = _compile()
     assert first is not second
     assert type(first) is type(second)
 
 
 def test_builder_uses_workflow_state_as_schema() -> None:
-    compiled, _step, _handler = _compile()
+    compiled, _step, _handler, _forecasting = _compile()
     assert compiled.builder.state_schema is WorkflowState
 
 
-def test_graph_contains_workflow_entry_parallel_ingestion_and_transition_nodes() -> None:
-    compiled, _step, _handler = _compile()
+def test_graph_contains_workflow_entry_parallel_ingestion_transition_and_forecasting_nodes() -> (
+    None
+):
+    compiled, _step, _handler, _forecasting = _compile()
     representation = compiled.get_graph()
     application_nodes = {node_id for node_id in representation.nodes if node_id not in {START, END}}
     assert application_nodes == set(_ALL_APPLICATION_NODES)
 
 
 def test_topology_routes_success_to_transition_and_failure_to_end() -> None:
-    compiled, _step, _handler = _compile()
+    compiled, _step, _handler, _forecasting = _compile()
     representation = compiled.get_graph()
     assert set(representation.nodes) == {START, *_ALL_APPLICATION_NODES, END}
     edges = {(edge.source, edge.target) for edge in representation.edges}
@@ -288,10 +372,12 @@ def test_topology_routes_success_to_transition_and_failure_to_end() -> None:
         (START, "workflow_entry"),
         ("workflow_entry", "regulatory_intelligence"),
         ("workflow_entry", "parallel_ingestion"),
+        ("workflow_entry", "forecasting"),
         ("regulatory_intelligence", END),
         ("parallel_ingestion", "parallel_ingestion_success_transition"),
         ("parallel_ingestion", END),
         ("parallel_ingestion_success_transition", END),
+        ("forecasting", END),
     }
     conditional = {
         (edge.source, edge.target)
@@ -301,20 +387,21 @@ def test_topology_routes_success_to_transition_and_failure_to_end() -> None:
     assert conditional == {
         ("workflow_entry", "regulatory_intelligence"),
         ("workflow_entry", "parallel_ingestion"),
+        ("workflow_entry", "forecasting"),
         ("parallel_ingestion", "parallel_ingestion_success_transition"),
         ("parallel_ingestion", END),
     }
 
 
 def test_graph_has_no_phase_specific_nodes() -> None:
-    compiled, _step, _handler = _compile()
+    compiled, _step, _handler, _forecasting = _compile()
     node_ids = set(compiled.get_graph().nodes)
     leaked = sorted(node_ids & _FORBIDDEN_BUSINESS_NODES)
     assert leaked == []
 
 
 def test_graph_has_exactly_one_phase2_conditional_routing_seam() -> None:
-    compiled, _step, _handler = _compile()
+    compiled, _step, _handler, _forecasting = _compile()
     representation = compiled.get_graph()
     conditional = [
         edge
@@ -328,7 +415,7 @@ def test_graph_has_exactly_one_phase2_conditional_routing_seam() -> None:
     }
     assert phase2_destinations == {"parallel_ingestion_success_transition", END}
     entry_destinations = {edge.target for edge in conditional if edge.source == "workflow_entry"}
-    assert entry_destinations == {"regulatory_intelligence", "parallel_ingestion"}
+    assert entry_destinations == {"regulatory_intelligence", "parallel_ingestion", "forecasting"}
 
 
 async def test_ainvoke_successful_path_ends_forecasting_running() -> None:
@@ -340,7 +427,7 @@ async def test_ainvoke_successful_path_ends_forecasting_running() -> None:
         field_name="timestamp",
     )
     original = _state(diagnostics=(first, second))
-    compiled, step, handler = _compile()
+    compiled, step, handler, _forecasting = _compile()
     result = await compiled.ainvoke(original)
     reconstructed = _reconstruct(result)
     assert step.calls == 1
@@ -369,7 +456,7 @@ async def test_ainvoke_successful_path_ends_forecasting_running() -> None:
 
 async def test_ainvoke_does_not_mutate_original_frozen_state() -> None:
     original = _state()
-    compiled, _step, _handler = _compile()
+    compiled, _step, _handler, _forecasting = _compile()
     await compiled.ainvoke(original)
     assert original.phase is WorkflowPhase.INGESTION
     assert original.status is WorkflowStatus.RUNNING
@@ -379,7 +466,7 @@ async def test_ainvoke_does_not_mutate_original_frozen_state() -> None:
 
 async def test_astream_runs_entry_then_ingestion_then_transition() -> None:
     original = _state()
-    compiled, step, handler = _compile()
+    compiled, step, handler, _forecasting = _compile()
     node_order: list[str] = []
     async for chunk in compiled.astream(original, stream_mode="updates"):
         node_order.extend(chunk.keys())
@@ -394,7 +481,7 @@ async def test_astream_runs_entry_then_ingestion_then_transition() -> None:
 async def test_step_failure_propagates_from_ainvoke_without_retry() -> None:
     error = DependencyUnavailableError("phase 2 step unavailable")
     step = _RecordingParallelIngestionStep(error=error)
-    compiled, _injected, handler = _compile(step)
+    compiled, _injected, handler, _forecasting = _compile(step)
     original = _state()
     with pytest.raises(DependencyUnavailableError) as captured:
         await compiled.ainvoke(original)
@@ -410,7 +497,7 @@ async def test_step_failure_propagates_from_ainvoke_without_retry() -> None:
 async def test_step_failure_skips_transition_and_propagates_without_retry() -> None:
     error = DependencyUnavailableError("phase 2 step unavailable")
     step = _RecordingParallelIngestionStep(error=error)
-    compiled, _injected, handler = _compile(step)
+    compiled, _injected, handler, _forecasting = _compile(step)
     original = _state()
     node_order: list[str] = []
     with pytest.raises(DependencyUnavailableError) as captured:
@@ -430,7 +517,7 @@ async def test_step_failure_skips_transition_and_propagates_without_retry() -> N
 async def test_non_group_invalid_request_propagates_without_runtime_handler() -> None:
     error = InvalidRequestError("phase 2 request is invalid")
     step = _RecordingParallelIngestionStep(error=error)
-    compiled, _injected, handler = _compile(step)
+    compiled, _injected, handler, _forecasting = _compile(step)
     original = _state()
     with pytest.raises(InvalidRequestError) as captured:
         await compiled.ainvoke(original)
@@ -462,7 +549,7 @@ async def test_exception_group_is_delegated_to_runtime_handler_and_skips_success
         diagnostics=(first,),
     )
     handler = _RecordingParallelIngestionFailureRuntimeHandler(result=failed)
-    compiled, _injected, injected_handler = _compile(step, handler)
+    compiled, _injected, injected_handler, _forecasting = _compile(step, handler)
     node_order: list[str] = []
     result = None
     async for chunk in compiled.astream(original, stream_mode="updates"):
@@ -512,7 +599,7 @@ async def test_real_single_attributed_failure_ends_ingestion_failed() -> None:
     )
     group = ExceptionGroup("phase 2 failed", [leaf])
     step = _RecordingParallelIngestionStep(error=group)
-    compiled, _injected, _handler = _compile(step, _real_runtime_handler())
+    compiled, _injected, _handler, _forecasting = _compile(step, _real_runtime_handler())
     node_order: list[str] = []
     async for chunk in compiled.astream(original, stream_mode="updates"):
         node_order.extend(chunk.keys())
@@ -544,7 +631,7 @@ async def test_multiple_attributed_failures_fail_closed_without_success_transiti
     )
     group = ExceptionGroup("phase 2 failed", [weather, hydro])
     step = _RecordingParallelIngestionStep(error=group)
-    compiled, _injected, _handler = _compile(step, _real_runtime_handler())
+    compiled, _injected, _handler, _forecasting = _compile(step, _real_runtime_handler())
     node_order: list[str] = []
     with pytest.raises(InvalidRequestError) as captured:
         async for chunk in compiled.astream(original, stream_mode="updates"):
@@ -570,7 +657,7 @@ async def test_unattributed_group_fails_closed_without_success_transition() -> N
         [attributed, RuntimeError(_SENTINEL_TEXT)],
     )
     step = _RecordingParallelIngestionStep(error=group)
-    compiled, _injected, _handler = _compile(step, _real_runtime_handler())
+    compiled, _injected, _handler, _forecasting = _compile(step, _real_runtime_handler())
     node_order: list[str] = []
     with pytest.raises(InvalidRequestError) as captured:
         async for chunk in compiled.astream(original, stream_mode="updates"):
@@ -586,7 +673,7 @@ async def test_unexpected_post_phase2_state_fails_closed_without_success_or_fail
     original = _state(phase=WorkflowPhase.INGESTION, status=WorkflowStatus.RUNNING)
     unexpected = _state(phase=WorkflowPhase.CONTRACT, status=WorkflowStatus.PENDING)
     step = _RecordingParallelIngestionStep(result=unexpected)
-    compiled, injected, handler = _compile(step)
+    compiled, injected, handler, _forecasting = _compile(step)
     node_order: list[str] = []
     with pytest.raises(InvalidRequestError) as captured:
         async for chunk in compiled.astream(original, stream_mode="updates"):
@@ -600,3 +687,208 @@ async def test_unexpected_post_phase2_state_fails_closed_without_success_or_fail
     assert "parallel_ingestion_success_transition" not in node_order
     assert original.phase is WorkflowPhase.INGESTION
     assert original.status is WorkflowStatus.RUNNING
+
+
+async def test_ainvoke_forecasting_running_invokes_step_once_and_stays_forecasting() -> None:
+    first = diagnostic()
+    second = AdapterDiagnostic(
+        code="SCHEMA_AMBIGUOUS",
+        message="header mapping was ambiguous",
+        severity=DiagnosticSeverity.WARNING,
+        field_name="timestamp",
+    )
+    original = _state(
+        phase=WorkflowPhase.FORECASTING,
+        status=WorkflowStatus.RUNNING,
+        diagnostics=(first, second),
+    )
+    forecasting = _RecordingForecastingStep()
+    compiled, step, handler, injected = _compile(forecasting_step=forecasting)
+    result = await compiled.ainvoke(original)
+    reconstructed = _reconstruct(result)
+    assert injected is forecasting
+    assert forecasting.calls == 1
+    assert len(forecasting.received) == 1
+    assert step.calls == 0
+    assert isinstance(handler, _RecordingParallelIngestionFailureRuntimeHandler)
+    assert handler.calls == 0
+    received = forecasting.received[0]
+    assert received == original
+    assert received.phase is WorkflowPhase.FORECASTING
+    assert received.status is WorkflowStatus.RUNNING
+    assert received.workflow_id == original.workflow_id
+    assert received.portfolio_id == original.portfolio_id
+    assert received.delivery_date == original.delivery_date
+    assert received.correlation_id == original.correlation_id
+    assert received.diagnostics == (first, second)
+    assert reconstructed.phase is WorkflowPhase.FORECASTING
+    assert reconstructed.status is WorkflowStatus.RUNNING
+    assert reconstructed.workflow_id == original.workflow_id
+    assert reconstructed.portfolio_id == original.portfolio_id
+    assert reconstructed.delivery_date == original.delivery_date
+    assert reconstructed.correlation_id == original.correlation_id
+    assert reconstructed.diagnostics == (first, second)
+    assert original.phase is WorkflowPhase.FORECASTING
+    assert original.status is WorkflowStatus.RUNNING
+    assert original.diagnostics == (first, second)
+
+
+async def test_ainvoke_forecasting_does_not_mutate_original_frozen_state() -> None:
+    original = _state(phase=WorkflowPhase.FORECASTING, status=WorkflowStatus.RUNNING)
+    forecasting = _RecordingForecastingStep()
+    compiled, _step, _handler, _injected = _compile(forecasting_step=forecasting)
+    await compiled.ainvoke(original)
+    assert original.phase is WorkflowPhase.FORECASTING
+    assert original.status is WorkflowStatus.RUNNING
+    assert original.diagnostics == ()
+    assert original.workflow_id == "workflow-1"
+
+
+async def test_astream_runs_entry_then_forecasting() -> None:
+    original = _state(phase=WorkflowPhase.FORECASTING, status=WorkflowStatus.RUNNING)
+    forecasting = _RecordingForecastingStep()
+    compiled, step, handler, injected = _compile(forecasting_step=forecasting)
+    node_order: list[str] = []
+    async for chunk in compiled.astream(original, stream_mode="updates"):
+        node_order.extend(chunk.keys())
+    assert node_order == list(_PHASE3_PATH_NODES)
+    assert injected is forecasting
+    assert forecasting.calls == 1
+    assert step.calls == 0
+    assert isinstance(handler, _RecordingParallelIngestionFailureRuntimeHandler)
+    assert handler.calls == 0
+    assert forecasting.received[0] == original
+    assert forecasting.received[0].phase is WorkflowPhase.FORECASTING
+    assert forecasting.received[0].status is WorkflowStatus.RUNNING
+    assert original.phase is WorkflowPhase.FORECASTING
+    assert original.status is WorkflowStatus.RUNNING
+
+
+async def test_forecasting_invalid_request_propagates_without_retry() -> None:
+    error = InvalidRequestError("phase 3 request is invalid")
+    forecasting = _RecordingForecastingStep(error=error)
+    compiled, step, handler, injected = _compile(forecasting_step=forecasting)
+    original = _state(phase=WorkflowPhase.FORECASTING, status=WorkflowStatus.RUNNING)
+    with pytest.raises(InvalidRequestError) as captured:
+        await compiled.ainvoke(original)
+    assert captured.value is error
+    assert injected is forecasting
+    assert forecasting.calls == 1
+    assert step.calls == 0
+    assert isinstance(handler, _RecordingParallelIngestionFailureRuntimeHandler)
+    assert handler.calls == 0
+    assert original.phase is WorkflowPhase.FORECASTING
+    assert original.status is WorkflowStatus.RUNNING
+
+
+async def test_forecasting_dependency_unavailable_propagates_without_retry() -> None:
+    error = DependencyUnavailableError("phase 3 step unavailable")
+    forecasting = _RecordingForecastingStep(error=error)
+    compiled, step, handler, injected = _compile(forecasting_step=forecasting)
+    original = _state(phase=WorkflowPhase.FORECASTING, status=WorkflowStatus.RUNNING)
+    node_order: list[str] = []
+    with pytest.raises(DependencyUnavailableError) as captured:
+        async for chunk in compiled.astream(original, stream_mode="updates"):
+            node_order.extend(chunk.keys())
+    assert captured.value is error
+    assert injected is forecasting
+    assert forecasting.calls == 1
+    assert step.calls == 0
+    assert isinstance(handler, _RecordingParallelIngestionFailureRuntimeHandler)
+    assert handler.calls == 0
+    assert "risk" not in node_order
+    assert "risk_and_bid" not in node_order
+    assert node_order == ["workflow_entry"]
+    assert original.phase is WorkflowPhase.FORECASTING
+    assert original.status is WorkflowStatus.RUNNING
+
+
+async def test_contract_running_invokes_regulatory_and_skips_forecasting() -> None:
+    original = _state(phase=WorkflowPhase.CONTRACT, status=WorkflowStatus.RUNNING)
+    regulatory = _RecordingRegulatoryIntelligenceNode()
+    forecasting = _RecordingForecastingStep()
+    compiled, step, handler, injected = _compile(
+        regulatory=regulatory,
+        forecasting_step=forecasting,
+    )
+    node_order: list[str] = []
+    async for chunk in compiled.astream(original, stream_mode="updates"):
+        node_order.extend(chunk.keys())
+    reconstructed = _reconstruct(await compiled.ainvoke(original))
+    assert node_order == list(_CONTRACT_PATH_NODES)
+    assert regulatory.calls == 2
+    assert injected is forecasting
+    assert forecasting.calls == 0
+    assert step.calls == 0
+    assert isinstance(handler, _RecordingParallelIngestionFailureRuntimeHandler)
+    assert handler.calls == 0
+    assert reconstructed.phase is WorkflowPhase.CONTRACT
+    assert reconstructed.status is WorkflowStatus.RUNNING
+    assert original.phase is WorkflowPhase.CONTRACT
+    assert original.status is WorkflowStatus.RUNNING
+    assert "forecasting" not in node_order
+    assert "parallel_ingestion" not in node_order
+
+
+async def test_ingestion_running_skips_forecasting_step() -> None:
+    original = _state(phase=WorkflowPhase.INGESTION, status=WorkflowStatus.RUNNING)
+    forecasting = _RecordingForecastingStep()
+    compiled, step, handler, injected = _compile(forecasting_step=forecasting)
+    node_order: list[str] = []
+    async for chunk in compiled.astream(original, stream_mode="updates"):
+        node_order.extend(chunk.keys())
+    reconstructed = _reconstruct(await compiled.ainvoke(original))
+    assert node_order == list(_PHASE2_PATH_NODES)
+    assert injected is forecasting
+    assert forecasting.calls == 0
+    assert step.calls == 2
+    assert isinstance(handler, _RecordingParallelIngestionFailureRuntimeHandler)
+    assert handler.calls == 0
+    assert reconstructed.phase is WorkflowPhase.FORECASTING
+    assert reconstructed.status is WorkflowStatus.RUNNING
+    assert original.phase is WorkflowPhase.INGESTION
+    assert original.status is WorkflowStatus.RUNNING
+    assert "forecasting" not in node_order
+
+
+@pytest.mark.parametrize(
+    ("phase", "status"),
+    [
+        (WorkflowPhase.CONTRACT, WorkflowStatus.PENDING),
+        (WorkflowPhase.CONTRACT, WorkflowStatus.FAILED),
+        (WorkflowPhase.INGESTION, WorkflowStatus.PENDING),
+        (WorkflowPhase.FORECASTING, WorkflowStatus.PENDING),
+        (WorkflowPhase.FORECASTING, WorkflowStatus.FAILED),
+        (WorkflowPhase.FORECASTING, WorkflowStatus.SUCCEEDED),
+        (WorkflowPhase.RISK_AND_BID, WorkflowStatus.RUNNING),
+        (WorkflowPhase.SETTLEMENT, WorkflowStatus.RUNNING),
+    ],
+)
+async def test_unsupported_entry_routes_fail_closed_without_executing(
+    phase: WorkflowPhase,
+    status: WorkflowStatus,
+) -> None:
+    original = _state(phase=phase, status=status)
+    regulatory = _RecordingRegulatoryIntelligenceNode()
+    forecasting = _RecordingForecastingStep()
+    compiled, step, handler, injected = _compile(
+        regulatory=regulatory,
+        forecasting_step=forecasting,
+    )
+    node_order: list[str] = []
+    with pytest.raises(InvalidRequestError) as captured:
+        async for chunk in compiled.astream(original, stream_mode="updates"):
+            node_order.extend(chunk.keys())
+    assert captured.value.code == "invalid_request"
+    assert captured.value.message == _INVALID_ENTRY_ROUTE_MESSAGE
+    assert injected is forecasting
+    assert regulatory.calls == 0
+    assert forecasting.calls == 0
+    assert step.calls == 0
+    assert isinstance(handler, _RecordingParallelIngestionFailureRuntimeHandler)
+    assert handler.calls == 0
+    assert "regulatory_intelligence" not in node_order
+    assert "parallel_ingestion" not in node_order
+    assert "forecasting" not in node_order
+    assert original.phase is phase
+    assert original.status is status
