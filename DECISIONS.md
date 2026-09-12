@@ -2067,3 +2067,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application can type-check one forecasting-phase input pair without choosing how those requests will later run. Phase 3 is not complete. Neither forecasting agent is ML-backed in production.
 
 ---
+
+## ADR-133 — Forecasting Success Aggregates Existing Canonical Forecast Points Without Choosing Execution Semantics
+
+- **Status:** Accepted
+- **Context:** ADR-128 through ADR-132 published two agent-specific forecast model request DTOs, two application agents that delegate through those ports, and an unwired `ForecastingPlan` that pairs those requests. Phase 3 still lacked the smallest typed application contract that could say both forecasting operations had successfully produced their canonical output tuples. Copying Phase 2's execution port, concurrent executor, workflow context, or LangGraph wiring would have implied either parallelism or Consumer → DAM sequencing that has not been justified. Inventing duplicate load/price result DTOs would hide the existing canonical `LoadForecastPoint` and `PriceForecastPoint` contracts.
+- **Decision:**
+  - ADR-128, ADR-129, ADR-130, ADR-131, and ADR-132 remain Accepted and are not superseded. ADR-037 remains Accepted: `WorkflowState` stays the seven-field snapshot and is not expanded with forecast payloads.
+  - Chunk 123 adds application-owned frozen/slots `ForecastingSuccess` in `application/orchestration/forecasting_success.py`. Fields are exactly `consumer_load_forecast: tuple[LoadForecastPoint, ...]` and `dam_price_forecast: tuple[PriceForecastPoint, ...]`. Canonical domain forecast points remain the semantic authorities for their own outputs.
+  - Empty tuples remain valid successful outputs. Supplied tuples are retained by identity. The aggregate does not reconstruct, copy, map, sort, deduplicate, fill timestamps, convert MW/MWh, or convert currencies. It introduces no cross-result length, timestamp, horizon, identity, currency, or ordering invariant.
+  - The aggregate does not execute either agent. It does not imply concurrency. It does not imply Consumer → DAM sequential dependency either. It stays outside `WorkflowState`.
+  - There is no duplicate result schema, generic forecast/model abstraction, `ForecastingExecutionPort`, executor, workflow context, workflow step, or LangGraph node in this module.
+  - Execution boundary, executor, workflow context, workflow step, LangGraph wiring, ML implementations, features, training, and runtime composition remain deferred.
+- **Consequences:** Application can type-check one forecasting-phase success pair without choosing how those forecasts will later run. Phase 3 is not complete. Neither forecasting agent is ML-backed in production.
+
+---

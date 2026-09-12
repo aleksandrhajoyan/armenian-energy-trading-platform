@@ -49,6 +49,7 @@ REGULATORY_INTELLIGENCE_WORKFLOW_NODE_MODULE = (
     ORCHESTRATION_ROOT / "regulatory_intelligence_workflow_node.py"
 )
 FORECASTING_PLAN_MODULE = ORCHESTRATION_ROOT / "forecasting_plan.py"
+FORECASTING_SUCCESS_MODULE = ORCHESTRATION_ROOT / "forecasting_success.py"
 AGENTS_ROOT = PRODUCTION_ROOT / "application" / "agents"
 AGENT_BASE = AGENTS_ROOT / "base.py"
 PORTS_ROOT = PRODUCTION_ROOT / "application" / "ports"
@@ -370,6 +371,17 @@ def test_forecasting_plan_module_remains_langgraph_free() -> None:
     )
 
 
+def test_forecasting_success_module_remains_langgraph_free() -> None:
+    names = imported_names(FORECASTING_SUCCESS_MODULE)
+    assert "langgraph" not in names
+    assert "langchain" not in names
+    assert "langchain_core" not in names
+    modules = imported_modules(FORECASTING_SUCCESS_MODULE)
+    assert not any(
+        is_forbidden(module, ("langgraph", "langchain", "langchain_core")) for module in modules
+    )
+
+
 def test_regulatory_intelligence_workflow_node_module_remains_langgraph_free() -> None:
     names = imported_names(REGULATORY_INTELLIGENCE_WORKFLOW_NODE_MODULE)
     assert "langgraph" not in names
@@ -460,6 +472,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "DAMPriceForecastModelPort" not in names
     assert "DAMPriceForecastModelRequest" not in names
     assert "ForecastingPlan" not in names
+    assert "ForecastingSuccess" not in names
     assert "RegulatoryIntelligenceQueryExecutionService" not in names
     assert "RegulatoryIntelligenceWorkflowStep" not in names
     assert "RegulatoryIntelligenceWorkflowRequest" not in names
@@ -478,6 +491,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     )
     assert "energy_trading.application.orchestration.parallel_ingestion" not in modules
     assert "energy_trading.application.orchestration.forecasting_plan" not in modules
+    assert "energy_trading.application.orchestration.forecasting_success" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_context" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_executor" not in modules
     assert "energy_trading.application.orchestration.failure_policy" not in modules

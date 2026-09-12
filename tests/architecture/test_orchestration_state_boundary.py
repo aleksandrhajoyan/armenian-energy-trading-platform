@@ -321,6 +321,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
         "FailurePolicyContext",
         "FailurePolicyPort",
         "ForecastingPlan",
+        "ForecastingSuccess",
         "ParallelIngestionPlan",
         "ParallelIngestionSuccess",
         "ParallelIngestionExecutionPort",
