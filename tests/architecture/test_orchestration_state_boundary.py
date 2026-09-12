@@ -109,6 +109,10 @@ FORBIDDEN_FIELD_NAMES = frozenset(
         "parallel_ingestion_context",
         "parallel_ingestion_workflow_step",
         "parallel_ingestion_workflow",
+        "regulatory_request",
+        "regulatory_result",
+        "regulatory_intelligence_request",
+        "regulatory_intelligence_result",
         "attempt_number",
         "selected_fact",
         "facts",
@@ -283,6 +287,8 @@ def test_workflow_state_has_only_construction_validation() -> None:
         "energy_trading.application.orchestration.parallel_ingestion_initial_failure_policy"
         not in modules
     )
+    assert "RegulatoryIntelligenceWorkflowContextPort" not in names
+    assert "energy_trading.application.orchestration.regulatory_intelligence_context" not in modules
 
 
 def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
@@ -330,6 +336,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
         "InitialParallelIngestionFailurePolicy",
         "StrictSingleParallelIngestionFailureSelector",
         "ParallelIngestionWorkflowStep",
+        "RegulatoryIntelligenceWorkflowContextPort",
         "RegulatoryIntelligenceQueryExecutionService",
         "RegulatoryIntelligenceWorkflowRequest",
         "RegulatoryIntelligenceWorkflowStep",

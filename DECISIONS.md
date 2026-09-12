@@ -1944,3 +1944,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Future graph/node adapters can depend on an application-owned typed Regulatory invocation seam without knowing how the query-execution service is constructed. Regulatory Intelligence is not yet wired into LangGraph. Parent Regulatory capability remains incomplete.
 
 ---
+
+## ADR-125 — Regulatory Phase Context Stays Outside the Global Workflow Snapshot
+
+- **Status:** Accepted
+- **Context:** Chunk 114 published `RegulatoryIntelligenceWorkflowRequest` and `RegulatoryIntelligenceWorkflowStep`. A future Regulatory orchestration node still needs a way to obtain that typed request and record the existing `RegulatoryIntelligenceResult` for a workflow snapshot. Expanding the published seven-field `WorkflowState` with `query_text`/`limit`/result slots, or introducing a generic artifact/context dictionary, would collapse typed contracts into the global snapshot and freeze storage policy before it is reviewed. Merging this seam into `ParallelIngestionWorkflowContextPort` or inventing `WorkflowContextPort[TRequest, TResult]` would genericize two phase-specific workflows that need different typed behavior.
+- **Decision:**
+  - ADR-037 (`WorkflowState` as a frozen seven-field snapshot) and ADR-049 (Phase 2 payloads remain outside `WorkflowState`) remain Accepted and are not superseded. ADR-124 remains Accepted.
+  - Application owns non-generic `RegulatoryIntelligenceWorkflowContextPort`, a `typing.Protocol` with exactly two public operations: `async resolve_request(*, state: WorkflowState) -> RegulatoryIntelligenceWorkflowRequest` and `async record_result(*, state: WorkflowState, result: RegulatoryIntelligenceResult) -> None`.
+  - The published `WorkflowState`, Chunk 114 request, and existing `RegulatoryIntelligenceResult` are reused. No second request/result DTO is introduced.
+  - Keyword-only `state` is the identity argument because Regulatory request resolution may depend on the full snapshot, not only `workflow_id`. This is an intentional asymmetry with `ParallelIngestionWorkflowContextPort.resolve_plan(workflow_id)` / `record_success(workflow_id, success)`; the two ports are not merged and neither inherits a generic context abstraction.
+  - `WorkflowState` remains the seven-field control snapshot. Regulatory request and result objects are not embedded on it. There is no generic payload dictionary, `Any`, `Mapping`, `TypedDict`, callback, or storage-specific method name.
+  - The protocol does not choose in-memory, Redis, PostgreSQL, filesystem, cache, or LangGraph checkpoint storage. There is no concrete production implementation in this chunk.
+  - LangGraph remains `START → workflow_entry → parallel_ingestion` then success or terminal-failure routing and does not import or inject the context port. The Chunk 114 step does not resolve context itself. `create_app()` remains unwired.
+  - A future graph node will coordinate this port and the Chunk 114 step. Storage/backend implementation, Phase-1 transition, Pricing & Sales, and an authoritative Armenian query-generation policy remain separately reviewed chunks.
+- **Consequences:** A later Regulatory node can use typed workflow context instead of stuffing phase-specific input/output into `WorkflowState`. Concrete context storage, LangGraph wiring, and Chief Orchestrator remain future work.
+
+---

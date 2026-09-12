@@ -430,6 +430,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "RegulatoryIntelligenceQueryExecutionService" not in names
     assert "RegulatoryIntelligenceWorkflowStep" not in names
     assert "RegulatoryIntelligenceWorkflowRequest" not in names
+    assert "RegulatoryIntelligenceWorkflowContextPort" not in names
     modules = imported_modules(GRAPH_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion_workflow" in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_transition" in modules
@@ -511,6 +512,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
         "energy_trading.application.orchestration.regulatory_intelligence_workflow_step"
         not in modules
     )
+    assert "energy_trading.application.orchestration.regulatory_intelligence_context" not in modules
 
 
 def test_graph_module_excludes_forbidden_runtime_features() -> None:
@@ -620,6 +622,7 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
             "RegulatoryIntelligenceAgent",
             "RegulatoryIntelligenceWorkflowStep",
             "RegulatoryIntelligenceQueryExecutionService",
+            "RegulatoryIntelligenceWorkflowContextPort",
         }:
             constructed.append(name)
     assert add_node_count == 3
@@ -657,6 +660,8 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "parallel_ingestion_initial_attempt_number_source" not in source
     assert "InitialParallelIngestionFailurePolicy" not in source
     assert "parallel_ingestion_initial_failure_policy" not in source
+    assert "RegulatoryIntelligenceWorkflowContextPort" not in source
+    assert "regulatory_intelligence_context" not in source
     assert "ParallelIngestionFailureRuntimeHandlingService" in source
     assert "parallel_ingestion_failure_runtime_handling" in source
     assert "add_conditional_edges" in source
