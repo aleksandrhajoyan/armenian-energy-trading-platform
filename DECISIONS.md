@@ -2111,3 +2111,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application can type-check Phase-3 payload ownership outside the control snapshot without choosing storage or execution strategy. Phase 3 is not complete. Neither forecasting agent is ML-backed in production.
 
 ---
+
+## ADR-136 — Forecasting Workflow Step Composes Typed Context and Execution Ports Without Choosing Execution Strategy
+
+- **Status:** Accepted
+- **Context:** ADR-128 through ADR-135 remain Accepted and are not superseded. They published two agent-specific forecast model request DTOs, two application agents that delegate through those ports, an unwired `ForecastingPlan`, an unwired `ForecastingSuccess`, an unwired `ForecastingExecutionPort` as `async execute(*, plan: ForecastingPlan) -> ForecastingSuccess`, and an unwired `ForecastingWorkflowContextPort` as `async resolve_plan(*, state: WorkflowState) -> ForecastingPlan` and `async record_success(*, state: WorkflowState, success: ForecastingSuccess) -> None`. Phase 3 still lacked the smallest executable application composition over those already-published seams. Direct agent or model-port invocation would choose an execution strategy. A generic `WorkflowStep[T]` would hide the Phase-3-specific ports.
+- **Decision:**
+  - ADR-128, ADR-129, ADR-130, ADR-131, ADR-132, ADR-133, ADR-134, and ADR-135 remain Accepted and are not superseded. ADR-037 remains Accepted: `WorkflowState` stays the seven-field snapshot and is not expanded with forecast payloads.
+  - Chunk 126 adds application-owned `ForecastingWorkflowStep` in `application/orchestration/forecasting_workflow.py`. Constructor injects `ForecastingWorkflowContextPort` and `ForecastingExecutionPort`. The only public operation is `async run(self, state: WorkflowState) -> WorkflowState`.
+  - `run` calls `resolve_plan(*, state)` once, then `execute(*, plan)` once with that exact plan, then `record_success(*, state, success)` once with that exact success, and returns the original `WorkflowState` object unchanged.
+  - The step does not reconstruct, copy, or map those typed objects. It does not mutate `phase` or `status`. It does not invoke `ConsumerLoadForecastAgent`, `DAMPriceForecastAgent`, or their model ports. It does not choose concurrency, sequential order, or Consumer → DAM dependency.
+  - There is no concrete executor, context adapter, retry/fallback, Phase-3 transition, LangGraph wiring, or ML/runtime composition in this chunk. Failures from resolve, execute, or record propagate with their original identity. Failed execution does not record success.
+- **Consequences:** Application can compose Phase-3 context and execution without choosing how forecasting is implemented. Phase 3 is not complete. Neither forecasting agent is ML-backed in production.
+
+---
