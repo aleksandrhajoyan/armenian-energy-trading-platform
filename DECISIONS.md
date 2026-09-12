@@ -2096,3 +2096,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application can type-check one forecasting-phase execution seam without choosing how those forecasts will later run. Phase 3 is not complete. Neither forecasting agent is ML-backed in production.
 
 ---
+
+## ADR-135 — Forecasting Workflow Context Keeps Phase-3 Payloads Outside WorkflowState
+
+- **Status:** Accepted
+- **Context:** ADR-128 through ADR-134 remain Accepted and are not superseded. They published two agent-specific forecast model request DTOs, two application agents that delegate through those ports, an unwired `ForecastingPlan`, an unwired `ForecastingSuccess`, and an unwired `ForecastingExecutionPort` as `async execute(*, plan: ForecastingPlan) -> ForecastingSuccess`. Phase 3 still lacked the smallest typed application seam that could obtain a prepared plan from workflow control state and publish successful output without expanding `WorkflowState`. A generic `WorkflowContextPort` / `ContextPort[TPlan, TResult]` / `ExecutionContext` would hide those Phase-3-specific contracts and reintroduce a payload bag. Copying Phase 2's `workflow_id: str` identity would ignore the already-established Regulatory keyword-only `state: WorkflowState` signature for later context ports.
+- **Decision:**
+  - ADR-128, ADR-129, ADR-130, ADR-131, ADR-132, ADR-133, and ADR-134 remain Accepted and are not superseded. ADR-037 remains Accepted: `WorkflowState` stays the seven-field snapshot and is not expanded with forecast payloads.
+  - Chunk 125 adds application-owned `ForecastingWorkflowContextPort` in `application/orchestration/forecasting_context.py`. It is a non-generic `typing.Protocol` whose only public operations are keyword-only `async resolve_plan(*, state: WorkflowState) -> ForecastingPlan` and keyword-only `async record_success(*, state: WorkflowState, success: ForecastingSuccess) -> None`. There are no defaults, no `*args` / `**kwargs`, and no provider/storage/runtime arguments.
+  - The port is Phase-3-specific. Method names follow the existing Phase-2 Plan/Success verbs (`resolve_plan` / `record_success`). Signatures follow the existing Regulatory context convention of keyword-only `state: WorkflowState`.
+  - Plan retrieval maps workflow control state to `ForecastingPlan`. Success publication accepts `WorkflowState` plus `ForecastingSuccess` and returns `None`. Both operations are async. Payloads remain outside `WorkflowState`.
+  - The protocol does not choose Redis vs PostgreSQL vs memory, serialization, TTL, locking, transactions, retry, fallback, degraded/partial success, model selection, or provider selection.
+  - There is no concrete context adapter, executor, workflow step, LangGraph wiring, or ML/runtime composition in this chunk. The protocol is satisfied structurally. It does not import or invoke `ForecastingExecutionPort`.
+- **Consequences:** Application can type-check Phase-3 payload ownership outside the control snapshot without choosing storage or execution strategy. Phase 3 is not complete. Neither forecasting agent is ML-backed in production.
+
+---

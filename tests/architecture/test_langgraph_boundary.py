@@ -51,6 +51,7 @@ REGULATORY_INTELLIGENCE_WORKFLOW_NODE_MODULE = (
 FORECASTING_PLAN_MODULE = ORCHESTRATION_ROOT / "forecasting_plan.py"
 FORECASTING_SUCCESS_MODULE = ORCHESTRATION_ROOT / "forecasting_success.py"
 FORECASTING_EXECUTION_MODULE = ORCHESTRATION_ROOT / "forecasting_execution.py"
+FORECASTING_CONTEXT_MODULE = ORCHESTRATION_ROOT / "forecasting_context.py"
 AGENTS_ROOT = PRODUCTION_ROOT / "application" / "agents"
 AGENT_BASE = AGENTS_ROOT / "base.py"
 PORTS_ROOT = PRODUCTION_ROOT / "application" / "ports"
@@ -394,6 +395,17 @@ def test_forecasting_execution_module_remains_langgraph_free() -> None:
     )
 
 
+def test_forecasting_context_module_remains_langgraph_free() -> None:
+    names = imported_names(FORECASTING_CONTEXT_MODULE)
+    assert "langgraph" not in names
+    assert "langchain" not in names
+    assert "langchain_core" not in names
+    modules = imported_modules(FORECASTING_CONTEXT_MODULE)
+    assert not any(
+        is_forbidden(module, ("langgraph", "langchain", "langchain_core")) for module in modules
+    )
+
+
 def test_regulatory_intelligence_workflow_node_module_remains_langgraph_free() -> None:
     names = imported_names(REGULATORY_INTELLIGENCE_WORKFLOW_NODE_MODULE)
     assert "langgraph" not in names
@@ -486,6 +498,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "ForecastingPlan" not in names
     assert "ForecastingSuccess" not in names
     assert "ForecastingExecutionPort" not in names
+    assert "ForecastingWorkflowContextPort" not in names
     assert "RegulatoryIntelligenceQueryExecutionService" not in names
     assert "RegulatoryIntelligenceWorkflowStep" not in names
     assert "RegulatoryIntelligenceWorkflowRequest" not in names
@@ -506,6 +519,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "energy_trading.application.orchestration.forecasting_plan" not in modules
     assert "energy_trading.application.orchestration.forecasting_success" not in modules
     assert "energy_trading.application.orchestration.forecasting_execution" not in modules
+    assert "energy_trading.application.orchestration.forecasting_context" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_context" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_executor" not in modules
     assert "energy_trading.application.orchestration.failure_policy" not in modules
@@ -699,6 +713,7 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
             "RegulatoryIntelligenceQueryExecutionService",
             "RegulatoryIntelligenceWorkflowContextPort",
             "RegulatoryIntelligenceWorkflowNodeAdapter",
+            "ForecastingWorkflowContextPort",
         }:
             constructed.append(name)
     assert add_node_count == 4
@@ -738,6 +753,8 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "parallel_ingestion_initial_failure_policy" not in source
     assert "RegulatoryIntelligenceWorkflowContextPort" not in source
     assert "regulatory_intelligence_context" not in source
+    assert "ForecastingWorkflowContextPort" not in source
+    assert "forecasting_context" not in source
     assert "RegulatoryIntelligenceWorkflowNodeAdapter" in source
     assert "regulatory_intelligence_workflow_node" in source
     assert "RegulatoryIntelligenceWorkflowStep" not in source

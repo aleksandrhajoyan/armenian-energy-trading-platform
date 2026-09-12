@@ -19,6 +19,7 @@ Regulatory Intelligence workflow node adapter,
 forecasting plan,
 forecasting success,
 forecasting execution,
+forecasting workflow context port,
 and
 LangGraph runtime.
 """
@@ -39,6 +40,9 @@ from energy_trading.application.orchestration.failure_policy import (
     FailureAction,
     FailurePolicyContext,
     FailurePolicyPort,
+)
+from energy_trading.application.orchestration.forecasting_context import (
+    ForecastingWorkflowContextPort,
 )
 from energy_trading.application.orchestration.forecasting_execution import (
     ForecastingExecutionPort,
@@ -146,6 +150,7 @@ __all__ = [
     "ForecastingExecutionPort",
     "ForecastingPlan",
     "ForecastingSuccess",
+    "ForecastingWorkflowContextPort",
     "InitialParallelIngestionAttemptNumberSource",
     "InitialParallelIngestionFailurePolicy",
     "ParallelIngestionAgentFailure",
