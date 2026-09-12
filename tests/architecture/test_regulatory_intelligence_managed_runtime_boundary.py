@@ -134,6 +134,7 @@ ALLOWED_MODULE_IMPORTS = frozenset(
         "energy_trading.application.orchestration.regulatory_intelligence_query_execution",
         "energy_trading.infrastructure.openai.client",
         "energy_trading.infrastructure.vector_store.qdrant.client",
+        "energy_trading.api.composition.regulatory_intelligence_collection_readiness",
         "energy_trading.shared.config.openai",
         "energy_trading.shared.config.qdrant",
         "energy_trading.shared.config.regulatory_intelligence",
@@ -153,6 +154,7 @@ RUNTIME_CALL_NAMES = frozenset(
         "load_openai_settings",
         "load_qdrant_settings",
         "load_regulatory_intelligence_runtime_settings",
+        "load_qdrant_document_vector_distance_settings",
         "AsyncOpenAI",
         "AsyncQdrantClient",
         "create_collection",
@@ -164,6 +166,10 @@ RUNTIME_CALL_NAMES = frozenset(
         "OpenAIRegulatoryConstraintInferenceAdapter",
         "QdrantDocumentVectorSearch",
         "QdrantDocumentVectorConfig",
+        "map_qdrant_document_vector_distance",
+        "ensure_qdrant_document_collection_ready",
+        "create_qdrant_document_collection",
+        "verify_qdrant_document_collection_ready",
     }
 )
 
@@ -221,8 +227,10 @@ def test_builder_imports_only_approved_surfaces() -> None:
     assert "OpenAISettings" in names
     assert "QdrantSettings" in names
     assert "RegulatoryIntelligenceRuntimeSettings" in names
+    assert "QdrantDocumentVectorDistanceSettings" in names
     assert "create_openai_client" in names
     assert "create_qdrant_client" in names
+    assert "verify_configured_regulatory_intelligence_collection_ready" in names
     assert "build_regulatory_intelligence_configured_runtime" in names
     assert "RegulatoryIntelligenceQueryExecutionService" in names
     assert "AsyncExitStack" in names
@@ -234,6 +242,11 @@ def test_builder_imports_only_approved_surfaces() -> None:
     assert "load_openai_settings" not in names
     assert "load_qdrant_settings" not in names
     assert "load_regulatory_intelligence_runtime_settings" not in names
+    assert "load_qdrant_document_vector_distance_settings" not in names
+    assert "map_qdrant_document_vector_distance" not in names
+    assert "ensure_qdrant_document_collection_ready" not in names
+    assert "create_qdrant_document_collection" not in names
+    assert "verify_qdrant_document_collection_ready" not in names
     assert "OpenAIDocumentQueryEmbeddingAdapter" not in names
     assert "OpenAIRegulatoryConstraintInferenceAdapter" not in names
     assert "QdrantDocumentVectorSearch" not in names
@@ -277,6 +290,7 @@ def test_builder_signature_is_keyword_only_settings() -> None:
         "openai_settings",
         "qdrant_settings",
         "regulatory_settings",
+        "distance_settings",
     )
     assert builder.args.vararg is None
     assert builder.args.kwarg is None
@@ -289,6 +303,7 @@ def test_builder_signature_is_keyword_only_settings() -> None:
         "openai_settings": "OpenAISettings",
         "qdrant_settings": "QdrantSettings",
         "regulatory_settings": "RegulatoryIntelligenceRuntimeSettings",
+        "distance_settings": "QdrantDocumentVectorDistanceSettings",
     }
     assert ast.unparse(builder.returns) == (
         "AsyncIterator[RegulatoryIntelligenceQueryExecutionService]"
@@ -317,14 +332,6 @@ def test_builder_registers_cleanup_then_delegates_to_chunk_73() -> None:
             runtime_calls.append(name)
         constructed.append(name)
     assert runtime_calls == []
-    assert constructed == [
-        "AsyncExitStack",
-        "create_openai_client",
-        "push_async_callback",
-        "create_qdrant_client",
-        "push_async_callback",
-        "build_regulatory_intelligence_configured_runtime",
-    ]
     statements = [node for node in builder.body if not isinstance(node, ast.Expr)]
     assert len(statements) == 1
     async_with = statements[0]
@@ -337,8 +344,36 @@ def test_builder_registers_cleanup_then_delegates_to_chunk_73() -> None:
     assert isinstance(item.optional_vars, ast.Name)
     assert item.optional_vars.id == "stack"
     inner = list(async_with.body)
-    assert len(inner) == 6
-    first, second, third, fourth, fifth, sixth = inner
+    ordered_calls: list[str] = []
+    for node in inner:
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            name = _call_name(node.value)
+            if name is not None:
+                ordered_calls.append(name)
+            continue
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            name = _call_name(node.value)
+            if name is not None:
+                ordered_calls.append(name)
+            continue
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Await):
+            assert isinstance(node.value.value, ast.Call)
+            name = _call_name(node.value.value)
+            if name is not None:
+                ordered_calls.append(name)
+    assert ordered_calls == [
+        "create_openai_client",
+        "push_async_callback",
+        "create_qdrant_client",
+        "push_async_callback",
+        "verify_configured_regulatory_intelligence_collection_ready",
+        "build_regulatory_intelligence_configured_runtime",
+    ]
+    assert "AsyncExitStack" in constructed
+    assert constructed.count("verify_configured_regulatory_intelligence_collection_ready") == 1
+    assert constructed.count("build_regulatory_intelligence_configured_runtime") == 1
+    assert len(inner) == 7
+    first, second, third, fourth, fifth, sixth, seventh = inner
     assert isinstance(first, ast.Assign)
     assert isinstance(first.value, ast.Call)
     assert _call_name(first.value) == "create_openai_client"
@@ -355,18 +390,32 @@ def test_builder_registers_cleanup_then_delegates_to_chunk_73() -> None:
     assert isinstance(fourth.value, ast.Call)
     assert _call_name(fourth.value) == "push_async_callback"
     assert ast.unparse(fourth.value.args[0]) == "qdrant_client.close"
-    assert isinstance(fifth, ast.Assign)
-    assert isinstance(fifth.value, ast.Call)
-    assert _call_name(fifth.value) == "build_regulatory_intelligence_configured_runtime"
-    fifth_keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in fifth.value.keywords}
+    assert isinstance(fifth, ast.Expr)
+    assert isinstance(fifth.value, ast.Await)
+    assert isinstance(fifth.value.value, ast.Call)
+    assert _call_name(fifth.value.value) == (
+        "verify_configured_regulatory_intelligence_collection_ready"
+    )
+    fifth_keywords = {
+        keyword.arg: ast.unparse(keyword.value) for keyword in fifth.value.value.keywords
+    }
     assert fifth_keywords == {
+        "client": "qdrant_client",
+        "runtime_settings": "regulatory_settings",
+        "distance_settings": "distance_settings",
+    }
+    assert isinstance(sixth, ast.Assign)
+    assert isinstance(sixth.value, ast.Call)
+    assert _call_name(sixth.value) == "build_regulatory_intelligence_configured_runtime"
+    sixth_keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in sixth.value.keywords}
+    assert sixth_keywords == {
         "openai_client": "openai_client",
         "qdrant_client": "qdrant_client",
         "settings": "regulatory_settings",
     }
-    assert isinstance(sixth, ast.Expr)
-    assert isinstance(sixth.value, ast.Yield)
-    assert ast.unparse(sixth.value.value) == "service"
+    assert isinstance(seventh, ast.Expr)
+    assert isinstance(seventh.value, ast.Yield)
+    assert ast.unparse(seventh.value.value) == "service"
     source = BUILDER_MODULE.read_text(encoding="utf-8")
     assert "AsyncOpenAI(" not in source
     assert "AsyncQdrantClient(" not in source
@@ -375,6 +424,11 @@ def test_builder_registers_cleanup_then_delegates_to_chunk_73() -> None:
     assert "load_openai_settings" not in source
     assert "load_qdrant_settings" not in source
     assert "load_regulatory_intelligence_runtime_settings" not in source
+    assert "load_qdrant_document_vector_distance_settings" not in source
+    assert "map_qdrant_document_vector_distance" not in source
+    assert "ensure_qdrant_document_collection_ready" not in source
+    assert "create_qdrant_document_collection" not in source
+    assert "verify_qdrant_document_collection_ready" not in source
     assert "os.environ" not in source
     assert "getenv" not in source
     assert ".env" not in source
@@ -384,6 +438,9 @@ def test_builder_registers_cleanup_then_delegates_to_chunk_73() -> None:
     assert ".execute(" not in source
     assert ".run(" not in source
     assert "create_collection" not in source
+    assert "sleep(" not in source
+    assert "tenacity" not in source
+    assert "backoff" not in source
     identifiers = {node.id for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Name)}
     leaked_frameworks = sorted(name for name in identifiers if name in GENERIC_FRAMEWORK_NAMES)
     assert leaked_frameworks == []

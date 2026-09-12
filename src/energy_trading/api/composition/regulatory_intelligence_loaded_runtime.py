@@ -1,9 +1,9 @@
 """Settings-loaded Regulatory Intelligence managed runtime composition.
 
-This module loads the three published typed settings objects through their
+This module loads the four published typed settings objects through their
 existing loaders, then delegates resource ownership to
 ``managed_regulatory_intelligence_runtime``. It does not construct clients,
-import provider SDKs, or invoke provider operations.
+import provider SDKs, or invoke collection readiness verification.
 
 Ownership:
 
@@ -12,11 +12,18 @@ Ownership:
 * Existing Qdrant settings loader: discovers ``QdrantSettings``.
 * Existing Regulatory runtime settings loader: discovers
   ``RegulatoryIntelligenceRuntimeSettings``.
-* Chunk 74 managed runtime: owns client lifetime and service construction.
-* FastAPI lifespan, ``create_app()``, and LangGraph remain deferred.
+* Existing document-vector distance settings loader: discovers
+  ``QdrantDocumentVectorDistanceSettings``.
+* Chunk 74 managed runtime: owns client lifetime, collection readiness
+  verification, and service construction.
+* Regulatory FastAPI lifespan consumes this runtime. Production
+  ``create_app()`` reaches it indirectly through ``build_production_lifespan``.
+  The exact yielded query-execution service is exposed by
+  ``regulatory_intelligence_lifespan.py``. LangGraph remains deferred.
 
 Entering the context loads settings and yields a service. It does not execute
-a Regulatory query.
+a Regulatory query. Collection readiness verification is owned by the managed
+runtime because that runtime owns the Qdrant client.
 """
 
 from collections.abc import AsyncIterator
@@ -30,7 +37,10 @@ from energy_trading.application.orchestration.regulatory_intelligence_query_exec
     RegulatoryIntelligenceQueryExecutionService,
 )
 from energy_trading.shared.config.openai import load_openai_settings
-from energy_trading.shared.config.qdrant import load_qdrant_settings
+from energy_trading.shared.config.qdrant import (
+    load_qdrant_document_vector_distance_settings,
+    load_qdrant_settings,
+)
 from energy_trading.shared.config.regulatory_intelligence import (
     load_regulatory_intelligence_runtime_settings,
 )
@@ -43,16 +53,18 @@ async def loaded_regulatory_intelligence_runtime(
 ) -> AsyncIterator[RegulatoryIntelligenceQueryExecutionService]:
     """Yield a wired Regulatory Intelligence service from loaded settings.
 
-    The three existing typed loaders remain authoritative. This function does
+    The four existing typed loaders remain authoritative. This function does
     not parse environment values itself or invoke provider operations.
     """
 
     openai_settings = load_openai_settings(env_file=env_file)
     qdrant_settings = load_qdrant_settings(env_file=env_file)
     regulatory_settings = load_regulatory_intelligence_runtime_settings(env_file=env_file)
+    distance_settings = load_qdrant_document_vector_distance_settings(env_file=env_file)
     async with managed_regulatory_intelligence_runtime(
         openai_settings=openai_settings,
         qdrant_settings=qdrant_settings,
         regulatory_settings=regulatory_settings,
+        distance_settings=distance_settings,
     ) as service:
         yield service

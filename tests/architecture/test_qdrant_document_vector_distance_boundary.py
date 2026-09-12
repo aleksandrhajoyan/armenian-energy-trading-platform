@@ -4,7 +4,9 @@ Chunk 110 is the authorized mapper-to-ensure composition. Chunk 111 authorizes
 the existing document-index loaded runtime to load distance settings and the
 existing managed runtime to receive those already-constructed settings.
 Chunk 112 is the authorized mapper-to-verify composition for Regulatory
-collection readiness and remains unwired from runtime. The mapper, create_app,
+collection readiness. Chunk 113 authorizes the existing Regulatory loaded
+runtime to load distance settings and the existing managed runtime to receive
+those already-constructed settings. The mapper, create_app,
 production/document-index/Regulatory lifespans, HTTP, and LangGraph remain
 unwired from mapping.
 """
@@ -45,8 +47,6 @@ UNWIRED_MODULES = (
     API_ROOT / "composition" / "document_vector_index_runtime.py",
     API_ROOT / "composition" / "document_vector_index_execution.py",
     API_ROOT / "composition" / "regulatory_intelligence_lifespan.py",
-    API_ROOT / "composition" / "regulatory_intelligence_loaded_runtime.py",
-    API_ROOT / "composition" / "regulatory_intelligence_managed_runtime.py",
     API_ROOT / "composition" / "regulatory_intelligence_configured_runtime.py",
     API_ROOT / "composition" / "regulatory_intelligence_runtime.py",
     API_ROOT / "composition" / "pdf_document_extraction_index.py",
