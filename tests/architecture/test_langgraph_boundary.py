@@ -426,6 +426,10 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "GenerationAvailabilityAgent" not in names
     assert "NewsIntelligenceAgent" not in names
     assert "MarketMonitoringAgent" not in names
+    assert "RegulatoryIntelligenceAgent" not in names
+    assert "RegulatoryIntelligenceQueryExecutionService" not in names
+    assert "RegulatoryIntelligenceWorkflowStep" not in names
+    assert "RegulatoryIntelligenceWorkflowRequest" not in names
     modules = imported_modules(GRAPH_MODULE)
     assert "energy_trading.application.orchestration.parallel_ingestion_workflow" in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_transition" in modules
@@ -498,6 +502,15 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "energy_trading.application.agents.generation_availability" not in modules
     assert "energy_trading.application.agents.news_intelligence" not in modules
     assert "energy_trading.application.agents.market_monitoring" not in modules
+    assert "energy_trading.application.agents.regulatory_intelligence" not in modules
+    assert (
+        "energy_trading.application.orchestration.regulatory_intelligence_query_execution"
+        not in modules
+    )
+    assert (
+        "energy_trading.application.orchestration.regulatory_intelligence_workflow_step"
+        not in modules
+    )
 
 
 def test_graph_module_excludes_forbidden_runtime_features() -> None:
@@ -604,6 +617,9 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
             "GenerationAvailabilityAgent",
             "NewsIntelligenceAgent",
             "MarketMonitoringAgent",
+            "RegulatoryIntelligenceAgent",
+            "RegulatoryIntelligenceWorkflowStep",
+            "RegulatoryIntelligenceQueryExecutionService",
         }:
             constructed.append(name)
     assert add_node_count == 3

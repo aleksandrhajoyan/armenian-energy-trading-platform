@@ -13,7 +13,8 @@ attempt-number source, Phase 2 initial terminal-fail failure policy,
 document vector-search query preparation, document vector index-entry
 preparation, document vector index execution, document extraction-to-index
 execution, Regulatory Intelligence query
-execution, and
+execution, Regulatory Intelligence workflow step,
+and
 LangGraph runtime.
 """
 
@@ -107,6 +108,10 @@ from energy_trading.application.orchestration.parallel_ingestion_workflow import
 from energy_trading.application.orchestration.regulatory_intelligence_query_execution import (
     RegulatoryIntelligenceQueryExecutionService,
 )
+from energy_trading.application.orchestration.regulatory_intelligence_workflow_step import (
+    RegulatoryIntelligenceWorkflowRequest,
+    RegulatoryIntelligenceWorkflowStep,
+)
 from energy_trading.application.orchestration.state import (
     WorkflowPhase,
     WorkflowState,
@@ -139,6 +144,8 @@ __all__ = [
     "ParallelIngestionWorkflowContextPort",
     "ParallelIngestionWorkflowStep",
     "RegulatoryIntelligenceQueryExecutionService",
+    "RegulatoryIntelligenceWorkflowRequest",
+    "RegulatoryIntelligenceWorkflowStep",
     "StrictSingleParallelIngestionFailureSelector",
     "WorkflowPhase",
     "WorkflowState",

@@ -1927,3 +1927,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Entering the existing Regulatory runtime now verifies that collection on the same managed Qdrant client before the query service is yielded. A missing or incompatible collection prevents startup. Failure remains fail-closed with ordinary cleanup. Not all Qdrant collections are automatically provisioned.
 
 ---
+
+## ADR-124 — Regulatory Orchestration Uses an Application-Owned Workflow Step
+
+- **Status:** Accepted
+- **Context:** Chunk 113 made the real Regulatory runtime safe to enter. Future workflow/LangGraph code still needed a provider-neutral application seam through which Regulatory Intelligence can be invoked. Expanding `WorkflowState` with a generic artifact/context bag, inventing a second agent-port protocol, or importing API composition / provider clients into application orchestration would violate Clean Architecture and the published `AgentPort` contract.
+- **Decision:**
+  - ADR-036 (`AgentPort`) and ADR-037 (`WorkflowState` as a frozen seven-field snapshot) remain Accepted and are not superseded.
+  - Chunk 114 adds application-owned `RegulatoryIntelligenceWorkflowRequest` (`query_text`, `limit`, no defaults) and `RegulatoryIntelligenceWorkflowStep` in `application/orchestration`.
+  - The step receives an already-constructed `RegulatoryIntelligenceQueryExecutionService` by constructor injection. Provider/runtime lifecycle remains outside the step.
+  - The step structurally satisfies existing `AgentPort[RegulatoryIntelligenceWorkflowRequest, RegulatoryIntelligenceResult]` using canonical `AgentName.REGULATORY_INTELLIGENCE` and async `run(request)`. No `RegulatoryAgentPort`, `WorkflowStepPort`, or other generic protocol is introduced.
+  - `run` awaits `execute(query_text=request.query_text, limit=request.limit)` exactly once and returns the existing `RegulatoryIntelligenceResult` unchanged. Exact exception identity propagates. There is no retry, wrap, or provider work.
+  - `WorkflowState` still has no typed agent-output mechanism (`phase`-specific canonical outputs are not slots on that type). Result integration is deferred rather than adding an untyped artifact/context bag. `WorkflowState` is not modified.
+  - LangGraph topology remains unchanged. The graph does not import, instantiate, or call the new step. HTTP, production runtime, and lifespan modules are not modified.
+  - Pricing & Sales, Phase-1 end-to-end execution, and an authoritative Armenian rule corpus remain out of scope.
+- **Consequences:** Future graph/node adapters can depend on an application-owned typed Regulatory invocation seam without knowing how the query-execution service is constructed. Regulatory Intelligence is not yet wired into LangGraph. Parent Regulatory capability remains incomplete.
+
+---
