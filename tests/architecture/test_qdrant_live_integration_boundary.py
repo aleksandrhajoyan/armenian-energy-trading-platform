@@ -59,7 +59,7 @@ PRODUCTION_COLLECTION_FORBIDDEN = (
     "Distance.MANHATTAN",
 )
 PRODUCTION_VECTOR_PARAMS_ALLOWED = frozenset({"collection_readiness.py", "collection_creation.py"})
-PRODUCTION_DISTANCE_TYPE_ALLOWED = frozenset({"collection_creation.py"})
+PRODUCTION_DISTANCE_TYPE_ALLOWED = frozenset({"collection_readiness.py", "collection_creation.py"})
 PRODUCTION_CREATE_COLLECTION_ALLOWED = frozenset({"collection_creation.py"})
 
 

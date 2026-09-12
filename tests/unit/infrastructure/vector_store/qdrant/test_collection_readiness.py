@@ -192,10 +192,22 @@ def _assert_no_side_effects(fake: _FakeQdrantClient) -> None:
 def test_signature_is_keyword_only_async_none() -> None:
     signature = inspect.signature(verify_qdrant_document_collection_ready)
     assert inspect.iscoroutinefunction(verify_qdrant_document_collection_ready)
-    assert list(signature.parameters) == ["client", "config"]
-    for name in ("client", "config"):
-        assert signature.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
+    assert list(signature.parameters) == ["client", "config", "distance"]
+    for name in ("client", "config", "distance"):
+        parameter = signature.parameters[name]
+        assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        assert parameter.default is inspect.Parameter.empty
     assert signature.return_annotation is None
+
+
+async def test_distance_is_required() -> None:
+    fake = _FakeQdrantClient(
+        info=_collection_info(vectors=_vector_params(VECTOR_SIZE, models.Distance.COSINE))
+    )
+    with pytest.raises(TypeError):
+        await verify_qdrant_document_collection_ready(client=fake, config=_config())
+    assert fake.get_collection_calls == []
+    _assert_no_side_effects(fake)
 
 
 @pytest.mark.parametrize(
@@ -211,8 +223,43 @@ async def test_compatible_unnamed_dense_vector_returns_none(
     distance: models.Distance,
 ) -> None:
     fake = _FakeQdrantClient(info=_collection_info(vectors=_vector_params(VECTOR_SIZE, distance)))
-    result = await verify_qdrant_document_collection_ready(client=fake, config=_config())
+    result = await verify_qdrant_document_collection_ready(
+        client=fake,
+        config=_config(),
+        distance=distance,
+    )
     assert result is None
+    assert fake.get_collection_calls == [{"collection_name": COLLECTION, "kwargs": {}}]
+    _assert_no_side_effects(fake)
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    (
+        (models.Distance.DOT, models.Distance.COSINE),
+        (models.Distance.COSINE, models.Distance.DOT),
+        (models.Distance.EUCLID, models.Distance.MANHATTAN),
+        (models.Distance.MANHATTAN, models.Distance.EUCLID),
+    ),
+)
+async def test_distance_mismatch_is_sanitized(
+    stored: models.Distance,
+    expected: models.Distance,
+) -> None:
+    fake = _FakeQdrantClient(info=_collection_info(vectors=_vector_params(VECTOR_SIZE, stored)))
+    with pytest.raises(DependencyUnavailableError, match=UNAVAILABLE) as caught:
+        await verify_qdrant_document_collection_ready(
+            client=fake,
+            config=_config(),
+            distance=expected,
+        )
+    message = caught.value.message
+    assert message == UNAVAILABLE
+    assert stored.value not in message
+    assert expected.value not in message
+    assert stored.name not in message
+    assert expected.name not in message
+    assert caught.value.__cause__ is None
     assert fake.get_collection_calls == [{"collection_name": COLLECTION, "kwargs": {}}]
     _assert_no_side_effects(fake)
 
@@ -222,9 +269,16 @@ async def test_vector_size_mismatch_is_sanitized() -> None:
         info=_collection_info(vectors=_vector_params(VECTOR_SIZE + 1, models.Distance.COSINE))
     )
     with pytest.raises(DependencyUnavailableError, match=UNAVAILABLE) as caught:
-        await verify_qdrant_document_collection_ready(client=fake, config=_config())
+        await verify_qdrant_document_collection_ready(
+            client=fake,
+            config=_config(),
+            distance=models.Distance.COSINE,
+        )
     assert caught.value.message == UNAVAILABLE
     assert str(VECTOR_SIZE + 1) not in caught.value.message
+    assert "Cosine" not in caught.value.message
+    assert "COSINE" not in caught.value.message
+    assert caught.value.__cause__ is None
     assert fake.get_collection_calls == [{"collection_name": COLLECTION, "kwargs": {}}]
     _assert_no_side_effects(fake)
 
@@ -236,10 +290,16 @@ async def test_named_vector_mapping_fails_closed_without_selecting_a_name() -> N
     }
     fake = _FakeQdrantClient(info=_collection_info(vectors=named))
     with pytest.raises(DependencyUnavailableError, match=UNAVAILABLE) as caught:
-        await verify_qdrant_document_collection_ready(client=fake, config=_config())
+        await verify_qdrant_document_collection_ready(
+            client=fake,
+            config=_config(),
+            distance=models.Distance.DOT,
+        )
     assert caught.value.message == UNAVAILABLE
     assert "dense" not in caught.value.message
     assert "title" not in caught.value.message
+    assert "Dot" not in caught.value.message
+    assert caught.value.__cause__ is None
     assert fake.get_collection_calls == [{"collection_name": COLLECTION, "kwargs": {}}]
     _assert_no_side_effects(fake)
 
@@ -249,7 +309,11 @@ async def test_single_named_vector_of_matching_size_fails_closed() -> None:
         info=_collection_info(vectors={"dense": _vector_params(VECTOR_SIZE, models.Distance.DOT)})
     )
     with pytest.raises(DependencyUnavailableError, match=UNAVAILABLE):
-        await verify_qdrant_document_collection_ready(client=fake, config=_config())
+        await verify_qdrant_document_collection_ready(
+            client=fake,
+            config=_config(),
+            distance=models.Distance.DOT,
+        )
     assert fake.get_collection_calls == [{"collection_name": COLLECTION, "kwargs": {}}]
     _assert_no_side_effects(fake)
 
@@ -262,9 +326,14 @@ async def test_sparse_only_configuration_fails_closed() -> None:
         )
     )
     with pytest.raises(DependencyUnavailableError, match=UNAVAILABLE) as caught:
-        await verify_qdrant_document_collection_ready(client=fake, config=_config())
+        await verify_qdrant_document_collection_ready(
+            client=fake,
+            config=_config(),
+            distance=models.Distance.COSINE,
+        )
     assert caught.value.message == UNAVAILABLE
     assert "text" not in caught.value.message
+    assert caught.value.__cause__ is None
     assert fake.get_collection_calls == [{"collection_name": COLLECTION, "kwargs": {}}]
     _assert_no_side_effects(fake)
 
@@ -272,15 +341,24 @@ async def test_sparse_only_configuration_fails_closed() -> None:
 async def test_missing_dense_vector_configuration_fails_closed() -> None:
     fake = _FakeQdrantClient(info=_collection_info(vectors=None))
     with pytest.raises(DependencyUnavailableError, match=UNAVAILABLE):
-        await verify_qdrant_document_collection_ready(client=fake, config=_config())
+        await verify_qdrant_document_collection_ready(
+            client=fake,
+            config=_config(),
+            distance=models.Distance.COSINE,
+        )
     assert fake.get_collection_calls == [{"collection_name": COLLECTION, "kwargs": {}}]
     _assert_no_side_effects(fake)
 
 
 async def test_malformed_collection_metadata_fails_closed() -> None:
     fake = _FakeQdrantClient(info=SimpleNamespace())
-    with pytest.raises(DependencyUnavailableError, match=UNAVAILABLE):
-        await verify_qdrant_document_collection_ready(client=fake, config=_config())
+    with pytest.raises(DependencyUnavailableError, match=UNAVAILABLE) as caught:
+        await verify_qdrant_document_collection_ready(
+            client=fake,
+            config=_config(),
+            distance=models.Distance.COSINE,
+        )
+    assert caught.value.__cause__ is None
     assert fake.get_collection_calls == [{"collection_name": COLLECTION, "kwargs": {}}]
     _assert_no_side_effects(fake)
 
@@ -296,7 +374,11 @@ async def test_malformed_collection_metadata_fails_closed() -> None:
 async def test_provider_lookup_failure_is_sanitized(error: BaseException) -> None:
     fake = _FakeQdrantClient(error=error)
     with pytest.raises(DependencyUnavailableError, match=UNAVAILABLE) as caught:
-        await verify_qdrant_document_collection_ready(client=fake, config=_config())
+        await verify_qdrant_document_collection_ready(
+            client=fake,
+            config=_config(),
+            distance=models.Distance.DOT,
+        )
     message = caught.value.message
     assert message == UNAVAILABLE
     assert SENTINEL_EXCEPTION not in message
@@ -304,6 +386,7 @@ async def test_provider_lookup_failure_is_sanitized(error: BaseException) -> Non
     assert "api_key" not in message.lower()
     assert "qdrant.internal" not in message
     assert "secret" not in message
+    assert "Dot" not in message
     assert caught.value.__cause__ is error
     assert fake.get_collection_calls == [{"collection_name": COLLECTION, "kwargs": {}}]
     _assert_no_side_effects(fake)
@@ -313,10 +396,18 @@ async def test_success_and_failure_do_not_call_mutation_or_point_apis() -> None:
     success = _FakeQdrantClient(
         info=_collection_info(vectors=_vector_params(VECTOR_SIZE, models.Distance.COSINE))
     )
-    await verify_qdrant_document_collection_ready(client=success, config=_config())
+    await verify_qdrant_document_collection_ready(
+        client=success,
+        config=_config(),
+        distance=models.Distance.COSINE,
+    )
     failure = _FakeQdrantClient(error=_backend_error())
     with pytest.raises(DependencyUnavailableError):
-        await verify_qdrant_document_collection_ready(client=failure, config=_config())
+        await verify_qdrant_document_collection_ready(
+            client=failure,
+            config=_config(),
+            distance=models.Distance.MANHATTAN,
+        )
     for fake in (success, failure):
         _assert_no_side_effects(fake)
         assert len(fake.get_collection_calls) == 1

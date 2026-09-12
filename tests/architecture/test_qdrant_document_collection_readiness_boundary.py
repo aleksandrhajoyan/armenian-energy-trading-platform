@@ -1,4 +1,4 @@
-"""Chunk 105 Qdrant collection readiness stays a verify-only infrastructure seam."""
+"""Chunk 107 Qdrant collection readiness stays a verify-only infrastructure seam."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ API_APP = API_ROOT / "app.py"
 GRAPH_MODULE = PRODUCTION_ROOT / "application" / "orchestration" / "graph.py"
 QDRANT_ROOT = PRODUCTION_ROOT / "infrastructure" / "vector_store" / "qdrant"
 READINESS_MODULE = QDRANT_ROOT / "collection_readiness.py"
+CREATION_MODULE = QDRANT_ROOT / "collection_creation.py"
 DOCUMENT_VECTOR = QDRANT_ROOT / "document_vector.py"
 CLIENT_MODULE = QDRANT_ROOT / "client.py"
 COMPOSITION_ROOT = API_ROOT / "composition"
@@ -96,7 +97,6 @@ ALLOWED_MODULES = frozenset(
 
 FORBIDDEN_IDENTIFIERS = frozenset(
     {
-        "Distance",
         "create_collection",
         "recreate_collection",
         "delete_collection",
@@ -111,6 +111,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "count",
         "retrieve",
         "create_qdrant_client",
+        "create_qdrant_document_collection",
         "QdrantSettings",
         "load_qdrant_settings",
         "create_app",
@@ -148,9 +149,14 @@ MUTATION_FRAGMENTS = (
     "count",
     "retrieve",
     "create_qdrant_client",
+    "create_qdrant_document_collection",
+    "ensure_qdrant_document_collection",
     "load_qdrant_settings",
     "QdrantSettings",
-    "Distance",
+    "Distance.COSINE",
+    "Distance.DOT",
+    "Distance.EUCLID",
+    "Distance.MANHATTAN",
     "tenacity",
     "backoff",
 )
@@ -169,9 +175,10 @@ GENERIC_TYPE_NAMES = frozenset(
         "ServiceRegistry",
         "ProviderRegistry",
         "FastAPI",
-        "Distance",
     }
 )
+
+DISTANCE_MEMBERS = frozenset({"COSINE", "DOT", "EUCLID", "MANHATTAN"})
 
 
 def _module_functions(path: Path) -> list[ast.AsyncFunctionDef | ast.FunctionDef]:
@@ -192,6 +199,30 @@ def _call_names(node: ast.AST) -> set[str]:
     return names
 
 
+def _distance_member_attrs(tree: ast.AST) -> set[str]:
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "Distance"
+        ):
+            names.add(node.attr)
+    return names
+
+
+def _attr_name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _name_id(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    return None
+
+
 def test_readiness_module_lives_in_qdrant_infrastructure() -> None:
     assert READINESS_MODULE.is_relative_to(QDRANT_ROOT)
     assert READINESS_MODULE.name == "collection_readiness.py"
@@ -209,11 +240,13 @@ def test_readiness_imports_are_narrow() -> None:
     assert modules == ALLOWED_MODULES
     assert "AsyncQdrantClient" in names
     assert "VectorParams" in names
+    assert "Distance" in names
     assert "QdrantDocumentVectorConfig" in names
     assert "DependencyUnavailableError" in names
-    assert "Distance" not in names
     assert "create_qdrant_client" not in names
     assert "QdrantSettings" not in names
+    assert "create_qdrant_document_collection" not in names
+    assert "collection_creation" not in modules
 
 
 def test_readiness_public_operation_is_the_narrow_verifier() -> None:
@@ -222,12 +255,15 @@ def test_readiness_public_operation_is_the_narrow_verifier() -> None:
     verifier = functions[0]
     assert isinstance(verifier, ast.AsyncFunctionDef)
     assert [arg.arg for arg in verifier.args.args] == []
-    assert [arg.arg for arg in verifier.args.kwonlyargs] == ["client", "config"]
+    assert [arg.arg for arg in verifier.args.kwonlyargs] == ["client", "config", "distance"]
     assert verifier.args.vararg is None
     assert verifier.args.kwarg is None
+    assert verifier.args.defaults == []
+    assert all(default is None for default in verifier.args.kw_defaults)
     annotations = annotation_type_names(READINESS_MODULE)
     assert "AsyncQdrantClient" in annotations
     assert "QdrantDocumentVectorConfig" in annotations
+    assert "Distance" in annotations
     assert annotations.isdisjoint(GENERIC_TYPE_NAMES)
     tree = ast.parse(READINESS_MODULE.read_text(encoding="utf-8"), filename=str(READINESS_MODULE))
     assert not any(isinstance(node, ast.ClassDef) for node in tree.body)
@@ -259,19 +295,35 @@ def test_readiness_performs_one_get_collection_and_inspects_vectorparams() -> No
     assert len(get_collection_calls) == 1
     keywords = {keyword.arg for keyword in get_collection_calls[0].keywords if keyword.arg}
     assert keywords == {"collection_name"}
+    size_checked = False
+    distance_checked = False
+    for node in ast.walk(verifier):
+        if not isinstance(node, ast.Compare):
+            continue
+        operands = [node.left, *node.comparators]
+        attrs = {_attr_name(operand) for operand in operands}
+        names = {_name_id(operand) for operand in operands}
+        if "size" in attrs and "vector_size" in attrs:
+            size_checked = True
+        if "distance" in attrs and "distance" in names:
+            distance_checked = True
+    assert size_checked
+    assert distance_checked
 
 
-def test_readiness_source_has_no_mutation_distance_or_retry() -> None:
+def test_readiness_source_has_no_mutation_hardcoded_distance_or_retry() -> None:
     source = READINESS_MODULE.read_text(encoding="utf-8")
     for fragment in MUTATION_FRAGMENTS:
         assert fragment not in source
     assert "VectorParams" in source
+    assert "Distance" in source
     assert "get_collection" in source
     tree = ast.parse(source, filename=str(READINESS_MODULE))
     assert not any(isinstance(node, (ast.For, ast.While, ast.AsyncFor)) for node in ast.walk(tree))
+    assert _distance_member_attrs(tree).isdisjoint(DISTANCE_MEMBERS)
 
 
-def test_index_and_search_adapters_do_not_invoke_readiness() -> None:
+def test_index_search_and_creation_do_not_invoke_readiness() -> None:
     names = imported_names(DOCUMENT_VECTOR)
     modules = imported_modules(DOCUMENT_VECTOR)
     source = DOCUMENT_VECTOR.read_text(encoding="utf-8")
@@ -282,6 +334,13 @@ def test_index_and_search_adapters_do_not_invoke_readiness() -> None:
     client_source = CLIENT_MODULE.read_text(encoding="utf-8")
     assert "verify_qdrant_document_collection_ready" not in client_source
     assert "get_collection" not in client_source
+    creation_names = imported_names(CREATION_MODULE)
+    creation_modules = imported_modules(CREATION_MODULE)
+    creation_source = CREATION_MODULE.read_text(encoding="utf-8")
+    assert "verify_qdrant_document_collection_ready" not in creation_names
+    assert "collection_readiness" not in creation_modules
+    assert "verify_qdrant_document_collection_ready" not in creation_source
+    assert "get_collection" not in creation_source
 
 
 def test_readiness_remains_unwired_from_runtime_and_http() -> None:

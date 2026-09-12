@@ -1,8 +1,8 @@
 """Read-only Qdrant document collection readiness verification.
 
 This module inspects already-provisioned collection metadata. It does not
-create, update, or delete collections, select a vector metric, embed, index,
-search, load settings, or own client lifetime.
+create, update, or delete collections, select a default vector metric, embed,
+index, search, load settings, or own client lifetime.
 """
 
 from typing import Final
@@ -10,7 +10,7 @@ from typing import Final
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.common.client_exceptions import ResourceExhaustedResponse
 from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
-from qdrant_client.http.models import VectorParams
+from qdrant_client.http.models import Distance, VectorParams
 
 from energy_trading.application.errors import DependencyUnavailableError
 from energy_trading.infrastructure.vector_store.qdrant.document_vector import (
@@ -29,13 +29,14 @@ async def verify_qdrant_document_collection_ready(
     *,
     client: AsyncQdrantClient,
     config: QdrantDocumentVectorConfig,
+    distance: Distance,
 ) -> None:
     """Verify an existing collection has a compatible unnamed dense vector.
 
     Compatibility is unnamed ``VectorParams`` whose size equals
-    ``config.vector_size``. Named-vector mappings, missing dense configuration,
-    and provider failures fail closed. The configured vector metric is not
-    inspected.
+    ``config.vector_size`` and whose distance equals the caller-supplied
+    expected ``distance``. Named-vector mappings, missing dense configuration,
+    size or distance mismatch, and provider failures fail closed.
     """
 
     try:
@@ -48,4 +49,6 @@ async def verify_qdrant_document_collection_ready(
     if not isinstance(vectors, VectorParams):
         raise DependencyUnavailableError(_MSG_UNAVAILABLE)
     if vectors.size != config.vector_size:
+        raise DependencyUnavailableError(_MSG_UNAVAILABLE)
+    if vectors.distance != distance:
         raise DependencyUnavailableError(_MSG_UNAVAILABLE)
