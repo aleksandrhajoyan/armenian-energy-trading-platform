@@ -58,6 +58,7 @@ _PHASE2_PATH_NODES = (
 _PHASE3_PATH_NODES = (
     "workflow_entry",
     "forecasting",
+    "forecasting_success_transition",
 )
 _CONTRACT_PATH_NODES = (
     "workflow_entry",
@@ -69,6 +70,7 @@ _ALL_APPLICATION_NODES = (
     "parallel_ingestion",
     "parallel_ingestion_success_transition",
     "forecasting",
+    "forecasting_success_transition",
 )
 _INVALID_ENTRY_ROUTE_MESSAGE = (
     "Workflow entry routing requires contract running, ingestion running, "
@@ -377,7 +379,8 @@ def test_topology_routes_success_to_transition_and_failure_to_end() -> None:
         ("parallel_ingestion", "parallel_ingestion_success_transition"),
         ("parallel_ingestion", END),
         ("parallel_ingestion_success_transition", END),
-        ("forecasting", END),
+        ("forecasting", "forecasting_success_transition"),
+        ("forecasting_success_transition", END),
     }
     conditional = {
         (edge.source, edge.target)
@@ -689,7 +692,7 @@ async def test_unexpected_post_phase2_state_fails_closed_without_success_or_fail
     assert original.status is WorkflowStatus.RUNNING
 
 
-async def test_ainvoke_forecasting_running_invokes_step_once_and_stays_forecasting() -> None:
+async def test_ainvoke_forecasting_running_invokes_step_once_and_ends_risk_and_bid() -> None:
     first = diagnostic()
     second = AdapterDiagnostic(
         code="SCHEMA_AMBIGUOUS",
@@ -721,7 +724,7 @@ async def test_ainvoke_forecasting_running_invokes_step_once_and_stays_forecasti
     assert received.delivery_date == original.delivery_date
     assert received.correlation_id == original.correlation_id
     assert received.diagnostics == (first, second)
-    assert reconstructed.phase is WorkflowPhase.FORECASTING
+    assert reconstructed.phase is WorkflowPhase.RISK_AND_BID
     assert reconstructed.status is WorkflowStatus.RUNNING
     assert reconstructed.workflow_id == original.workflow_id
     assert reconstructed.portfolio_id == original.portfolio_id
@@ -744,7 +747,7 @@ async def test_ainvoke_forecasting_does_not_mutate_original_frozen_state() -> No
     assert original.workflow_id == "workflow-1"
 
 
-async def test_astream_runs_entry_then_forecasting() -> None:
+async def test_astream_runs_entry_then_forecasting_then_success_transition() -> None:
     original = _state(phase=WorkflowPhase.FORECASTING, status=WorkflowStatus.RUNNING)
     forecasting = _RecordingForecastingStep()
     compiled, step, handler, injected = _compile(forecasting_step=forecasting)
@@ -764,19 +767,23 @@ async def test_astream_runs_entry_then_forecasting() -> None:
     assert original.status is WorkflowStatus.RUNNING
 
 
-async def test_forecasting_invalid_request_propagates_without_retry() -> None:
+async def test_forecasting_invalid_request_skips_success_transition_without_retry() -> None:
     error = InvalidRequestError("phase 3 request is invalid")
     forecasting = _RecordingForecastingStep(error=error)
     compiled, step, handler, injected = _compile(forecasting_step=forecasting)
     original = _state(phase=WorkflowPhase.FORECASTING, status=WorkflowStatus.RUNNING)
+    node_order: list[str] = []
     with pytest.raises(InvalidRequestError) as captured:
-        await compiled.ainvoke(original)
+        async for chunk in compiled.astream(original, stream_mode="updates"):
+            node_order.extend(chunk.keys())
     assert captured.value is error
     assert injected is forecasting
     assert forecasting.calls == 1
     assert step.calls == 0
     assert isinstance(handler, _RecordingParallelIngestionFailureRuntimeHandler)
     assert handler.calls == 0
+    assert "forecasting_success_transition" not in node_order
+    assert node_order == ["workflow_entry"]
     assert original.phase is WorkflowPhase.FORECASTING
     assert original.status is WorkflowStatus.RUNNING
 
@@ -798,6 +805,7 @@ async def test_forecasting_dependency_unavailable_propagates_without_retry() -> 
     assert handler.calls == 0
     assert "risk" not in node_order
     assert "risk_and_bid" not in node_order
+    assert "forecasting_success_transition" not in node_order
     assert node_order == ["workflow_entry"]
     assert original.phase is WorkflowPhase.FORECASTING
     assert original.status is WorkflowStatus.RUNNING

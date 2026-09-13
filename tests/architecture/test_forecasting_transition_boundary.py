@@ -410,14 +410,43 @@ def test_workflow_step_and_ports_remain_unwired_to_the_transition() -> None:
         assert "forecasting_transition" not in source
 
 
-def test_graph_does_not_import_or_call_the_transition() -> None:
+def test_graph_delegates_to_published_transition_without_reimplementing_policy() -> None:
     names = imported_names(GRAPH_MODULE)
-    assert "advance_after_forecasting" not in names
+    assert "advance_after_forecasting" in names
     modules = imported_modules(GRAPH_MODULE)
-    assert "energy_trading.application.orchestration.forecasting_transition" not in modules
+    assert "energy_trading.application.orchestration.forecasting_transition" in modules
     graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
-    assert "advance_after_forecasting" not in graph_source
-    assert "forecasting_transition" not in graph_source
+    parsed = ast.parse(graph_source, filename=str(GRAPH_MODULE))
+    string_constants = {
+        node.value
+        for node in ast.walk(parsed)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert "forecasting" in string_constants
+    assert "forecasting_success_transition" in string_constants
+    transition_calls = 0
+    replace_calls = 0
+    constructed_states = 0
+    for node in ast.walk(parsed):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Name) and func.id == "advance_after_forecasting":
+            transition_calls += 1
+        elif isinstance(func, ast.Attribute) and func.attr == "advance_after_forecasting":
+            transition_calls += 1
+        elif isinstance(func, ast.Name) and func.id == "replace":
+            replace_calls += 1
+        elif isinstance(func, ast.Attribute) and func.attr == "replace":
+            replace_calls += 1
+        elif isinstance(func, ast.Name) and func.id == "WorkflowState":
+            constructed_states += 1
+    assert transition_calls == 1
+    assert replace_calls == 0
+    assert constructed_states == 0
+    identifiers = _identifier_names(GRAPH_MODULE)
+    assert "replace" not in identifiers
+    assert "RISK_AND_BID" not in graph_source
     transition_source = TRANSITION_MODULE.read_text(encoding="utf-8").lower()
     assert "langgraph" not in transition_source
 

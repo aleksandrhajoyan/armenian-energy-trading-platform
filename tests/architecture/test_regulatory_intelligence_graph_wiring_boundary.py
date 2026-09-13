@@ -260,6 +260,7 @@ def test_topology_keeps_terminal_regulatory_slice_with_forecasting_branch() -> N
     assert "parallel_ingestion" in string_constants
     assert "parallel_ingestion_success_transition" in string_constants
     assert "forecasting" in string_constants
+    assert "forecasting_success_transition" in string_constants
     add_node_count = 0
     add_edge_count = 0
     add_conditional_edges_count = 0
@@ -273,12 +274,11 @@ def test_topology_keeps_terminal_regulatory_slice_with_forecasting_branch() -> N
             add_edge_count += 1
         elif name == "add_conditional_edges":
             add_conditional_edges_count += 1
-    assert add_node_count == 5
-    assert add_edge_count == 4
+    assert add_node_count == 6
+    assert add_edge_count == 5
     assert add_conditional_edges_count == 2
     assert "advance_after_regulatory" not in source
     assert "advance_after_contract" not in source
-    assert "advance_after_forecasting" not in source
     assert "CONTRACT → INGESTION" not in source
     assert "PricingAndSales" not in source
     assert "PricingAndSalesAgent" not in source

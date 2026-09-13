@@ -412,7 +412,7 @@ def test_graph_remains_unwired_to_the_forecasting_success() -> None:
     assert "energy_trading.application.orchestration.forecasting_success" not in modules
     source = GRAPH_MODULE.read_text(encoding="utf-8")
     assert "ForecastingSuccess" not in source
-    assert "forecasting_success" not in source
+    assert "orchestration.forecasting_success" not in source
 
 
 def test_api_composition_does_not_import_or_construct_forecasting_success() -> None:

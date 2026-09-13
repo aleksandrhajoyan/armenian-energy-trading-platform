@@ -440,7 +440,6 @@ def test_context_and_execution_ports_remain_unwired_to_the_workflow_step() -> No
     assert "forecasting_workflow" in graph_source
     assert "ForecastingWorkflowContextPort" not in graph_source
     assert "ForecastingExecutionPort" not in graph_source
-    assert "advance_after_forecasting" not in graph_source
 
 
 def test_api_composition_does_not_import_or_construct_workflow_step() -> None:

@@ -118,6 +118,7 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
         "langgraph.graph",
         "langgraph.graph.state",
         "energy_trading.application.errors",
+        "energy_trading.application.orchestration.forecasting_transition",
         "energy_trading.application.orchestration.forecasting_workflow",
         "energy_trading.application.orchestration.parallel_ingestion_failure_runtime_handling",
         "energy_trading.application.orchestration.parallel_ingestion_transition",
@@ -136,6 +137,7 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
         "WorkflowPhase",
         "WorkflowState",
         "WorkflowStatus",
+        "advance_after_forecasting",
         "advance_after_parallel_ingestion",
     }
 )
@@ -526,7 +528,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "ForecastingExecutionPort" not in names
     assert "ForecastingWorkflowContextPort" not in names
     assert "ForecastingWorkflowStep" in names
-    assert "advance_after_forecasting" not in names
+    assert "advance_after_forecasting" in names
     assert "RegulatoryIntelligenceQueryExecutionService" not in names
     assert "RegulatoryIntelligenceWorkflowStep" not in names
     assert "RegulatoryIntelligenceWorkflowRequest" not in names
@@ -549,7 +551,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "energy_trading.application.orchestration.forecasting_execution" not in modules
     assert "energy_trading.application.orchestration.forecasting_context" not in modules
     assert "energy_trading.application.orchestration.forecasting_workflow" in modules
-    assert "energy_trading.application.orchestration.forecasting_transition" not in modules
+    assert "energy_trading.application.orchestration.forecasting_transition" in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_context" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_executor" not in modules
     assert "energy_trading.application.orchestration.failure_policy" not in modules
@@ -733,6 +735,62 @@ def test_forecasting_node_delegates_once_to_step_run_without_try_except() -> Non
     assert isinstance(returned.value.value, ast.Call)
 
 
+def test_forecasting_success_transition_node_delegates_once_without_try_except() -> None:
+    tree = ast.parse(GRAPH_MODULE.read_text(encoding="utf-8"), filename=str(GRAPH_MODULE))
+    class_def = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name == "_Phase3SuccessTransitionNode"
+    )
+    call_method = next(
+        node
+        for node in class_def.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "__call__"
+    )
+    except_handlers = [
+        node for node in ast.walk(call_method) if isinstance(node, ast.ExceptHandler)
+    ]
+    assert except_handlers == []
+    control = [
+        type(node).__name__
+        for node in ast.walk(call_method)
+        if isinstance(node, (ast.If, ast.IfExp, ast.Match, ast.For, ast.While, ast.Try, ast.With))
+    ]
+    assert control == []
+    helper = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_forecasting_success_transition"
+    )
+    helper_except = [node for node in ast.walk(helper) if isinstance(node, ast.ExceptHandler)]
+    assert helper_except == []
+    helper_control = [
+        type(node).__name__
+        for node in ast.walk(helper)
+        if isinstance(node, (ast.If, ast.IfExp, ast.Match, ast.For, ast.While, ast.Try, ast.With))
+    ]
+    assert helper_control == []
+    transition_calls = [
+        node
+        for node in ast.walk(helper)
+        if isinstance(node, ast.Call)
+        and (
+            (isinstance(node.func, ast.Name) and node.func.id == "advance_after_forecasting")
+            or (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "advance_after_forecasting"
+            )
+        )
+    ]
+    assert len(transition_calls) == 1
+    assert [ast.unparse(arg) for arg in transition_calls[0].args] == ["state"]
+    statements = [node for node in helper.body if not isinstance(node, ast.Expr)]
+    assert len(statements) == 1
+    returned = statements[0]
+    assert isinstance(returned, ast.Return)
+    assert isinstance(returned.value, ast.Call)
+
+
 def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     source = GRAPH_MODULE.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(GRAPH_MODULE))
@@ -746,12 +804,14 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "parallel_ingestion" in string_constants
     assert "parallel_ingestion_success_transition" in string_constants
     assert "forecasting" in string_constants
+    assert "forecasting_success_transition" in string_constants
     assert "parallel_ingestion_failure_transition" not in string_constants
     add_node_count = 0
     add_edge_count = 0
     add_conditional_edges_count = 0
     constructed: list[str] = []
     transition_calls = 0
+    forecasting_transition_calls = 0
     handler_calls = 0
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -770,6 +830,8 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
             add_conditional_edges_count += 1
         elif name == "advance_after_parallel_ingestion":
             transition_calls += 1
+        elif name == "advance_after_forecasting":
+            forecasting_transition_calls += 1
         elif name == "handle":
             handler_calls += 1
         if name in {
@@ -792,13 +854,13 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
             "RegulatoryIntelligenceWorkflowNodeAdapter",
             "ForecastingWorkflowContextPort",
             "ForecastingWorkflowStep",
-            "advance_after_forecasting",
         }:
             constructed.append(name)
-    assert add_node_count == 5
-    assert add_edge_count == 4
+    assert add_node_count == 6
+    assert add_edge_count == 5
     assert add_conditional_edges_count == 2
     assert transition_calls == 1
+    assert forecasting_transition_calls == 1
     assert handler_calls == 1
     assert constructed == []
     assert "FailurePolicyPort" not in source
@@ -836,8 +898,8 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "forecasting_context" not in source
     assert "ForecastingWorkflowStep" in source
     assert "forecasting_workflow" in source
-    assert "advance_after_forecasting" not in source
-    assert "forecasting_transition" not in source
+    assert "advance_after_forecasting" in source
+    assert "forecasting_transition" in source
     assert "RegulatoryIntelligenceWorkflowNodeAdapter" in source
     assert "regulatory_intelligence_workflow_node" in source
     assert "RegulatoryIntelligenceWorkflowStep" not in source

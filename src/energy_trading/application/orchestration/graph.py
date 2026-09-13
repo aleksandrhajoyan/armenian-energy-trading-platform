@@ -28,6 +28,9 @@ Ownership:
 * Chunk 126 ``ForecastingWorkflowStep``: owns resolve → execute →
   record. The graph does not reconstruct that sequence and does not
   choose forecasting execution order.
+* Chunk 127 ``advance_after_forecasting``: owns the
+  forecasting/running → risk_and_bid/running replacement. The graph
+  does not reimplement that policy.
 
 The topology is ``START → workflow_entry``, then conditional routing:
 
@@ -35,17 +38,21 @@ The topology is ``START → workflow_entry``, then conditional routing:
 * ingestion/running → ``parallel_ingestion``, then
   ingestion/running → ``parallel_ingestion_success_transition`` → ``END``
   or ingestion/failed → ``END``
-* forecasting/running → ``forecasting`` → ``END``
+* forecasting/running → ``forecasting`` →
+  ``forecasting_success_transition`` → ``END``
 
 ``workflow_entry`` remains an async no-op. There is no Pricing & Sales
 node, no contract-to-ingestion phase transition, no persistence, retry,
-fallback, or Phase-3 success-transition wiring in this module.
+fallback, or Phase-3 failure-transition wiring in this module.
 """
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from energy_trading.application.errors import InvalidRequestError
+from energy_trading.application.orchestration.forecasting_transition import (
+    advance_after_forecasting,
+)
 from energy_trading.application.orchestration.forecasting_workflow import (
     ForecastingWorkflowStep,
 )
@@ -72,6 +79,7 @@ _REGULATORY_INTELLIGENCE_NODE = "regulatory_intelligence"
 _PARALLEL_INGESTION_NODE = "parallel_ingestion"
 _PARALLEL_INGESTION_SUCCESS_TRANSITION_NODE = "parallel_ingestion_success_transition"
 _FORECASTING_NODE = "forecasting"
+_FORECASTING_SUCCESS_TRANSITION_NODE = "forecasting_success_transition"
 _INVALID_ENTRY_ROUTE_MESSAGE = (
     "Workflow entry routing requires contract running, ingestion running, "
     "or forecasting running status."
@@ -96,6 +104,12 @@ async def _parallel_ingestion_success_transition(state: WorkflowState) -> Workfl
     """Thin node that applies the published Phase 2 success transition."""
 
     return advance_after_parallel_ingestion(state)
+
+
+async def _forecasting_success_transition(state: WorkflowState) -> WorkflowState:
+    """Thin node that applies the published Phase 3 success transition."""
+
+    return advance_after_forecasting(state)
 
 
 def _route_after_workflow_entry(state: WorkflowState) -> str:
@@ -173,6 +187,10 @@ def build_workflow_graph(
         async def __call__(self, state: WorkflowState) -> WorkflowState:
             return await forecasting_step.run(state)
 
+    class _Phase3SuccessTransitionNode:
+        async def __call__(self, state: WorkflowState) -> WorkflowState:
+            return await _forecasting_success_transition(state)
+
     graph.add_node(_WORKFLOW_ENTRY_NODE, _WorkflowEntryNode())
     graph.add_node(_REGULATORY_INTELLIGENCE_NODE, _RegulatoryIntelligenceNode())
     graph.add_node(_PARALLEL_INGESTION_NODE, _ParallelIngestionNode())
@@ -181,6 +199,10 @@ def build_workflow_graph(
         _Phase2SuccessTransitionNode(),
     )
     graph.add_node(_FORECASTING_NODE, _ForecastingNode())
+    graph.add_node(
+        _FORECASTING_SUCCESS_TRANSITION_NODE,
+        _Phase3SuccessTransitionNode(),
+    )
     graph.add_edge(START, _WORKFLOW_ENTRY_NODE)
     graph.add_conditional_edges(
         _WORKFLOW_ENTRY_NODE,
@@ -203,5 +225,6 @@ def build_workflow_graph(
         },
     )
     graph.add_edge(_PARALLEL_INGESTION_SUCCESS_TRANSITION_NODE, END)
-    graph.add_edge(_FORECASTING_NODE, END)
+    graph.add_edge(_FORECASTING_NODE, _FORECASTING_SUCCESS_TRANSITION_NODE)
+    graph.add_edge(_FORECASTING_SUCCESS_TRANSITION_NODE, END)
     return graph.compile()

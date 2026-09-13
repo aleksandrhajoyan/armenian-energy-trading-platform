@@ -32,6 +32,7 @@ _CONTRACT_APPLICATION_NODES = (
 _PHASE3_APPLICATION_NODES = (
     "workflow_entry",
     "forecasting",
+    "forecasting_success_transition",
 )
 
 
@@ -197,6 +198,7 @@ def test_topology_includes_terminal_regulatory_slice() -> None:
         "parallel_ingestion",
         "parallel_ingestion_success_transition",
         "forecasting",
+        "forecasting_success_transition",
     }
     edges = {(edge.source, edge.target) for edge in representation.edges}
     assert edges == {
@@ -208,7 +210,8 @@ def test_topology_includes_terminal_regulatory_slice() -> None:
         ("parallel_ingestion", "parallel_ingestion_success_transition"),
         ("parallel_ingestion", END),
         ("parallel_ingestion_success_transition", END),
-        ("forecasting", END),
+        ("forecasting", "forecasting_success_transition"),
+        ("forecasting_success_transition", END),
     }
     conditional = {
         (edge.source, edge.target)
@@ -327,7 +330,7 @@ async def test_forecasting_running_skips_regulatory_and_phase2() -> None:
     assert step.calls == 0
     assert handler.calls == 0
     assert forecasting.calls == 2
-    assert reconstructed.phase is WorkflowPhase.FORECASTING
+    assert reconstructed.phase is WorkflowPhase.RISK_AND_BID
     assert reconstructed.status is WorkflowStatus.RUNNING
     assert original.phase is WorkflowPhase.FORECASTING
     assert original.status is WorkflowStatus.RUNNING

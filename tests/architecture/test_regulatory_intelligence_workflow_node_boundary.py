@@ -486,6 +486,8 @@ def test_graph_may_import_node_adapter_but_not_context_or_step() -> None:
     assert "workflow_entry" in string_constants
     assert "parallel_ingestion" in string_constants
     assert "regulatory_intelligence" in string_constants
+    assert "forecasting" in string_constants
+    assert "forecasting_success_transition" in string_constants
     add_node_count = 0
     add_edge_count = 0
     add_conditional_edges_count = 0
@@ -499,8 +501,8 @@ def test_graph_may_import_node_adapter_but_not_context_or_step() -> None:
             add_edge_count += 1
         elif name == "add_conditional_edges":
             add_conditional_edges_count += 1
-    assert add_node_count == 5
-    assert add_edge_count == 4
+    assert add_node_count == 6
+    assert add_edge_count == 5
     assert add_conditional_edges_count == 2
 
 
