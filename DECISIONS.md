@@ -2276,3 +2276,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Already-built Consumer Load feature rows can be partitioned into a usable chronological training/evaluation boundary without temporal leakage. Model fitting, wider feature engineering, cross-validation, champion selection, and Phase 3 execution remain future work.
 
 ---
+
+## ADR-147 — Consumer Load lag-24h ordinary least squares is a one-feature ML fit, not a runtime predictor
+
+- **Status:** Accepted
+- **Context:** ADR-146 remains Accepted and is not superseded. Chunk 135 published chronological exact 24-hour lag supervised feature rows. Chunk 136 published an explicit UTC chronological split. The first learned Consumer Load numerical artifact should stay a narrow, dependency-free OLS fit over those already-built training rows. sklearn/NumPy/pandas, a generic `Model`/`Trainer`/`Estimator`/`ml/common` framework, and coupling fit to prediction or MAE comparison would invent abstractions this repository does not own.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-146 remain Accepted and are not superseded.
+  - Chunk 137 adds ML-owned `ConsumerLoadLag24hLinearRegressionFit` and `fit_consumer_load_lag_24h_linear_regression` under `energy_trading.ml.consumer_load`. The fitter consumes already-built `ConsumerLoadLag24hFeatureRow` training rows only. It does not consume `ConsumerLoadChronologicalFeatureSplit` and does not import the Chunk 136 splitter.
+  - The single feature is `lag_24h_mw`. The target is `target_value_mw`. Ordinary least squares uses `x_mean`, `y_mean`, `slope = numerator / denominator`, and `intercept_mw = y_mean - slope * x_mean`. Parameters are not rounded, scaled, regularized, or clamped.
+  - `intercept_mw` is a signed `float`, not `NonNegativeMW`. A negative intercept is mathematically valid and is preserved.
+  - At least two training rows are required. Zero `lag_24h_mw` variance (`denominator == 0.0`) fails closed. Mixed consumers and duplicate/out-of-order target timestamps fail closed as existing `InvalidRequestError`. The function does not sort, deduplicate, or group automatically.
+  - Non-finite computed slope or intercept fails closed. There is no prediction, MAE/RMSE/R², persistence comparison, model registry, or runtime wiring.
+  - No sklearn/NumPy/pandas/scipy/statsmodels, LightGBM/XGBoost, generic trainer/model framework, or `ml/common` is introduced. The fitter remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** Consumer Load now has an offline one-feature OLS parameter fit independent of split ownership, prediction, and evaluation. Trained-model prediction, trained-model MAE, persistence-versus-trained comparison, wider feature engineering, LightGBM/XGBoost, and Phase 3 execution remain future work.
+
+---
