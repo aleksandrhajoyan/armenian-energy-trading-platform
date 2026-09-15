@@ -2304,6 +2304,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - `predicted_value_mw` is a signed finite `float`. A negative finite prediction is valid experimental evidence and is not clamped, discarded, or converted to `NonNegativeMW`. This artifact is not a live `LoadForecastPoint`.
   - Empty evaluation input, mixed consumers, duplicate/out-of-order target timestamps, non-finite slope or intercept, and non-finite calculated predictions fail closed as existing `InvalidRequestError`. The function does not sort, group, or silently repair input.
   - Metrics, persistence-versus-trained comparison, model serialization, and runtime wiring are not introduced. No sklearn/NumPy/pandas, LightGBM/XGBoost, generic `Predictor`/`Model`/`ml/common` framework, or live inference adapter is introduced. The predictor remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
-- **Consequences:** Already-fitted Consumer Load OLS parameters can be applied to an evaluation partition without becoming live application inference. Trained-model MAE, persistence-versus-trained comparison, LightGBM/XGBoost, and Phase 3 execution remain future work.
+- **Consequences:** Already-fitted Consumer Load OLS parameters can be applied to an evaluation partition without becoming live application inference. Scoring those prediction artifacts as MAE is a later accepted decision (ADR-149). Persistence-versus-trained comparison, LightGBM/XGBoost, and Phase 3 execution remain future work.
+
+---
+
+## ADR-149 — Consumer Load lag-24h OLS MAE scores prediction artifacts and is not persistence comparison
+
+- **Status:** Accepted
+- **Context:** ADR-148 remains Accepted and is not superseded. Chunk 138 published offline OLS evaluation predictions. Scoring those artifacts as MAE is a separate offline experiment from Chunk 134 persistence MAE, from live `ConsumerLoadForecastModelPort` inference, and from persistence-versus-trained comparison or model selection. Reusing `PreviousDayPersistenceMAEResult`, depending on Chunk 134, or introducing a generic `Metric`/`Evaluator`/`ml/common` framework would invent abstractions this repository does not own. Refitting or repredicting inside the evaluator would mix transformation ownership.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-148 remain Accepted and are not superseded.
+  - Chunk 139 adds ML-owned `ConsumerLoadLag24hLinearRegressionMAEResult` and `evaluate_consumer_load_lag_24h_linear_regression_mae` under `energy_trading.ml.consumer_load`. The evaluator consumes already-produced `ConsumerLoadLag24hLinearRegressionPrediction` values only. It does not import the Chunk 135 feature builder, Chunk 136 splitter, Chunk 137 fitter, Chunk 138 predictor function, or Chunk 134 persistence MAE.
+  - The metric is exactly MAE: `mae_mw = sum(|predicted_value_mw - actual_value_mw|) / case_count`, with `case_count = len(predictions)`. Values are not rounded, clamped, or converted. A negative finite prediction is valid and is scored with the ordinary absolute difference.
+  - Empty prediction input, mixed consumers, duplicate/out-of-order target timestamps, non-finite predicted or actual values, and non-finite computed MAE fail closed as existing `InvalidRequestError`. The function does not sort, group, skip malformed cases, or return `case_count=0`.
+  - RMSE/MSE/MAPE/R²/bias, persistence-versus-trained comparison, champion selection, model serialization, and runtime wiring are not introduced. No sklearn/NumPy/pandas, LightGBM/XGBoost, generic `Metric`/`Evaluator`/`ml/common` framework, or live inference adapter is introduced. The evaluator remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** Already-produced Consumer Load OLS predictions can be scored as MW MAE without becoming live application inference and without comparing against persistence. Persistence-versus-trained comparison, LightGBM/XGBoost, and Phase 3 execution remain future work.
 
 ---
