@@ -2350,3 +2350,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Consumer Load now has a richer two-lag supervised row without rewriting the published one-feature contract. Splitting, two-feature regression, live inference, and Phase 3 execution remain future work.
 
 ---
+
+## ADR-152 — Consumer Load 24h+168h rows split on a separate chronological contract
+
+- **Status:** Accepted
+- **Context:** ADR-146 and ADR-151 remain Accepted and are not superseded. Chunk 136 published an explicit UTC chronological split for one-feature `ConsumerLoadLag24hFeatureRow` values. Chunk 141 published a richer exact `T-24h` plus `T-168h` row. Routing those richer rows through the Chunk 136 splitter, widening `ConsumerLoadChronologicalFeatureSplit`, or introducing a generic `DatasetSplit`/`FeatureSplit`/`ml/common` splitter would rewrite a published experiment contract or invent an abstraction this repository does not own. Random, ratio, and sklearn `train_test_split` / `TimeSeriesSplit` partitions would hide the cutoff or move later timestamps into training.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-151 remain Accepted and are not superseded.
+  - Chunk 142 adds ML-owned `ConsumerLoadLag24h168hChronologicalFeatureSplit` and `split_consumer_load_lag_24h_168h_feature_rows_chronologically` under `energy_trading.ml.consumer_load`. The splitter consumes already-built `ConsumerLoadLag24h168hFeatureRow` values and returns ML preparation tuples, not workflow state and not `LoadForecastPoint`.
+  - The published Chunk 136 one-feature split contract remains unchanged. Chunk 142 does not call `split_consumer_load_feature_rows_chronologically` and does not reuse `ConsumerLoadChronologicalFeatureSplit`.
+  - The cutoff is an explicit caller-supplied canonical UTC timestamp. It is not stored on the result and is not derived from percentages, row counts, random seeds, clocks, delivery date, or workflow state.
+  - `training_rows` contain only rows whose `target_timestamp < cutoff`. `evaluation_rows` contain only rows whose `target_timestamp >= cutoff`. A row equal to the cutoff is evaluation, never training. Original row order is preserved. The function does not sort, shuffle, sample, stratify, rebuild features, or inspect `ConsumptionRecord` history.
+  - Input must already be strictly chronological. Duplicate or decreasing timestamps fail closed as existing `InvalidRequestError`. Mixed consumer identities fail closed. Empty input and either empty partition fail closed. There is no silent repair.
+  - No generic `Dataset`/`DatasetSplit`/`Splitter`/`ml/common` framework, training, prediction, MAE, persistence comparison, LightGBM/XGBoost/sklearn, or DAM split is introduced. The splitter remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** Already-built two-lag Consumer Load feature rows can be partitioned into a usable chronological training/evaluation boundary without temporal leakage and without rewriting the published one-feature split. Two-feature regression fitting, live inference, and Phase 3 execution remain future work.
+
+---
