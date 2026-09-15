@@ -2261,3 +2261,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Consumer Load now has one explicit supervised feature row for later training experiments. Wider feature engineering, shared ML utilities, trained models, DAM features, and Phase 3 execution remain future work.
 
 ---
+
+## ADR-146 — Consumer Load feature rows split at an explicit UTC cutoff
+
+- **Status:** Accepted
+- **Context:** ADR-145 remains Accepted and is not superseded. Chunk 135 published chronological exact 24-hour lag supervised feature rows. A future trained Consumer Load model needs a leakage-safe training/evaluation boundary. Ratio splits, random shuffles, sklearn `train_test_split`, and `TimeSeriesSplit` would move later timestamps into training or hide the cutoff. A generic `Dataset`/`Splitter`/`ml/common` framework would invent abstractions this repository does not own.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-145 remain Accepted and are not superseded.
+  - Chunk 136 adds ML-owned `ConsumerLoadChronologicalFeatureSplit` and `split_consumer_load_feature_rows_chronologically` under `energy_trading.ml.consumer_load`. The splitter consumes already-built `ConsumerLoadLag24hFeatureRow` values and returns ML preparation tuples, not workflow state and not `LoadForecastPoint`.
+  - The cutoff is an explicit caller-supplied canonical UTC timestamp. It is not derived from percentages, row counts, random seeds, clocks, delivery date, or workflow state.
+  - `training_rows` contain only rows whose `target_timestamp < cutoff`. `evaluation_rows` contain only rows whose `target_timestamp >= cutoff`. A row equal to the cutoff is evaluation, never training. Original row order is preserved. The function does not sort, shuffle, sample, or stratify.
+  - Input must be strictly chronological: each adjacent pair satisfies `rows[i].target_timestamp < rows[i + 1].target_timestamp`. Duplicate or decreasing timestamps fail closed as existing `InvalidRequestError`. Mixed consumer identities fail closed. Empty input and either empty partition fail closed. There is no silent repair, first-win/last-win, or optional/sentinel split.
+  - No generic `Dataset`/`DatasetSplit`/`Splitter`/`ml/common` framework, training, LightGBM/XGBoost/sklearn, or DAM split is introduced. The splitter remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** Already-built Consumer Load feature rows can be partitioned into a usable chronological training/evaluation boundary without temporal leakage. Model fitting, wider feature engineering, cross-validation, champion selection, and Phase 3 execution remain future work.
+
+---
