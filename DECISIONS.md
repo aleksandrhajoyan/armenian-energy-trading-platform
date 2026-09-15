@@ -2218,3 +2218,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Consumer Load now has one concrete, unwired numerical implementation that can be compared later against trained models. Feature pipelines, LightGBM/XGBoost, DAM baselines, shared `ml/common`, and Phase 3 execution remain future work. Phase 3 remains incomplete.
 
 ---
+
+## ADR-143 — Previous-day persistence backtest cases use exact historical pairs
+
+- **Status:** Accepted
+- **Context:** ADR-142 remains Accepted and is not superseded. Chunk 132 published an unwired exact `T - 24h` Consumer Load inference baseline that fails closed when a requested target lacks a unique exact lag. Offline evaluation of that baseline needs deterministic historical cases without turning missing early-history observations into inference failures, and without introducing a generic ML evaluation framework.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-142 remain Accepted and are not superseded.
+  - Chunk 133 adds ML-owned `PreviousDayPersistenceBacktestCase` and `build_previous_day_persistence_backtest_cases` under `energy_trading.ml.consumer_load`. The builder consumes canonical `ConsumptionRecord` history and returns ML evaluation cases, not workflow state and not `LoadForecastPoint`.
+  - A case exists only for an exact pair: actual at `T` and predicted MW copied from the unique observation at exactly `T - 24 hours`. Output is sorted by `target_timestamp` ascending. Input history order does not control output. Canonical MW values are copied unchanged with no MW↔MWh conversion and no residual/MAE/MSE/RMSE/MAPE calculation.
+  - A historical candidate whose exact lag is missing is skipped, not imputed and not raised. This differs from Chunk 132 live inference, where an explicit requested target missing exact lag fails closed.
+  - Mixed-consumer history and any duplicate historical timestamp fail closed as existing `InvalidRequestError` before any case is returned. Empty history returns `()`.
+  - No generic `ml/common` framework, evaluator, metric interface, model registry, or dataset repository is introduced. The builder remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** The Chunk 132 baseline can later be scored against these exact-pair cases. Metrics, training, feature engineering, DAM backtests, and Phase 3 execution remain future work.
+
+---
