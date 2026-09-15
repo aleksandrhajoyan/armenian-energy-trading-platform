@@ -2414,3 +2414,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Already-produced two-feature Consumer Load OLS predictions can be scored as MW MAE without becoming live application inference and without comparing against persistence or one-feature OLS. LightGBM/XGBoost and Phase 3 execution remain future work.
 
 ---
+
+## ADR-156 — Consumer Load one-feature versus two-feature OLS MAE comparison requires aligned artifacts, not aggregate shortcuts
+
+- **Status:** Accepted
+- **Context:** ADR-149, ADR-150, and ADR-155 remain Accepted and are not superseded. Chunk 139 published one-feature OLS MAE over prediction artifacts. Chunk 145 published two-feature OLS MAE over prediction artifacts. Comparing those two aggregate MAE result objects alone does not prove they were scored over the same consumer, the same target timestamps, and the same actual MW labels. Widening the published Chunk 140 persistence comparison, introducing a generic `Comparator`/`Metric`/`ml/common` framework, a winner field, or a relative-change field would rewrite a published experiment contract or invent model-selection policy this repository does not own. Recalculating MAE inside the comparison would mix transformation ownership.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-155 remain Accepted and are not superseded.
+  - Chunk 146 adds ML-owned `ConsumerLoadLag24hVsLag24h168hOLSMAEComparison` and `compare_consumer_load_lag_24h_vs_lag_24h_168h_ols_mae` under `energy_trading.ml.consumer_load`. The comparison consumes already-produced `ConsumerLoadLag24hLinearRegressionPrediction` values and already-produced `ConsumerLoadLag24h168hLinearRegressionPrediction` values. It does not import feature builders, splitters, fitters, prediction functions, or the Chunk 140 persistence comparison.
+  - Fair comparison requires a non-empty equal-length cohort, exactly one shared consumer, strictly increasing target timestamps, pairwise timestamp identity, and pairwise actual-MW identity. Predicted values are intentionally allowed to differ, including a negative finite prediction. The function does not sort, truncate with `zip`, intersect timestamps, apply tolerances, or drop unmatched cases.
+  - After alignment succeeds, scoring is delegated to published `evaluate_consumer_load_lag_24h_linear_regression_mae` and `evaluate_consumer_load_lag_24h_168h_linear_regression_mae`. Chunk 146 does not reimplement MAE. The result fields are exactly `case_count`, `lag_24h_mae_mw`, and `lag_24h_168h_mae_mw`.
+  - Winner selection, relative change, acceptance thresholds, RMSE/MSE/MAPE/R², persistence comparison, three-way comparison, model serialization, and runtime wiring are not introduced. No sklearn/NumPy/pandas, LightGBM/XGBoost, generic comparison/`ml/common` framework, or live inference adapter is introduced. The comparison remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** One-feature and two-feature OLS MAE can be reported side by side only after identity and actual-label alignment. The comparison is evidence machinery, not a production-model choice and not empirical proof that the richer model is better. LightGBM/XGBoost and Phase 3 execution remain future work.
+
+---
