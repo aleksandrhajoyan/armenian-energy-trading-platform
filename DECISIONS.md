@@ -2366,3 +2366,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Already-built two-lag Consumer Load feature rows can be partitioned into a usable chronological training/evaluation boundary without temporal leakage and without rewriting the published one-feature split. Two-feature regression fitting, live inference, and Phase 3 execution remain future work.
 
 ---
+
+## ADR-153 — Consumer Load 24h+168h OLS is a separate two-feature fit, not a reuse of Chunk 137
+
+- **Status:** Accepted
+- **Context:** ADR-147 and ADR-152 remain Accepted and are not superseded. Chunk 137 published a one-feature OLS fit over `ConsumerLoadLag24hFeatureRow` training rows. Chunk 141 published richer exact `T-24h` plus `T-168h` rows, and Chunk 142 published a separate chronological split of those rows. Routing the richer training rows through `fit_consumer_load_lag_24h_linear_regression`, widening `ConsumerLoadLag24hLinearRegressionFit`, or introducing a generic `Model`/`Trainer`/`Estimator`/`ml/common` regression framework would rewrite a published experiment contract or invent an abstraction this repository does not own. sklearn/NumPy/pandas, ridge/pseudo-inverse fallback, and coupling fit to prediction or MAE would mix later ownership.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-152 remain Accepted and are not superseded.
+  - Chunk 143 adds ML-owned `ConsumerLoadLag24h168hLinearRegressionFit` and `fit_consumer_load_lag_24h_168h_linear_regression` under `energy_trading.ml.consumer_load`. The fitter consumes already-built `ConsumerLoadLag24h168hFeatureRow` training rows only. It does not consume `ConsumerLoadLag24h168hChronologicalFeatureSplit` and does not import the Chunk 142 splitter.
+  - The published Chunk 137 one-feature contract remains unchanged. Chunk 143 does not call `fit_consumer_load_lag_24h_linear_regression` and does not reuse `ConsumerLoadLag24hLinearRegressionFit`.
+  - The two features are `lag_24h_mw` and `lag_168h_mw`. The target is `target_value_mw`. Ordinary least squares uses the centered two-feature normal equations with intercept: `determinant = s11 * s22 - s12 * s12`, then `lag_24h_coefficient = (t1 * s22 - t2 * s12) / determinant`, `lag_168h_coefficient = (t2 * s11 - t1 * s12) / determinant`, and `intercept_mw = y_mean - lag_24h_coefficient * x1_mean - lag_168h_coefficient * x2_mean`. Parameters are not rounded, scaled, regularized, or forced non-negative.
+  - All three parameters are signed `float` values, not `NonNegativeMW`. Negative coefficients and a negative intercept are mathematically valid and are preserved.
+  - At least three training rows are required. A non-positive centered determinant fails closed. Mixed consumers and duplicate/out-of-order target timestamps fail closed as existing `InvalidRequestError`. The function does not sort, deduplicate, drop a feature, add epsilon, or fall back to Chunk 137.
+  - Non-finite intermediate OLS aggregates, computed coefficients, or intercept fail closed. There is no prediction, MAE/RMSE/R², persistence or one-feature comparison, model registry, or runtime wiring.
+  - No sklearn/NumPy/pandas/scipy/statsmodels, LightGBM/XGBoost, generic trainer/model/matrix framework, or `ml/common` is introduced. The fitter remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** Consumer Load now has an offline two-feature OLS parameter fit independent of split ownership, prediction, and evaluation, without rewriting the published one-feature fit. Applying those parameters to evaluation rows is future work. Two-lag versus one-lag or persistence comparison, live inference, and Phase 3 execution remain future work.
+
+---
