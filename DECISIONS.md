@@ -2399,3 +2399,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Already-fitted two-feature Consumer Load OLS parameters can be applied to an evaluation partition without becoming live application inference and without rewriting the published one-feature predictor. Scoring those prediction artifacts as MAE, comparing them with persistence or one-feature OLS, live inference, and Phase 3 execution remain future work.
 
 ---
+
+## ADR-155 — Consumer Load 24h+168h OLS MAE scores prediction artifacts and is not model comparison
+
+- **Status:** Accepted
+- **Context:** ADR-154 remains Accepted and is not superseded. Chunk 144 published offline two-feature OLS evaluation predictions. Scoring those artifacts as MAE is a separate offline experiment from Chunk 139 one-feature MAE, from live `ConsumerLoadForecastModelPort` inference, and from persistence or one-feature comparison or model selection. Reusing `ConsumerLoadLag24hLinearRegressionMAEResult`, depending on Chunk 139, or introducing a generic `Metric`/`Evaluator`/`ml/common` framework would rewrite a published experiment contract or invent an abstraction this repository does not own. Refitting or repredicting inside the evaluator would mix transformation ownership.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-154 remain Accepted and are not superseded.
+  - Chunk 145 adds ML-owned `ConsumerLoadLag24h168hLinearRegressionMAEResult` and `evaluate_consumer_load_lag_24h_168h_linear_regression_mae` under `energy_trading.ml.consumer_load`. The evaluator consumes already-produced `ConsumerLoadLag24h168hLinearRegressionPrediction` values only. It does not import the Chunk 141 feature builder, Chunk 142 splitter, Chunk 143 fitter, Chunk 144 predictor function, or Chunk 139 one-feature MAE.
+  - The published Chunk 139 one-feature evaluation contract remains unchanged. Chunk 145 does not call `evaluate_consumer_load_lag_24h_linear_regression_mae` and does not reuse `ConsumerLoadLag24hLinearRegressionMAEResult`.
+  - The metric is exactly MAE: `mae_mw = sum(|predicted_value_mw - actual_value_mw|) / case_count`, with `case_count = len(predictions)`. Values are not rounded, clamped, or converted. A negative finite prediction is valid and is scored with the ordinary absolute difference.
+  - Empty prediction input, mixed consumers, duplicate/out-of-order target timestamps, non-finite predicted or actual values, and non-finite computed MAE fail closed as existing `InvalidRequestError`. The function does not sort, group, skip malformed cases, or return `case_count=0`.
+  - RMSE/MSE/MAPE/R²/bias, persistence or one-feature comparison, champion selection, model serialization, and runtime wiring are not introduced. No sklearn/NumPy/pandas, LightGBM/XGBoost, generic `Metric`/`Evaluator`/`ml/common` framework, or live inference adapter is introduced. The evaluator remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** Already-produced two-feature Consumer Load OLS predictions can be scored as MW MAE without becoming live application inference and without comparing against persistence or one-feature OLS. LightGBM/XGBoost and Phase 3 execution remain future work.
+
+---
