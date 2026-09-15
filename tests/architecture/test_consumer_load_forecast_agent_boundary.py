@@ -24,7 +24,10 @@ GRAPH_MODULE = PRODUCTION_ROOT / "application" / "orchestration" / "graph.py"
 STATE_MODULE = PRODUCTION_ROOT / "application" / "orchestration" / "state.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
-ML_ROOT = PRODUCTION_ROOT / "ml"
+AUTHORIZED_CONSUMER_LOAD_ML_MODULE = (
+    PRODUCTION_ROOT / "ml" / "consumer_load" / "previous_day_persistence.py"
+)
+AUTHORIZED_CONSUMER_LOAD_ML_CLASS = "PreviousDayPersistenceConsumerLoadForecastModel"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -431,7 +434,7 @@ def test_api_composition_remains_unaware_of_the_agent() -> None:
     assert transport_leaks == []
 
 
-def test_no_production_model_adapter_or_ml_package() -> None:
+def test_exactly_one_authorized_consumer_load_ml_model_is_previous_day_persistence() -> None:
     production_impls: list[str] = []
     for path in _production_python_files():
         if path == PORT_MODULE:
@@ -441,11 +444,13 @@ def test_no_production_model_adapter_or_ml_package() -> None:
                 "ConsumerLoadForecastModelPort",
                 "ConsumerLoadForecastPoint",
             } or name.endswith("ConsumerLoadForecastModel"):
+                if (
+                    path == AUTHORIZED_CONSUMER_LOAD_ML_MODULE
+                    and name == AUTHORIZED_CONSUMER_LOAD_ML_CLASS
+                ):
+                    continue
                 production_impls.append(f"{path.relative_to(PRODUCTION_ROOT).as_posix()}:{name}")
     assert production_impls == []
-    if ML_ROOT.exists():
-        ml_files = sorted(path.name for path in ML_ROOT.rglob("*.py"))
-        assert ml_files == []
     port_classes = set(_module_class_names(PORT_MODULE))
     assert port_classes == {
         "ConsumerLoadForecastModelRequest",

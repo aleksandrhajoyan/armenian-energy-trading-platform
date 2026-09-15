@@ -541,8 +541,16 @@ def test_no_production_dam_price_forecast_model_adapter() -> None:
                 production_impls.append(f"{path.relative_to(PRODUCTION_ROOT)}:{name}")
     assert production_impls == []
     if ML_ROOT.exists():
-        ml_files = sorted(path.name for path in ML_ROOT.rglob("*.py"))
-        assert ml_files == []
+        dam_ml_impls: list[str] = []
+        for path in ML_ROOT.rglob("*.py"):
+            for name in _module_class_names(path):
+                if name in {
+                    "DAMPriceForecastModelPort",
+                    "DAMPriceForecastPoint",
+                    "DAMMarketPriceRecord",
+                } or name.endswith("DAMPriceForecastModel"):
+                    dam_ml_impls.append(f"{path.relative_to(PRODUCTION_ROOT)}:{name}")
+        assert dam_ml_impls == []
     port_classes = set(_module_class_names(PORT_MODULE))
     assert port_classes == {
         "DAMPriceForecastModelRequest",

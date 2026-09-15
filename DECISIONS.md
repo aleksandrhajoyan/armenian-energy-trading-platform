@@ -2203,3 +2203,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** A future Consumer Load model implementation can construct every required `LoadForecastPoint` field from published request data without invented metadata. MW history remains sufficient for a later persistence baseline. That baseline is still not implemented. Phase 3 remains incomplete.
 
 ---
+
+## ADR-142 — First Consumer Load numerical baseline is exact previous-day persistence
+
+- **Status:** Accepted
+- **Context:** ADR-128 through ADR-141 remain Accepted and are not superseded. Chunk 131 made `forecast_run_id` and `generated_at` caller-supplied on `ConsumerLoadForecastModelRequest`, so a Consumer Load model can emit complete `LoadForecastPoint` values without invented identity. The first numerical Consumer Load implementation should be a simple, auditable baseline rather than a trained tree model. Nearest-neighbor, interpolation, weekly lag, calendar-day, and rolling-average rules would hide missing data and invent load.
+- **Decision:**
+  - ADR-128, ADR-129, ADR-130, ADR-131, ADR-132, ADR-133, ADR-134, ADR-135, ADR-136, ADR-137, ADR-138, ADR-139, ADR-140, and ADR-141 remain Accepted and are not superseded. ADR-008 remains Accepted: numerical forecasting belongs to `ml`, not to LLMs or application agents. ADR-037 remains Accepted: `WorkflowState` stays the seven-field snapshot.
+  - Chunk 132 adds ML-owned `PreviousDayPersistenceConsumerLoadForecastModel` under `energy_trading.ml.consumer_load`. It structurally implements existing `ConsumerLoadForecastModelPort` without inheriting a Protocol, generic `ModelPort`, registry, factory, or service locator.
+  - For each requested target timestamp `T`, the baseline copies canonical MW from the unique `ConsumptionRecord` whose timestamp is exactly `T - 24 hours`. The rule is exact elapsed 24-hour persistence, not previous local calendar day, nearest timestamp, previous available observation, same weekday, one-week lag, rolling average, interpolation, or resampling.
+  - Output order matches `request.target_timestamps`. Duplicate requested targets are not silently deduplicated. `forecast_run_id`, `generated_at`, and `consumer_id` pass through from the request. `value_mw` is copied unchanged with no MW↔MWh conversion.
+  - Missing exact lag and duplicate exact lag observations fail closed as existing application-owned `InvalidRequestError`. Partial tuples are not returned. There is no retry or fallback in this adapter.
+  - The baseline is a benchmark/reference implementation, not a production-trained champion model and not Armenia-specific load behavior. It remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`. No Phase-3 execution-order decision is made.
+- **Consequences:** Consumer Load now has one concrete, unwired numerical implementation that can be compared later against trained models. Feature pipelines, LightGBM/XGBoost, DAM baselines, shared `ml/common`, and Phase 3 execution remain future work. Phase 3 remains incomplete.
+
+---
