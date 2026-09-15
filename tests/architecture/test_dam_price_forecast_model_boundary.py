@@ -168,6 +168,8 @@ ALLOWED_REQUEST_FIELDS = {
 }
 
 ALLOWED_CONSUMER_REQUEST_FIELDS = {
+    "forecast_run_id": "EntityId",
+    "generated_at": "UtcDateTime",
     "consumer_id": "EntityId",
     "history": "tuple[ConsumptionRecord, ...]",
     "target_timestamps": "tuple[UtcDateTime, ...]",

@@ -66,6 +66,9 @@ FORBIDDEN_PREFIXES = (
     "mlflow",
     "optuna",
     "n8n",
+    "uuid",
+    "random",
+    "secrets",
 )
 
 FORBIDDEN_TYPE_NAMES = frozenset(
@@ -94,6 +97,12 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "RetryPolicy",
         "FailurePolicyPort",
         "WorkflowState",
+        "ForecastRunContext",
+        "InferenceContext",
+        "ForecastMetadata",
+        "ModelMetadata",
+        "ClockPort",
+        "UuidFactory",
     }
 )
 
@@ -120,6 +129,13 @@ FORBIDDEN_REQUEST_FIELDS = frozenset(
         "tenant",
         "value_mwh",
         "energy_mwh",
+        "clock",
+        "uuid",
+        "model_catalog",
+        "forecast_run_context",
+        "inference_context",
+        "forecast_metadata",
+        "model_metadata",
     }
 )
 
@@ -150,6 +166,8 @@ ALLOWED_MODULE_IMPORTS = frozenset(
 )
 
 ALLOWED_REQUEST_FIELDS = {
+    "forecast_run_id": "EntityId",
+    "generated_at": "UtcDateTime",
     "consumer_id": "EntityId",
     "history": "tuple[ConsumptionRecord, ...]",
     "target_timestamps": "tuple[UtcDateTime, ...]",
@@ -354,27 +372,51 @@ def test_forecast_is_async_and_narrowly_typed() -> None:
     assert ast.unparse(forecast_fn.returns) == "tuple[LoadForecastPoint, ...]"
 
 
-def test_request_contains_only_consumer_id_canonical_history_and_explicit_targets() -> None:
+def test_request_contains_explicit_inference_identity_consumer_history_and_targets() -> None:
     request_def = _class_def(PORT_MODULE, "ConsumerLoadForecastModelRequest")
     keywords = _dataclass_keywords(request_def)
     assert keywords == {"frozen": True, "slots": True}
     annotations = _annassign_field_annotations(PORT_MODULE, "ConsumerLoadForecastModelRequest")
     assert annotations == ALLOWED_REQUEST_FIELDS
-    assert tuple(annotations) == ("consumer_id", "history", "target_timestamps")
+    assert tuple(annotations) == (
+        "forecast_run_id",
+        "generated_at",
+        "consumer_id",
+        "history",
+        "target_timestamps",
+    )
     leaked = sorted(name for name in annotations if name in FORBIDDEN_REQUEST_FIELDS)
     assert leaked == []
     assert "horizon" not in annotations
+    assert "metadata" not in annotations
+    assert "provider" not in annotations
+    assert "model_version" not in annotations
+    for item in request_def.body:
+        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+            assert item.value is None
     source = PORT_MODULE.read_text(encoding="utf-8")
     assert "ConsumptionRecord" in source
     assert "LoadForecastPoint" in source
+    assert "datetime.now" not in source
+    assert "uuid4" not in source
+    assert "uuid." not in source
+    assert "Clock" not in source
     observations = OBSERVATIONS_MODULE.read_text(encoding="utf-8")
     assert "class ConsumptionRecord" in observations
     assert "value_mw" in observations
     assert "class ConsumptionRecord" not in source
     imported = imported_names(PORT_MODULE)
     assert "EntityId" in imported
+    assert "UtcDateTime" in imported
     modules = imported_modules(PORT_MODULE)
     assert "energy_trading.domain.value_objects.quantities" in modules
+    assert "energy_trading.domain.value_objects.time" in modules
+    assert "uuid" not in modules
+    assert "random" not in modules
+    assert "secrets" not in modules
+    forecasting = FORECASTING_MODULE.read_text(encoding="utf-8")
+    assert "class LoadForecastPoint" in forecasting
+    assert "class LoadForecastPoint" not in source
 
 
 def test_historical_consumption_type_is_reused_not_duplicated() -> None:

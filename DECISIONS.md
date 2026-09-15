@@ -2189,3 +2189,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Local/dev and offline tests can resolve prepared Phase-3 plans and record all-two-success output without a database. Phase 3 remains incomplete without a concrete `ForecastingExecutionPort` implementation and production composition. Production still has no durable forecasting workflow-context implementation and no Chief Orchestrator composition root.
 
 ---
+
+## ADR-141 — Consumer load inference identity is explicit at the model-request boundary
+
+- **Status:** Accepted
+- **Context:** ADR-128 through ADR-140 remain Accepted and are not superseded. A proposed Consumer Load previous-day persistence baseline could copy MW history at exact `T − 24 hours` into `LoadForecastPoint.value_mw` without unit invention. Canonical `LoadForecastPoint` also requires `forecast_run_id` and `generated_at`. Published `ConsumerLoadForecastModelRequest` carried only `consumer_id`, `history`, and `target_timestamps`. Emitting a complete forecast point would have required a UUID, `datetime.now()`, a constant, or another hidden dependency. That is forbidden. Adding a generic `ForecastRunContext`, clock port, or UUID factory would invent abstractions beyond this specific request.
+- **Decision:**
+  - ADR-128, ADR-129, ADR-130, ADR-131, ADR-132, ADR-133, ADR-134, ADR-135, ADR-136, ADR-137, ADR-138, ADR-139, and ADR-140 remain Accepted and are not superseded. ADR-037 remains Accepted: `WorkflowState` stays the seven-field snapshot and is not expanded with forecast payloads. `forecast_run_id` is not assumed equal to `workflow_id`.
+  - Chunk 131 extends application-owned frozen/slots `ConsumerLoadForecastModelRequest` with exactly two new required fields: `forecast_run_id: EntityId` and `generated_at: UtcDateTime`. The request now has exactly `forecast_run_id`, `generated_at`, `consumer_id`, `history`, and `target_timestamps`. There are no defaults, optionality, clock, UUID factory, provider, model-version, or generic metadata fields.
+  - The caller owns supplying those identity values. The request DTO, `ConsumerLoadForecastAgent`, and future ML adapters must not generate them. `generated_at` is not inferred from target timestamps or historical observation timestamps.
+  - `async forecast(*, request: ConsumerLoadForecastModelRequest) -> tuple[LoadForecastPoint, ...]` is unchanged. `LoadForecastPoint` is unchanged. `DAMPriceForecastModelRequest` is unchanged; Consumer Load and DAM do not share a run identity by this chunk.
+  - No concrete baseline adapter, `energy_trading.ml` package, previous-day lookup, `ForecastingExecutionPort` implementation, or Phase-3 execution-order decision is introduced.
+- **Consequences:** A future Consumer Load model implementation can construct every required `LoadForecastPoint` field from published request data without invented metadata. MW history remains sufficient for a later persistence baseline. That baseline is still not implemented. Phase 3 remains incomplete.
+
+---

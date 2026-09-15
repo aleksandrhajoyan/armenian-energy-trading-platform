@@ -61,6 +61,8 @@ def _point(**overrides: object) -> LoadForecastPoint:
 
 def _request(**overrides: object) -> ConsumerLoadForecastModelRequest:
     values: dict[str, object] = {
+        "forecast_run_id": "run-1",
+        "generated_at": utc(),
         "consumer_id": "consumer-1",
         "history": (consumption(),),
         "target_timestamps": (utc(hour=16),),
@@ -99,6 +101,8 @@ async def test_run_delegates_exact_request_and_returns_exact_points() -> None:
     result = await _as_agent_port(agent).run(request)
     assert len(model.calls) == 1
     assert model.calls[0] is request
+    assert model.calls[0].forecast_run_id is request.forecast_run_id
+    assert model.calls[0].generated_at is request.generated_at
     assert result is model.points
     assert result == (first, second)
     assert result[0] is first

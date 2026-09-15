@@ -125,6 +125,8 @@ ALLOWED_AGENT_IMPORTS = frozenset(
 )
 
 ALLOWED_REQUEST_FIELDS = {
+    "forecast_run_id": "EntityId",
+    "generated_at": "UtcDateTime",
     "consumer_id": "EntityId",
     "history": "tuple[ConsumptionRecord, ...]",
     "target_timestamps": "tuple[UtcDateTime, ...]",
@@ -361,6 +363,10 @@ def test_run_delegates_exactly_once_to_forecast_without_reconstruction() -> None
     assert "try:" not in source
     assert "except " not in source
     assert "LoadForecastPoint(" not in source
+    assert "datetime.now" not in source
+    assert "uuid" not in source.lower()
+    assert "forecast_run_id =" not in source
+    assert "generated_at =" not in source
 
 
 def test_chunk_118_port_shape_is_unchanged() -> None:

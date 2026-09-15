@@ -38,6 +38,8 @@ _OTHER_WORKFLOW_ID = "workflow-forecasting-2"
 
 def _load_request(*, consumer_id: str = "consumer-1") -> ConsumerLoadForecastModelRequest:
     return ConsumerLoadForecastModelRequest(
+        forecast_run_id="run-1",
+        generated_at=utc(),
         consumer_id=consumer_id,
         history=(consumption(consumer_id=consumer_id),),
         target_timestamps=(utc(hour=16),),

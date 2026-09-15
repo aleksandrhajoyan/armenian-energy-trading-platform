@@ -16,6 +16,9 @@ Ownership:
 * Historical observations reuse canonical ``ConsumptionRecord`` (load in MW).
   Forecast points reuse canonical ``LoadForecastPoint`` (predicted load in MW).
   This port does not convert MW to MWh or invent a second history schema.
+* ``forecast_run_id`` and ``generated_at`` are caller-supplied inference
+  identity. This module does not invent those values, clocks, or defaults.
+  Future adapters must pass those values through rather than invent them.
 * Agent construction, LangGraph, persistence, and training remain deferred.
 
 Returned tuples are already canonical. An empty tuple is a valid successful
@@ -37,25 +40,41 @@ from energy_trading.domain.value_objects.time import UtcDateTime, to_utc
 
 @dataclass(frozen=True, slots=True)
 class ConsumerLoadForecastModelRequest:
-    """Immutable model-inference request: consumer, MW history, and targets.
+    """Immutable model-inference request: identity, consumer, MW history, targets.
 
     This is an application orchestration DTO, not a domain entity and not a
     workflow snapshot. It carries no model path, hyperparameters, provider,
     feature registry, weather series, or persistence handles.
 
-    ``consumer_id`` identifies the consumer being forecast and is required even
-    when ``history`` is empty. Identity is never inferred from observations.
-    ``history`` reuses existing ``ConsumptionRecord`` values whose quantity is
-    load/power in MW; when present, every record must belong to that same
-    consumer. ``target_timestamps`` are explicit timezone-aware UTC instants;
-    an integer horizon such as ``24`` is not a substitute.
+    ``forecast_run_id`` is the caller-supplied opaque identity for this
+    inference run. ``generated_at`` is the caller-supplied UTC generation
+    timestamp for the same run. Neither is derived from history, targets,
+    ``workflow_id``, or a clock. ``consumer_id`` identifies the consumer
+    being forecast and is required even when ``history`` is empty. Identity
+    is never inferred from observations. ``history`` reuses existing
+    ``ConsumptionRecord`` values whose quantity is load/power in MW; when
+    present, every record must belong to that same consumer.
+    ``target_timestamps`` are explicit timezone-aware UTC instants; an
+    integer horizon such as ``24`` is not a substitute.
     """
 
+    forecast_run_id: EntityId
+    generated_at: UtcDateTime
     consumer_id: EntityId
     history: tuple[ConsumptionRecord, ...]
     target_timestamps: tuple[UtcDateTime, ...]
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "forecast_run_id",
+            _require_non_empty("forecast_run_id", self.forecast_run_id),
+        )
+        object.__setattr__(
+            self,
+            "generated_at",
+            _require_aware_utc("generated_at", self.generated_at),
+        )
         object.__setattr__(self, "consumer_id", _require_non_empty("consumer_id", self.consumer_id))
         history = _require_consumption_records(self.history)
         _require_history_matches_consumer(self.consumer_id, history)
@@ -83,6 +102,7 @@ class ConsumerLoadForecastModelPort(Protocol):
     * return ``tuple[LoadForecastPoint, ...]``
     * treat an empty result tuple as a valid successful outcome
     * must not convert MW history into MWh or invent missing points
+    * must not generate ``forecast_run_id`` or ``generated_at``
     * must not call an LLM to calculate the numeric forecast
 
     Unavailable or unusable model backends become sanitized

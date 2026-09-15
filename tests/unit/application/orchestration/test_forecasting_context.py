@@ -60,6 +60,8 @@ class _StructuralForecastingWorkflowContextFake:
 
 def _load_request() -> ConsumerLoadForecastModelRequest:
     return ConsumerLoadForecastModelRequest(
+        forecast_run_id="run-1",
+        generated_at=utc(),
         consumer_id="consumer-1",
         history=(consumption(),),
         target_timestamps=(utc(hour=16),),

@@ -20,6 +20,8 @@ from tests.unit.domain._factories import amd_price, consumption, utc
 
 def _load_request(**overrides: object) -> ConsumerLoadForecastModelRequest:
     values: dict[str, object] = {
+        "forecast_run_id": "run-1",
+        "generated_at": utc(),
         "consumer_id": "consumer-1",
         "history": (consumption(),),
         "target_timestamps": (utc(hour=16),),
