@@ -2233,3 +2233,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** The Chunk 132 baseline can later be scored against these exact-pair cases. Metrics, training, feature engineering, DAM backtests, and Phase 3 execution remain future work.
 
 ---
+
+## ADR-144 — First Consumer Load baseline metric is MW MAE over exact-pair cases
+
+- **Status:** Accepted
+- **Context:** ADR-142 and ADR-143 remain Accepted and are not superseded. Chunk 132 published an unwired exact `T - 24h` Consumer Load inference baseline. Chunk 133 published chronological exact-pair backtest cases. Offline scoring of that baseline needs one deterministic metric without introducing a generic ML metrics framework, additional error measures, or runtime wiring.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-143 remain Accepted and are not superseded.
+  - Chunk 134 adds ML-owned `PreviousDayPersistenceMAEResult` and `evaluate_previous_day_persistence_mae` under `energy_trading.ml.consumer_load`. The evaluator consumes already-built `PreviousDayPersistenceBacktestCase` values and returns ML evaluation results, not workflow state and not `LoadForecastPoint`.
+  - MAE is the first baseline metric: `MAE = mean(|predicted_value_mw - actual_value_mw|)`. The result fields are exactly `case_count` and `mae_mw`. MAE remains in MW with no MW↔MWh conversion, weighting, rounding, or residual report.
+  - An empty case tuple is invalid and fails closed as existing `InvalidRequestError`. There is no zero, NaN, infinity, optional, or sentinel MAE.
+  - No generic `ml/common` metrics module, evaluator interface, RMSE, MSE, MAPE, training, or feature engineering is introduced. The evaluator remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** Exact-pair persistence cases can be scored as MW MAE offline. RMSE/MAPE, generic metrics frameworks, DAM metrics, and Phase 3 execution remain future work.
+
+---
