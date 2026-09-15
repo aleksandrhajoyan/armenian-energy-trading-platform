@@ -2335,3 +2335,18 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Persistence and trained OLS MAE can be reported side by side only after identity and actual-label alignment. The comparison is evidence machinery, not a production-model choice and not empirical proof from Armenian data. LightGBM/XGBoost and Phase 3 execution remain future work.
 
 ---
+
+## ADR-151 — Consumer Load weekly lag is a separate exact `T-168h` feature row
+
+- **Status:** Accepted
+- **Context:** ADR-145 remains Accepted and is not superseded. Chunk 135 published a one-feature exact `T - 24h` supervised row. Extending that published DTO with `lag_168h_mw`, routing the richer row through the Chunk 135 builder, or treating “same weekday” as weekly lag would rewrite an already-published experiment contract or substitute calendar labels for elapsed time. Coupling this construction to Chunk 136 splitting or later training would mix transformation ownership.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-150 remain Accepted and are not superseded.
+  - Chunk 141 adds ML-owned `ConsumerLoadLag24h168hFeatureRow` and `build_consumer_load_lag_24h_168h_feature_rows` under `energy_trading.ml.consumer_load`. The builder consumes canonical `ConsumptionRecord` history directly and returns ML supervised rows, not workflow state and not `LoadForecastPoint`.
+  - The published Chunk 135 one-feature contract remains unchanged. Chunk 141 does not add `lag_168h_mw` to `ConsumerLoadLag24hFeatureRow` and does not call `build_consumer_load_lag_24h_feature_rows`.
+  - A row exists only when exact observations exist at `T`, `T - 24 hours`, and `T - 168 hours`. Weekly lag means 168 elapsed hours, not a weekday label. Canonical MW values are copied unchanged. Output is sorted by `target_timestamp` ascending.
+  - Missing either required lag omits that target. There is no imputation, interpolation, nearest-neighbor substitution, 167/169-hour substitute, or averaging. Mixed-consumer history and any duplicate historical timestamp fail closed as existing `InvalidRequestError` before any row is returned. Empty history returns `()`.
+  - Feature construction remains independent from chronological splitting, OLS fitting, prediction, MAE evaluation, and persistence-versus-trained comparison. No calendar/weather/rolling features, generic `ml/common` framework, or live inference adapter is introduced. The builder remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** Consumer Load now has a richer two-lag supervised row without rewriting the published one-feature contract. Splitting, two-feature regression, live inference, and Phase 3 execution remain future work.
+
+---
