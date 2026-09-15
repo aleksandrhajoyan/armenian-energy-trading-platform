@@ -2289,6 +2289,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - At least two training rows are required. Zero `lag_24h_mw` variance (`denominator == 0.0`) fails closed. Mixed consumers and duplicate/out-of-order target timestamps fail closed as existing `InvalidRequestError`. The function does not sort, deduplicate, or group automatically.
   - Non-finite computed slope or intercept fails closed. There is no prediction, MAE/RMSE/R², persistence comparison, model registry, or runtime wiring.
   - No sklearn/NumPy/pandas/scipy/statsmodels, LightGBM/XGBoost, generic trainer/model framework, or `ml/common` is introduced. The fitter remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
-- **Consequences:** Consumer Load now has an offline one-feature OLS parameter fit independent of split ownership, prediction, and evaluation. Trained-model prediction, trained-model MAE, persistence-versus-trained comparison, wider feature engineering, LightGBM/XGBoost, and Phase 3 execution remain future work.
+- **Consequences:** Consumer Load now has an offline one-feature OLS parameter fit independent of split ownership, prediction, and evaluation. Applying those parameters to evaluation rows is a later accepted decision (ADR-148). Trained-model MAE, persistence-versus-trained comparison, wider feature engineering, LightGBM/XGBoost, and Phase 3 execution remain future work.
+
+---
+
+## ADR-148 — Consumer Load lag-24h OLS prediction is an offline evaluation artifact, not live inference
+
+- **Status:** Accepted
+- **Context:** ADR-147 remains Accepted and is not superseded. Chunk 137 published a one-feature OLS parameter fit. Applying those parameters to evaluation rows is a separate offline experiment from live `ConsumerLoadForecastModelPort` inference. Clamping negative predictions to zero, wrapping them as `NonNegativeMW`, or emitting `LoadForecastPoint` would hide model evidence and mix evaluation artifacts with application forecasts. Coupling prediction to MAE or persistence comparison would invent a later chunk.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-147 remain Accepted and are not superseded.
+  - Chunk 138 adds ML-owned `ConsumerLoadLag24hLinearRegressionPrediction` and `predict_consumer_load_lag_24h_linear_regression` under `energy_trading.ml.consumer_load`. The predictor consumes an already-constructed `ConsumerLoadLag24hLinearRegressionFit` plus already-built `ConsumerLoadLag24hFeatureRow` evaluation rows. It does not rebuild history, import the Chunk 136 splitter, or call the Chunk 137 fitter.
+  - The formula is exactly `predicted_value_mw = fit.slope * row.lag_24h_mw + fit.intercept_mw`. Evaluation identity (`consumer_id`, `target_timestamp`) and `actual_value_mw` from `row.target_value_mw` are copied. Input order is preserved.
+  - `predicted_value_mw` is a signed finite `float`. A negative finite prediction is valid experimental evidence and is not clamped, discarded, or converted to `NonNegativeMW`. This artifact is not a live `LoadForecastPoint`.
+  - Empty evaluation input, mixed consumers, duplicate/out-of-order target timestamps, non-finite slope or intercept, and non-finite calculated predictions fail closed as existing `InvalidRequestError`. The function does not sort, group, or silently repair input.
+  - Metrics, persistence-versus-trained comparison, model serialization, and runtime wiring are not introduced. No sklearn/NumPy/pandas, LightGBM/XGBoost, generic `Predictor`/`Model`/`ml/common` framework, or live inference adapter is introduced. The predictor remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** Already-fitted Consumer Load OLS parameters can be applied to an evaluation partition without becoming live application inference. Trained-model MAE, persistence-versus-trained comparison, LightGBM/XGBoost, and Phase 3 execution remain future work.
 
 ---
