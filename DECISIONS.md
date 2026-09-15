@@ -2247,3 +2247,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Exact-pair persistence cases can be scored as MW MAE offline. RMSE/MAPE, generic metrics frameworks, DAM metrics, and Phase 3 execution remain future work.
 
 ---
+
+## ADR-145 — First Consumer Load supervised feature is exact 24-hour load lag
+
+- **Status:** Accepted
+- **Context:** ADR-142, ADR-143, and ADR-144 remain Accepted and are not superseded. Chunk 132 published an unwired exact `T - 24h` Consumer Load inference baseline. Chunk 133 published chronological exact-pair backtest cases. Chunk 134 published MW MAE over those cases. A future trained Consumer Load model needs an explicit supervised feature representation without inventing a generic feature framework, calendar/timezone features, or additional lags.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-144 remain Accepted and are not superseded.
+  - Chunk 135 adds ML-owned `ConsumerLoadLag24hFeatureRow` and `build_consumer_load_lag_24h_feature_rows` under `energy_trading.ml.consumer_load`. The builder consumes canonical `ConsumptionRecord` history and returns ML supervised rows, not workflow state and not `LoadForecastPoint`.
+  - The first explicit numerical feature is exact elapsed 24-hour load lag: `lag_24h_mw` is copied from the unique observation at exactly `T - 24 hours`. The supervised label is canonical target MW: `target_value_mw` is copied from the observation at `T`. Output is sorted by `target_timestamp` ascending. Input history order does not control output. Canonical MW values are copied unchanged with no MW↔MWh conversion.
+  - A historical candidate whose exact lag is missing is skipped, not imputed and not raised. Mixed-consumer history and any duplicate historical timestamp fail closed as existing `InvalidRequestError` before any row is returned. Empty history returns `()`.
+  - No calendar, time-of-day, weekday, holiday, weather, hydro, generation, news, price, weekly, rolling, or additional lag features are introduced. No generic `ml/common` framework, `Feature`/`FeatureVector`/`FeatureSet`/`FeatureRegistry`/`FeaturePipeline`/`TrainingRow` abstraction, training, or LightGBM/XGBoost is introduced. The builder does not depend on Chunk 132 inference, Chunk 133 backtest cases, or Chunk 134 MAE evaluation. It remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** Consumer Load now has one explicit supervised feature row for later training experiments. Wider feature engineering, shared ML utilities, trained models, DAM features, and Phase 3 execution remain future work.
+
+---
