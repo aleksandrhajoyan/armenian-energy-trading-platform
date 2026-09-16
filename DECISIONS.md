@@ -2538,3 +2538,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Callers can extract attributed forecasting TaskGroup leaves without putting raw exception text on `WorkflowState`. Phase 3 still has no classification, policy decision, action execution, terminal runtime routing, or retry/fallback.
 
 ---
+
+## ADR-164 — Forecasting single-agent failure classification produces a sanitized application-owned fact
+
+- **Status:** Accepted
+- **Context:** Chunk 152 published `ForecastingAgentFailure` attribution at the concurrent forecasting executor boundary. Chunk 153 published `extract_forecasting_agent_failures` for nested `ExceptionGroup` / `BaseExceptionGroup` traversal. Downstream `FailurePolicyContext` requires a stable sanitized `error_code` plus canonical agent identity, but exception text, class names, and tracebacks must never become policy facts. The published Phase 2 analogue owns frozen `ParallelIngestionFailureFact` and `classify_parallel_ingestion_agent_failure` in one module. Reusing that Phase-2 DTO or classifier for Phase 3 would mix ingestion identity into forecasting. Folding one-leaf classification together with tuple classification, selection, attempt tracking, `FailurePolicyContext` construction, or LangGraph catch/conditional routing would freeze independently reviewable concerns.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-128 through ADR-163 remain Accepted and are not superseded.
+  - Application owns frozen `ForecastingFailureFact` and synchronous `classify_forecasting_agent_failure(failure: ForecastingAgentFailure) -> ForecastingFailureFact` in `forecasting_failure_fact.py`. This is one Phase-3-specific DTO plus one classifier, not a generic exception framework, registry, factory, or policy service.
+  - Chunk 152 remains the owner of task→agent attribution. Chunk 153 remains the owner of ExceptionGroup attributed-leaf extraction. Chunk 154 owns only sanitized classification of exactly one already-attributed leaf.
+  - The fact fields are exactly canonical `AgentName` and a stable `error_code`. There is no exception object, message, traceback, attempt number, workflow state, diagnostic, retryable flag, severity, timestamp, or provider/vendor field.
+  - When `failure.__cause__` is an `ApplicationError`, the published application error `code` is reused unchanged. There is no second mapping table for existing application errors.
+  - Non-application causes and a missing `__cause__` collapse to one stable sanitized code: `forecasting_unexpected_failure`. Codes are never derived from Python exception class names, module names, messages, repr, traceback, or vendor type names.
+  - The classifier inspects only `failure.__cause__`. It does not mutate the attribution wrapper or the chained cause. Exception text never appears on the fact. Agent identity comes exclusively from `ForecastingAgentFailure.agent_name`. There is no Consumer versus DAM ranking.
+  - Tuple classification, multi-failure selection, attempt tracking, `FailurePolicyContext` construction, policy decision, action execution, `fail_after_forecasting` invocation, diagnostics mutation, and LangGraph routing remain deferred.
+  - `ParallelForecastingExecutionService`, `extract_forecasting_agent_failures`, `ForecastingWorkflowStep`, `fail_after_forecasting`, graph topology, and `WorkflowState` remain unchanged.
+- **Consequences:** Callers can turn one attributed forecasting leaf into a sanitized `AgentName` + `error_code` fact without selecting among failures or invoking policy. Phase 3 still has no tuple classification, selection, policy decision, action execution, terminal runtime routing, or retry/fallback.
+
+---

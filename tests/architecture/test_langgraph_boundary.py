@@ -58,6 +58,7 @@ FORECASTING_TRANSITION_MODULE = ORCHESTRATION_ROOT / "forecasting_transition.py"
 FORECASTING_FAILURE_TRANSITION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_transition.py"
 FORECASTING_AGENT_FAILURE_MODULE = ORCHESTRATION_ROOT / "forecasting_agent_failure.py"
 FORECASTING_EXCEPTION_GROUP_MODULE = ORCHESTRATION_ROOT / "forecasting_exception_group.py"
+FORECASTING_FAILURE_FACT_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_fact.py"
 AGENTS_ROOT = PRODUCTION_ROOT / "application" / "agents"
 AGENT_BASE = AGENTS_ROOT / "base.py"
 PORTS_ROOT = PRODUCTION_ROOT / "application" / "ports"
@@ -482,6 +483,17 @@ def test_forecasting_exception_group_module_remains_langgraph_free() -> None:
     )
 
 
+def test_forecasting_failure_fact_module_remains_langgraph_free() -> None:
+    names = imported_names(FORECASTING_FAILURE_FACT_MODULE)
+    assert "langgraph" not in names
+    assert "langchain" not in names
+    assert "langchain_core" not in names
+    modules = imported_modules(FORECASTING_FAILURE_FACT_MODULE)
+    assert not any(
+        is_forbidden(module, ("langgraph", "langchain", "langchain_core")) for module in modules
+    )
+
+
 def test_regulatory_intelligence_workflow_node_module_remains_langgraph_free() -> None:
     names = imported_names(REGULATORY_INTELLIGENCE_WORKFLOW_NODE_MODULE)
     assert "langgraph" not in names
@@ -581,6 +593,8 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "fail_after_forecasting" not in names
     assert "ForecastingAgentFailure" not in names
     assert "extract_forecasting_agent_failures" not in names
+    assert "classify_forecasting_agent_failure" not in names
+    assert "ForecastingFailureFact" not in names
     assert "RegulatoryIntelligenceQueryExecutionService" not in names
     assert "RegulatoryIntelligenceWorkflowStep" not in names
     assert "RegulatoryIntelligenceWorkflowRequest" not in names
@@ -608,6 +622,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "energy_trading.application.orchestration.forecasting_failure_transition" not in modules
     assert "energy_trading.application.orchestration.forecasting_agent_failure" not in modules
     assert "energy_trading.application.orchestration.forecasting_exception_group" not in modules
+    assert "energy_trading.application.orchestration.forecasting_failure_fact" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_context" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_executor" not in modules
     assert "energy_trading.application.orchestration.failure_policy" not in modules
@@ -963,6 +978,9 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "forecasting_agent_failure" not in source
     assert "extract_forecasting_agent_failures" not in source
     assert "forecasting_exception_group" not in source
+    assert "classify_forecasting_agent_failure" not in source
+    assert "ForecastingFailureFact" not in source
+    assert "forecasting_failure_fact" not in source
     assert "RegulatoryIntelligenceWorkflowNodeAdapter" in source
     assert "regulatory_intelligence_workflow_node" in source
     assert "RegulatoryIntelligenceWorkflowStep" not in source

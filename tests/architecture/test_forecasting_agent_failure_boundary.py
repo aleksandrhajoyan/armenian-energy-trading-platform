@@ -28,6 +28,7 @@ EXECUTION_MODULE = ORCHESTRATION_ROOT / "forecasting_execution.py"
 GRAPH_MODULE = ORCHESTRATION_ROOT / "graph.py"
 STATE_MODULE = ORCHESTRATION_ROOT / "state.py"
 EXCEPTION_GROUP_MODULE = ORCHESTRATION_ROOT / "forecasting_exception_group.py"
+FAILURE_FACT_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_fact.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 
@@ -282,6 +283,12 @@ def test_policy_graph_and_handling_remain_unwired_to_attribution() -> None:
     assert "ForecastingAgentFailure" in extractor_names
     extractor_modules = imported_modules(EXCEPTION_GROUP_MODULE)
     assert "energy_trading.application.orchestration.forecasting_agent_failure" in extractor_modules
+    classifier_names = imported_names(FAILURE_FACT_MODULE)
+    assert "ForecastingAgentFailure" in classifier_names
+    classifier_modules = imported_modules(FAILURE_FACT_MODULE)
+    assert (
+        "energy_trading.application.orchestration.forecasting_agent_failure" in classifier_modules
+    )
 
 
 def test_api_composition_does_not_import_or_construct_attribution() -> None:

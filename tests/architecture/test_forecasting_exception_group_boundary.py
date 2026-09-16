@@ -101,6 +101,7 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "ForecastingWorkflowContextPort",
         "ForecastingWorkflowStep",
         "ParallelForecastingExecutionService",
+        "ForecastingFailureFact",
         "ConsumerLoadForecastAgent",
         "DAMPriceForecastAgent",
         "StateGraph",
@@ -133,6 +134,8 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "extract_parallel_ingestion_agent_failures",
         "ParallelIngestionFailureFact",
         "classify_parallel_ingestion_agent_failure",
+        "classify_forecasting_agent_failure",
+        "ForecastingFailureFact",
         "ParallelForecastingExecutionService",
         "ForecastingWorkflowStep",
         "registry",
@@ -262,6 +265,8 @@ def test_extraction_module_does_not_import_outer_layers_or_vendors() -> None:
     assert "ParallelIngestionAgentFailure" not in names
     assert "extract_parallel_ingestion_agent_failures" not in names
     assert "fail_after_forecasting" not in names
+    assert "ForecastingFailureFact" not in names
+    assert "classify_forecasting_agent_failure" not in names
     leaked_names = sorted(name for name in names if name in FORBIDDEN_TYPE_NAMES)
     assert leaked_names == []
 
