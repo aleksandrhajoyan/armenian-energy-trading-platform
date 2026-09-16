@@ -266,6 +266,7 @@ def test_executor_does_not_import_outer_layers_or_vendors() -> None:
     assert "ExceptionGroup" not in names
     assert "extract_forecasting_agent_failures" not in names
     assert "classify_forecasting_agent_failure" not in names
+    assert "classify_forecasting_agent_failures" not in names
     assert "ForecastingFailureFact" not in names
 
 
@@ -496,8 +497,10 @@ def test_graph_remains_unwired_to_the_executor() -> None:
     assert "extract_forecasting_agent_failures" not in names
     assert "forecasting_exception_group" not in source
     assert "classify_forecasting_agent_failure" not in names
+    assert "classify_forecasting_agent_failures" not in names
     assert "ForecastingFailureFact" not in names
     assert "forecasting_failure_fact" not in source
+    assert "forecasting_failure_classification" not in source
 
 
 def test_api_composition_does_not_import_or_construct_executor() -> None:

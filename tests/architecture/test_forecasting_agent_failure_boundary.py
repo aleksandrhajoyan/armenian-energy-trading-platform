@@ -29,6 +29,7 @@ GRAPH_MODULE = ORCHESTRATION_ROOT / "graph.py"
 STATE_MODULE = ORCHESTRATION_ROOT / "state.py"
 EXCEPTION_GROUP_MODULE = ORCHESTRATION_ROOT / "forecasting_exception_group.py"
 FAILURE_FACT_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_fact.py"
+FAILURE_CLASSIFICATION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_classification.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 
@@ -288,6 +289,13 @@ def test_policy_graph_and_handling_remain_unwired_to_attribution() -> None:
     classifier_modules = imported_modules(FAILURE_FACT_MODULE)
     assert (
         "energy_trading.application.orchestration.forecasting_agent_failure" in classifier_modules
+    )
+    tuple_classifier_names = imported_names(FAILURE_CLASSIFICATION_MODULE)
+    assert "ForecastingAgentFailure" in tuple_classifier_names
+    tuple_classifier_modules = imported_modules(FAILURE_CLASSIFICATION_MODULE)
+    assert (
+        "energy_trading.application.orchestration.forecasting_agent_failure"
+        in tuple_classifier_modules
     )
 
 

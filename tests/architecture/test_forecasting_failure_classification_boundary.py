@@ -1,4 +1,4 @@
-"""Forecasting sanitized failure-fact classification stays application-owned."""
+"""Forecasting tuple-level failure classification stays application-owned."""
 
 from __future__ import annotations
 
@@ -17,16 +17,17 @@ from tests.architecture.import_inspection import (
 
 PRODUCTION_ROOT = SRC_ROOT / "energy_trading"
 ORCHESTRATION_ROOT = PRODUCTION_ROOT / "application" / "orchestration"
+CLASSIFICATION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_classification.py"
 FACT_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_fact.py"
 AGENT_FAILURE_MODULE = ORCHESTRATION_ROOT / "forecasting_agent_failure.py"
 EXTRACTION_MODULE = ORCHESTRATION_ROOT / "forecasting_exception_group.py"
 EXECUTOR_MODULE = ORCHESTRATION_ROOT / "forecasting_executor.py"
+EXECUTION_MODULE = ORCHESTRATION_ROOT / "forecasting_execution.py"
+CONTEXT_MODULE = ORCHESTRATION_ROOT / "forecasting_context.py"
 FAILURE_POLICY_MODULE = ORCHESTRATION_ROOT / "failure_policy.py"
 FAILURE_TRANSITION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_transition.py"
 SUCCESS_TRANSITION_MODULE = ORCHESTRATION_ROOT / "forecasting_transition.py"
 WORKFLOW_MODULE = ORCHESTRATION_ROOT / "forecasting_workflow.py"
-EXECUTION_MODULE = ORCHESTRATION_ROOT / "forecasting_execution.py"
-CONTEXT_MODULE = ORCHESTRATION_ROOT / "forecasting_context.py"
 GRAPH_MODULE = ORCHESTRATION_ROOT / "graph.py"
 STATE_MODULE = ORCHESTRATION_ROOT / "state.py"
 API_ROOT = PRODUCTION_ROOT / "api"
@@ -38,11 +39,12 @@ FORBIDDEN_PREFIXES = (
     "energy_trading.api",
     "energy_trading.application.agents.consumer_load_forecast",
     "energy_trading.application.agents.dam_price_forecast",
+    "energy_trading.application.agents.base",
+    "energy_trading.application.errors",
     "energy_trading.application.orchestration.parallel_ingestion_agent_failure",
     "energy_trading.application.orchestration.parallel_ingestion_exception_group",
     "energy_trading.application.orchestration.parallel_ingestion_failure_fact",
     "energy_trading.application.orchestration.parallel_ingestion_failure_classification",
-    "energy_trading.application.orchestration.forecasting_failure_classification",
     "fastapi",
     "starlette",
     "langgraph",
@@ -95,6 +97,8 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "ExceptionGroup",
         "BaseExceptionGroup",
         "TracebackType",
+        "ApplicationError",
+        "AgentName",
         "WorkflowState",
         "FailurePolicyContext",
         "FailurePolicyPort",
@@ -132,6 +136,10 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "format_tb",
         "extract_tb",
         "print_exc",
+        "ApplicationError",
+        "AgentName",
+        "ExceptionGroup",
+        "BaseExceptionGroup",
         "WorkflowState",
         "FailurePolicyContext",
         "FailurePolicyPort",
@@ -143,7 +151,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "ParallelIngestionAgentFailure",
         "ParallelIngestionFailureFact",
         "classify_parallel_ingestion_agent_failure",
-        "classify_forecasting_agent_failures",
+        "classify_parallel_ingestion_agent_failures",
         "ParallelForecastingExecutionService",
         "ForecastingWorkflowStep",
         "registry",
@@ -160,38 +168,33 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "split",
         "subgroup",
         "derive",
-        "__name__",
+        "sorted",
+        "sort",
+        "unique",
+        "deduplicate",
+        "groupby",
+        "group",
+        "primary",
+        "rank",
+        "severity",
+        "max",
+        "min",
+        "diagnostics",
+        "code",
+        "exceptions",
+        "__cause__",
         "__context__",
         "__traceback__",
+        "__name__",
         "CONSUMER_LOAD_FORECAST",
         "DAM_PRICE_FORECAST",
-        "exceptions",
-    }
-)
-
-FORBIDDEN_FACT_FIELDS = frozenset(
-    {
-        "exception",
-        "cause",
-        "message",
-        "traceback",
-        "attempt_number",
-        "workflow_state",
-        "diagnostics",
-        "retryable",
-        "severity",
-        "timestamp",
-        "provider",
-        "vendor",
     }
 )
 
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
-        "dataclasses",
-        "energy_trading.application.agents.base",
-        "energy_trading.application.errors",
         "energy_trading.application.orchestration.forecasting_agent_failure",
+        "energy_trading.application.orchestration.forecasting_failure_fact",
     }
 )
 
@@ -207,16 +210,8 @@ UNWIRED_MODULES = (
     SUCCESS_TRANSITION_MODULE,
     STATE_MODULE,
     AGENT_FAILURE_MODULE,
+    FACT_MODULE,
 )
-
-
-def _class_def(path: Path, class_name: str) -> ast.ClassDef:
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name == class_name:
-            return node
-    msg = f"class {class_name!r} not found in {path}"
-    raise AssertionError(msg)
 
 
 def _module_class_names(path: Path) -> list[str]:
@@ -234,21 +229,16 @@ def _public_function_defs(path: Path) -> list[ast.FunctionDef]:
 
 
 def _annassign_field_names(path: Path, class_name: str) -> tuple[str, ...]:
-    class_def = _class_def(path, class_name)
-    return tuple(
-        item.target.id
-        for item in class_def.body
-        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name)
-    )
-
-
-def _annassign_field_annotations(path: Path, class_name: str) -> dict[str, str]:
-    class_def = _class_def(path, class_name)
-    annotations: dict[str, str] = {}
-    for item in class_def.body:
-        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
-            annotations[item.target.id] = ast.unparse(item.annotation)
-    return annotations
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            names: list[str] = []
+            for item in node.body:
+                if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                    names.append(item.target.id)
+            return tuple(names)
+    msg = f"class {class_name!r} not found in {path}"
+    raise AssertionError(msg)
 
 
 def _identifier_names(path: Path) -> set[str]:
@@ -280,63 +270,44 @@ def _call_names(function: ast.FunctionDef) -> set[str]:
     return names
 
 
-def _dataclass_keywords(class_def: ast.ClassDef) -> dict[str, object]:
-    for decorator in class_def.decorator_list:
-        if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Name):
-            if decorator.func.id != "dataclass":
-                continue
-            return {
-                keyword.arg: keyword.value.value
-                for keyword in decorator.keywords
-                if keyword.arg is not None and isinstance(keyword.value, ast.Constant)
-            }
-    return {}
-
-
 def test_classification_module_belongs_to_application_orchestration() -> None:
-    assert FACT_MODULE.parent == ORCHESTRATION_ROOT
-    assert FACT_MODULE.exists()
+    assert CLASSIFICATION_MODULE.parent == ORCHESTRATION_ROOT
+    assert CLASSIFICATION_MODULE.exists()
 
 
 def test_classification_module_does_not_import_outer_layers_or_vendors() -> None:
     leaked = sorted(
         module
-        for module in imported_modules(FACT_MODULE)
+        for module in imported_modules(CLASSIFICATION_MODULE)
         if is_forbidden(module, FORBIDDEN_PREFIXES)
     )
     assert leaked == []
-    extras = imported_modules(FACT_MODULE) - ALLOWED_MODULE_IMPORTS
+    extras = imported_modules(CLASSIFICATION_MODULE) - ALLOWED_MODULE_IMPORTS
     assert extras == set()
-    names = imported_names(FACT_MODULE)
-    assert "AgentName" in names
-    assert "ApplicationError" in names
+    names = imported_names(CLASSIFICATION_MODULE)
     assert "ForecastingAgentFailure" in names
-    assert "dataclass" in names
+    assert "ForecastingFailureFact" in names
+    assert "classify_forecasting_agent_failure" in names
+    assert "ApplicationError" not in names
+    assert "AgentName" not in names
     assert "WorkflowState" not in names
     assert "FailurePolicyContext" not in names
     assert "FailurePolicyPort" not in names
     assert "FailureAction" not in names
-    assert "ParallelIngestionFailureFact" not in names
     assert "extract_forecasting_agent_failures" not in names
     assert "fail_after_forecasting" not in names
     leaked_names = sorted(name for name in names if name in FORBIDDEN_TYPE_NAMES)
     assert leaked_names == []
 
 
-def test_classification_module_exposes_exactly_one_dto_and_one_function() -> None:
-    public_functions = _public_function_defs(FACT_MODULE)
-    assert [node.name for node in public_functions] == ["classify_forecasting_agent_failure"]
-    assert _module_class_names(FACT_MODULE) == ["ForecastingFailureFact"]
-    production_classes: list[str] = []
-    for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        parsed = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in parsed.body:
-            if isinstance(node, ast.ClassDef) and node.name == "ForecastingFailureFact":
-                production_classes.append(path.relative_to(SRC_ROOT).as_posix())
-    assert production_classes == [
-        "energy_trading/application/orchestration/forecasting_failure_fact.py"
-    ]
-    tree = ast.parse(FACT_MODULE.read_text(encoding="utf-8"), filename=str(FACT_MODULE))
+def test_classification_module_exposes_exactly_one_public_function() -> None:
+    public_functions = _public_function_defs(CLASSIFICATION_MODULE)
+    assert [node.name for node in public_functions] == ["classify_forecasting_agent_failures"]
+    assert _module_class_names(CLASSIFICATION_MODULE) == []
+    tree = ast.parse(
+        CLASSIFICATION_MODULE.read_text(encoding="utf-8"),
+        filename=str(CLASSIFICATION_MODULE),
+    )
     async_functions = [node.name for node in tree.body if isinstance(node, ast.AsyncFunctionDef)]
     assert async_functions == []
     protocols = [
@@ -350,127 +321,110 @@ def test_classification_module_exposes_exactly_one_dto_and_one_function() -> Non
         )
     ]
     assert protocols == []
-
-
-def test_failure_fact_is_frozen_with_exact_two_fields() -> None:
-    class_def = _class_def(FACT_MODULE, "ForecastingFailureFact")
-    keywords = _dataclass_keywords(class_def)
-    assert keywords.get("frozen") is True
-    assert keywords.get("slots") is True
-    fields = _annassign_field_names(FACT_MODULE, "ForecastingFailureFact")
-    assert fields == ("agent_name", "error_code")
-    leaked = sorted(name for name in fields if name in FORBIDDEN_FACT_FIELDS)
-    assert leaked == []
-    annotations = _annassign_field_annotations(FACT_MODULE, "ForecastingFailureFact")
-    assert annotations == {
-        "agent_name": "AgentName",
-        "error_code": "str",
-    }
-    defined = [
+    abcs = [
         node.name
-        for node in class_def.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef)
+        and any(
+            (isinstance(base, ast.Name) and base.id == "ABC")
+            or (isinstance(base, ast.Attribute) and base.attr == "ABC")
+            for base in node.bases
+        )
     ]
-    assert defined == ["__post_init__"]
+    assert abcs == []
 
 
-def test_classifier_signature_is_one_attributed_failure_to_fact() -> None:
-    classifier = _public_function_defs(FACT_MODULE)[0]
-    assert classifier.name == "classify_forecasting_agent_failure"
-    assert tuple(arg.arg for arg in classifier.args.args) == ("failure",)
+def test_classifier_signature_is_attributed_tuple_to_fact_tuple() -> None:
+    classifier = _public_function_defs(CLASSIFICATION_MODULE)[0]
+    assert classifier.name == "classify_forecasting_agent_failures"
+    assert tuple(arg.arg for arg in classifier.args.args) == ("failures",)
     assert classifier.args.posonlyargs == []
     assert classifier.args.kwonlyargs == []
     assert classifier.args.vararg is None
     assert classifier.args.kwarg is None
-    assert ast.unparse(classifier.args.args[0].annotation) == "ForecastingAgentFailure"
-    assert ast.unparse(classifier.returns) == "ForecastingFailureFact"
+    assert ast.unparse(classifier.args.args[0].annotation) == (
+        "tuple[ForecastingAgentFailure, ...]"
+    )
+    assert ast.unparse(classifier.returns) == "tuple[ForecastingFailureFact, ...]"
 
 
-def test_classifier_reuses_application_error_code_without_text_or_class_names() -> None:
-    classifier = _public_function_defs(FACT_MODULE)[0]
+def test_classifier_delegates_without_selection_or_exception_inspection() -> None:
+    classifier = _public_function_defs(CLASSIFICATION_MODULE)[0]
     call_names = _call_names(classifier)
-    assert "isinstance" in call_names
-    assert "ForecastingFailureFact" in call_names
-    assert "str" not in call_names
-    assert "repr" not in call_names
-    assert "type" not in call_names
-    assert "format_exc" not in call_names
-    isinstance_checks = [
-        ast.unparse(node)
-        for node in ast.walk(classifier)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "isinstance"
-    ]
-    assert "isinstance(cause, ApplicationError)" in isinstance_checks
-    code_reads = [
-        ast.unparse(node)
-        for node in ast.walk(classifier)
-        if isinstance(node, ast.Attribute) and node.attr == "code"
-    ]
-    assert "cause.code" in code_reads
-    cause_reads = [
-        ast.unparse(node)
-        for node in ast.walk(classifier)
-        if isinstance(node, ast.Attribute) and node.attr == "__cause__"
-    ]
-    assert "failure.__cause__" in cause_reads
-    constructed = [
-        node
-        for node in ast.walk(classifier)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "ForecastingFailureFact"
-    ]
-    assert len(constructed) == 1
-    call = constructed[0]
-    keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in call.keywords}
-    assert keywords == {
-        "agent_name": "failure.agent_name",
-        "error_code": "error_code",
-    }
-    identifiers = _identifier_names(FACT_MODULE)
+    assert "classify_forecasting_agent_failure" in call_names
+    assert "isinstance" not in call_names
+    assert "sorted" not in call_names
+    assert "set" not in call_names
+    assert "ExceptionGroup" not in call_names
+    assert "extract_forecasting_agent_failures" not in call_names
+    assert "ForecastingFailureFact" not in call_names
+    try_nodes = [node for node in ast.walk(classifier) if isinstance(node, ast.Try)]
+    assert try_nodes == []
+    if_nodes = [node for node in ast.walk(classifier) if isinstance(node, ast.If)]
+    assert if_nodes == []
+    match_nodes = [node for node in ast.walk(classifier) if isinstance(node, ast.Match)]
+    assert match_nodes == []
+    for_nodes = [node for node in ast.walk(classifier) if isinstance(node, ast.For)]
+    assert for_nodes == []
+    while_nodes = [node for node in ast.walk(classifier) if isinstance(node, ast.While)]
+    assert while_nodes == []
+    identifiers = _identifier_names(CLASSIFICATION_MODULE)
     leaked = sorted(name for name in identifiers if name in FORBIDDEN_IDENTIFIERS)
     assert leaked == []
-    names = annotation_type_names(FACT_MODULE)
+    names = annotation_type_names(CLASSIFICATION_MODULE)
     leaked_types = sorted(name for name in names if name in FORBIDDEN_TYPE_NAMES)
     assert leaked_types == []
-    source = FACT_MODULE.read_text(encoding="utf-8")
+    source = CLASSIFICATION_MODULE.read_text(encoding="utf-8")
     lowered = source.lower()
     assert "langgraph" not in lowered
     assert "langchain" not in lowered
     assert "traceback" not in lowered
-    assert "__cause__" in source
+    assert "__cause__" not in source
     assert "__context__" not in source
     assert "__traceback__" not in source
-    assert "__name__" not in source
-    assert "str(" not in source
-    assert "repr(" not in source
-    assert "forecasting_unexpected_failure" in source
-    assert ".exceptions" not in source
+    assert "ApplicationError" not in source
+    assert "AgentName" not in source
     assert "ExceptionGroup" not in source
     assert "BaseExceptionGroup" not in source
+    assert "extract_forecasting_agent_failures" not in source
+    assert "FailurePolicyContext" not in source
+    assert "fail_after_forecasting" not in source
+    assert "forecasting_unexpected_failure" not in source
+    assert ".code" not in source
+    assert ".exceptions" not in source
+    assert "CONSUMER_LOAD_FORECAST" not in source
+    assert "DAM_PRICE_FORECAST" not in source
+    assert "sorted(" not in source
+    assert ".sort(" not in source
     assert "time.sleep" not in lowered
     assert "asyncio.sleep" not in lowered
-    assert "FailurePolicyContext" not in source
-    assert "extract_forecasting_agent_failures" not in source
-    assert "classify_forecasting_agent_failures" not in source
+    assert "str(" not in source
+    assert "repr(" not in source
+    singular_calls = [
+        node
+        for node in ast.walk(classifier)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "classify_forecasting_agent_failure"
+    ]
+    assert len(singular_calls) == 1
 
 
-def test_graph_policy_extractor_and_executor_remain_unwired_to_classification() -> None:
+def test_graph_policy_extractor_and_executor_remain_unwired_to_tuple_classification() -> None:
     for path in UNWIRED_MODULES:
         names = imported_names(path)
-        assert "classify_forecasting_agent_failure" not in names
-        assert "ForecastingFailureFact" not in names
+        assert "classify_forecasting_agent_failures" not in names
         modules = imported_modules(path)
-        assert "energy_trading.application.orchestration.forecasting_failure_fact" not in modules
+        assert (
+            "energy_trading.application.orchestration.forecasting_failure_classification"
+            not in modules
+        )
         source = path.read_text(encoding="utf-8")
-        assert "classify_forecasting_agent_failure" not in source
-        assert "ForecastingFailureFact" not in source
-        assert "forecasting_failure_fact" not in source
+        assert "classify_forecasting_agent_failures" not in source
+        assert "forecasting_failure_classification" not in source
 
 
-def test_workflow_state_shape_is_unchanged_by_classification() -> None:
+def test_workflow_state_shape_is_unchanged_by_tuple_classification() -> None:
     fields = _annassign_field_names(STATE_MODULE, "WorkflowState")
     assert fields == (
         "workflow_id",
@@ -483,17 +437,15 @@ def test_workflow_state_shape_is_unchanged_by_classification() -> None:
     )
 
 
-def test_api_composition_does_not_import_or_construct_classification() -> None:
+def test_api_composition_does_not_import_or_construct_tuple_classification() -> None:
     forbidden_wiring = (
         "energy_trading.application.orchestration",
-        "energy_trading.application.orchestration.forecasting_failure_fact",
+        "energy_trading.application.orchestration.forecasting_failure_classification",
     )
     assert collect_http_api_import_violations(API_ROOT, forbidden_wiring) == []
     for path in http_transport_api_paths(API_ROOT):
         names = imported_names(path)
-        assert "classify_forecasting_agent_failure" not in names
-        assert "ForecastingFailureFact" not in names
+        assert "classify_forecasting_agent_failures" not in names
     app_source = API_APP.read_text(encoding="utf-8").lower()
-    assert "classify_forecasting_agent_failure" not in app_source
-    assert "forecastingfailurefact" not in app_source
-    assert "forecasting_failure_fact" not in app_source
+    assert "classify_forecasting_agent_failures" not in app_source
+    assert "forecasting_failure_classification" not in app_source

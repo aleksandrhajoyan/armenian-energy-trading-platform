@@ -2556,3 +2556,19 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Callers can turn one attributed forecasting leaf into a sanitized `AgentName` + `error_code` fact without selecting among failures or invoking policy. Phase 3 still has no tuple classification, selection, policy decision, action execution, terminal runtime routing, or retry/fallback.
 
 ---
+
+## ADR-165 — Forecasting tuple classification delegates each attributed failure independently
+
+- **Status:** Accepted
+- **Context:** Chunk 152 attributes ordinary Phase 3 Consumer Load and DAM failures as `ForecastingAgentFailure`. Chunk 153 extracts those already-attributed leaves from a possibly nested exception group. Chunk 154 classifies exactly one extracted leaf into sanitized `ForecastingFailureFact`. Downstream multi-failure policy, if later approved, needs a sanitized fact tuple rather than raw exceptions. Reusing `classify_parallel_ingestion_agent_failures` for Phase 3 would mix ingestion identity into forecasting. Folding tuple composition together with primary-failure selection, ranking, aggregation, attempt tracking, `FailurePolicyContext` construction, action execution, `fail_after_forecasting` invocation, or LangGraph catch/conditional routing would freeze independently reviewable concerns.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-128 through ADR-164 remain Accepted and are not superseded.
+  - Application owns synchronous `classify_forecasting_agent_failures(failures: tuple[ForecastingAgentFailure, ...]) -> tuple[ForecastingFailureFact, ...]` in `forecasting_failure_classification.py`. This is one Phase-3-specific composition helper, not a policy service, registry, factory, generic shared Phase 2/Phase 3 classifier, or exception framework.
+  - Chunk 152 remains the owner of task→agent attribution. Chunk 153 remains the owner of ExceptionGroup attributed-leaf extraction. Chunk 154 remains the owner of one-leaf error-code classification. Chunk 155 owns only tuple-level composition of already-attributed forecasting failures.
+  - Each input element is classified by delegating to the existing `classify_forecasting_agent_failure`. Encounter order, cardinality, and duplicate agent identities are preserved. An empty input tuple is valid and returns an empty output tuple. No failure is fabricated.
+  - The composer does not inspect `__cause__`, `ApplicationError`, `.code`, messages, repr, traceback, `BaseExceptionGroup`, `ExceptionGroup`, or `.exceptions`. It does not duplicate `forecasting_unexpected_failure` mapping, `ApplicationError` mapping, `AgentName` mapping, or Consumer/DAM logic.
+  - There is no sorting, deduplication, grouping, ranking, aggregation, or primary-failure selection. Attempt tracking, `FailurePolicyContext` construction/resolution, policy decision, action execution, `fail_after_forecasting` invocation, diagnostics mutation, LangGraph routing, and retry/fallback remain deferred.
+  - `ParallelForecastingExecutionService`, `extract_forecasting_agent_failures`, `classify_forecasting_agent_failure`, `ForecastingWorkflowStep`, `fail_after_forecasting`, graph topology, and `WorkflowState` remain unchanged.
+- **Consequences:** Callers can turn an attributed forecasting failure tuple into a sanitized fact tuple without selecting among failures or invoking policy. Phase 3 still has no selection, attempt tracking, policy decision, action execution, terminal runtime routing, or retry/fallback.
+
+---
