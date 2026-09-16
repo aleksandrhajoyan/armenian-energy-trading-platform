@@ -137,6 +137,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "ServiceLocator",
         "advance_after_forecasting",
         "fail_after_forecasting",
+        "ForecastingAgentFailure",
         "complete_forecasting",
     }
 )

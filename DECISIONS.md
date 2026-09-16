@@ -2504,3 +2504,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application callers can apply a terminal Phase 3 failure snapshot without a graph runtime. Production still has no LangGraph forecasting-failure handling, no forecasting failure classification, no retry/fallback execution, and no complete Phase 3 failure workflow.
 
 ---
+
+## ADR-162 — Forecasting branch failure attribution is application-owned at the concurrent executor boundary
+
+- **Status:** Accepted
+- **Context:** Chunk 150 published `ParallelForecastingExecutionService`, which concurrently executes Consumer Load and DAM agents and lets native `asyncio.TaskGroup` exception aggregation propagate unattributed. Chunk 151 published `fail_after_forecasting` as a state-only terminal replacement. The published Phase 2 analogue attributes ordinary agent failures as `ParallelIngestionAgentFailure` at the concurrent executor boundary before TaskGroup aggregation. Reusing `ParallelIngestionAgentFailure` for Phase 3 would mix Phase-2 identity into forecasting. Catching `BaseExceptionGroup` in LangGraph or `ForecastingWorkflowStep` and calling `fail_after_forecasting` would skip attribution, classification, and `FailurePolicyPort`. ExceptionGroup extraction, sanitized facts, selection, policy, and graph routing remain separately reviewed.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-128 through ADR-161 remain Accepted and are not superseded.
+  - Application owns `ForecastingAgentFailure` in `forecasting_agent_failure.py`. It is a Phase-3-specific `Exception`, not a generic orchestration-failure hierarchy, not a field on `WorkflowState`, and not a reuse of `ParallelIngestionAgentFailure`.
+  - Constructor input is only canonical `AgentName`. The wrapper stores `agent_name` and a sanitized message that identifies that agent. It does not store traceback text, cause text, error codes, diagnostics, retry state, or arbitrary metadata.
+  - Attribution belongs at the concurrent forecasting executor boundary. `ParallelForecastingExecutionService` awaits each branch through `_run_attributed`. Ordinary `Exception` is wrapped as `ForecastingAgentFailure(agent_name) from exc`. Consumer Load uses `AgentName.CONSUMER_LOAD_FORECAST`. DAM uses `AgentName.DAM_PRICE_FORECAST`.
+  - Original exception identity survives only through standard Python `__cause__` chaining. The executor does not inspect `ApplicationError.code`, classify leaves, or invent Consumer Load versus DAM precedence.
+  - `asyncio.TaskGroup` continues to own sibling cancellation and `ExceptionGroup` aggregation. `CancelledError` / `BaseException` is not wrapped. `execute` does not catch `ExceptionGroup` or `BaseExceptionGroup`.
+  - This ADR does **not** authorize ExceptionGroup extraction, failure classification, failure-fact DTOs, selection, attempt tracking, `FailurePolicyContext`, `FailurePolicyPort` runtime composition, `FailureAction` execution, `fail_after_forecasting` wiring, LangGraph failure handling, retry/fallback, or diagnostics mutation.
+  - `ForecastingWorkflowStep`, `fail_after_forecasting`, graph topology, and `WorkflowState` remain unchanged.
+- **Consequences:** Ordinary forecasting TaskGroup leaves can now carry canonical agent identity without putting raw exception text on `WorkflowState`. Phase 3 still has no extraction, classification, policy decision, action execution, terminal runtime routing, or retry/fallback.
+
+---

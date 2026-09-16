@@ -20,6 +20,7 @@ forecasting plan,
 forecasting success,
 forecasting execution,
 parallel forecasting execution service,
+forecasting agent-failure attribution,
 forecasting workflow context port,
 forecasting workflow step,
 forecasting success transition,
@@ -44,6 +45,9 @@ from energy_trading.application.orchestration.failure_policy import (
     FailureAction,
     FailurePolicyContext,
     FailurePolicyPort,
+)
+from energy_trading.application.orchestration.forecasting_agent_failure import (
+    ForecastingAgentFailure,
 )
 from energy_trading.application.orchestration.forecasting_context import (
     ForecastingWorkflowContextPort,
@@ -161,6 +165,7 @@ __all__ = [
     "FailureAction",
     "FailurePolicyContext",
     "FailurePolicyPort",
+    "ForecastingAgentFailure",
     "ForecastingExecutionPort",
     "ForecastingPlan",
     "ForecastingSuccess",

@@ -40,6 +40,7 @@ FORBIDDEN_PREFIXES = (
     "energy_trading.application.orchestration.forecasting_workflow",
     "energy_trading.application.orchestration.forecasting_transition",
     "energy_trading.application.orchestration.forecasting_failure_transition",
+    "energy_trading.application.orchestration.failure_policy",
     "energy_trading.application.orchestration.graph",
     "fastapi",
     "starlette",
@@ -100,7 +101,6 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "FailurePolicyContext",
         "FailureAction",
         "AgentPort",
-        "AgentName",
         "StateGraph",
         "CompiledStateGraph",
         "Send",
@@ -120,8 +120,11 @@ FORBIDDEN_TYPE_NAMES = frozenset(
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
         "asyncio",
+        "collections.abc",
+        "energy_trading.application.agents.base",
         "energy_trading.application.agents.consumer_load_forecast",
         "energy_trading.application.agents.dam_price_forecast",
+        "energy_trading.application.orchestration.forecasting_agent_failure",
         "energy_trading.application.orchestration.forecasting_plan",
         "energy_trading.application.orchestration.forecasting_success",
     }
@@ -255,9 +258,12 @@ def test_executor_does_not_import_outer_layers_or_vendors() -> None:
     assert "DAMPriceForecastAgent" in names
     assert "ForecastingPlan" in names
     assert "ForecastingSuccess" in names
+    assert "ForecastingAgentFailure" in names
+    assert "AgentName" in names
     assert "ForecastingExecutionPort" not in names
     assert "ForecastingWorkflowContextPort" not in names
     assert "WorkflowState" not in names
+    assert "ExceptionGroup" not in names
 
 
 def test_executor_module_exposes_exactly_one_concrete_class() -> None:
@@ -312,7 +318,7 @@ def test_executor_public_operation_is_async_keyword_only_execute() -> None:
         for node in class_def.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     ]
-    assert defined == ["__init__", "execute"]
+    assert defined == ["__init__", "execute", "_run_attributed"]
     execute_fn = next(
         node
         for node in class_def.body
@@ -347,10 +353,38 @@ def test_executor_uses_taskgroup_and_not_gather() -> None:
         if isinstance(func, ast.Attribute) and func.attr == "create_task":
             create_task_calls += 1
     assert create_task_calls == 2
-    except_handlers = [node for node in ast.walk(tree) if isinstance(node, ast.ExceptHandler)]
-    assert except_handlers == []
+    except_types = [
+        ast.unparse(node.type) if node.type is not None else None
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ExceptHandler)
+    ]
+    assert except_types == ["Exception"]
     assert "except*" not in source
-    assert "try:" not in source
+    assert "BaseExceptionGroup" not in source
+    assert "ExceptionGroup" not in source
+    assert ".exceptions" not in source
+    assert "__cause__" not in source
+    raise_from_count = 0
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Raise) or node.exc is None or node.cause is None:
+            continue
+        func = node.exc
+        name: str | None = None
+        if isinstance(func, ast.Call):
+            if isinstance(func.func, ast.Name):
+                name = func.func.id
+        if name == "ForecastingAgentFailure":
+            raise_from_count += 1
+            assert isinstance(node.cause, ast.Name)
+            assert node.cause.id == "exc"
+    assert raise_from_count == 1
+    execute_fn = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "execute"
+    )
+    execute_excepts = [node for node in ast.walk(execute_fn) if isinstance(node, ast.ExceptHandler)]
+    assert execute_excepts == []
 
 
 def test_executor_does_not_own_context_or_workflow_state() -> None:
@@ -406,6 +440,8 @@ def test_executor_public_contract_excludes_payload_and_runtime_types() -> None:
     assert "FailurePolicyPort" not in identifiers
     assert "WorkflowState" not in identifiers
     assert "ExceptionGroup" not in identifiers
+    assert "ForecastingAgentFailure" in identifiers
+    assert "AgentName" in identifiers
     source = EXECUTOR_MODULE.read_text(encoding="utf-8")
     assert "langgraph" not in source.lower()
     assert "langchain" not in source.lower()
@@ -413,6 +449,7 @@ def test_executor_public_contract_excludes_payload_and_runtime_types() -> None:
     assert "redis" not in source.lower()
     assert "postgres" not in source.lower()
     assert "qdrant" not in source.lower()
+    assert "except*" not in source
 
 
 def test_published_plan_success_and_port_modules_remain_unchanged() -> None:
@@ -451,6 +488,8 @@ def test_graph_remains_unwired_to_the_executor() -> None:
     source = GRAPH_MODULE.read_text(encoding="utf-8")
     assert "ParallelForecastingExecutionService" not in source
     assert "forecasting_executor" not in source
+    assert "ForecastingAgentFailure" not in names
+    assert "forecasting_agent_failure" not in source
 
 
 def test_api_composition_does_not_import_or_construct_executor() -> None:

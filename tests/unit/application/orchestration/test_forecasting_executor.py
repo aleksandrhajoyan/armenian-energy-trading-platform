@@ -7,10 +7,12 @@ import inspect
 
 import pytest
 
+from energy_trading.application.agents import AgentName
 from energy_trading.application.agents.consumer_load_forecast import ConsumerLoadForecastAgent
 from energy_trading.application.agents.dam_price_forecast import DAMPriceForecastAgent
-from energy_trading.application.errors import DependencyUnavailableError
+from energy_trading.application.errors import ApplicationError, DependencyUnavailableError
 from energy_trading.application.orchestration import (
+    ForecastingAgentFailure,
     ForecastingExecutionPort,
     ForecastingPlan,
     ForecastingSuccess,
@@ -144,6 +146,15 @@ def _as_execution_port(
     executor: ParallelForecastingExecutionService,
 ) -> ForecastingExecutionPort:
     return executor
+
+
+def _attributed_failures(
+    group: BaseExceptionGroup[Exception],
+) -> tuple[ForecastingAgentFailure, ...]:
+    return tuple(item for item in group.exceptions if isinstance(item, ForecastingAgentFailure))
+
+
+_SENTINEL_TEXT = "sentinel-forecast-executor-text-not-for-clients"
 
 
 def _executor(
@@ -300,12 +311,30 @@ async def test_consumer_load_failure_does_not_return_success_and_cancels_dam() -
     with pytest.raises(ExceptionGroup) as exc_info:
         await execute_task
     assert type(exc_info.value) is ExceptionGroup
-    assert error in exc_info.value.exceptions
+    leaves = _attributed_failures(exc_info.value)
+    assert len(leaves) == 1
+    leaf = leaves[0]
+    assert type(leaf) is ForecastingAgentFailure
+    assert leaf.agent_name is AgentName.CONSUMER_LOAD_FORECAST
+    assert leaf.__cause__ is error
+    assert isinstance(error, ApplicationError)
+    assert error.code == "dependency_unavailable"
+    assert leaf.__cause__.code == error.code
+    assert not hasattr(leaf, "code")
+    assert not hasattr(leaf, "error_code")
+    assert "consumer load unavailable" not in str(leaf)
+    assert str(leaf) == "Forecasting agent failed: Consumer Load Forecast Agent."
     assert len(consumer_model.calls) == 1
     assert len(dam_model.calls) == 1
     assert dam_model.cancelled
     assert not dam_model.completed
     assert not isinstance(exc_info.value, ForecastingSuccess)
+    assert not any(isinstance(item, asyncio.CancelledError) for item in exc_info.value.exceptions)
+    assert not any(
+        isinstance(item, ForecastingAgentFailure)
+        and item.agent_name is not AgentName.CONSUMER_LOAD_FORECAST
+        for item in exc_info.value.exceptions
+    )
 
 
 async def test_dam_failure_does_not_return_success_and_cancels_consumer_load() -> None:
@@ -325,12 +354,56 @@ async def test_dam_failure_does_not_return_success_and_cancels_consumer_load() -
     with pytest.raises(ExceptionGroup) as exc_info:
         await execute_task
     assert type(exc_info.value) is ExceptionGroup
-    assert error in exc_info.value.exceptions
+    leaves = _attributed_failures(exc_info.value)
+    assert len(leaves) == 1
+    leaf = leaves[0]
+    assert type(leaf) is ForecastingAgentFailure
+    assert leaf.agent_name is AgentName.DAM_PRICE_FORECAST
+    assert leaf.__cause__ is error
+    assert isinstance(error, ApplicationError)
+    assert error.code == "dependency_unavailable"
+    assert leaf.__cause__.code == error.code
+    assert not hasattr(leaf, "code")
+    assert not hasattr(leaf, "error_code")
+    assert "dam price unavailable" not in str(leaf)
+    assert str(leaf) == "Forecasting agent failed: DAM Price Forecast Agent."
     assert len(consumer_model.calls) == 1
     assert len(dam_model.calls) == 1
     assert consumer_model.cancelled
     assert not consumer_model.completed
     assert not isinstance(exc_info.value, ForecastingSuccess)
+    assert not any(isinstance(item, asyncio.CancelledError) for item in exc_info.value.exceptions)
+    assert not any(
+        isinstance(item, ForecastingAgentFailure)
+        and item.agent_name is not AgentName.DAM_PRICE_FORECAST
+        for item in exc_info.value.exceptions
+    )
+
+
+async def test_sibling_cancellation_is_not_reclassified_as_agent_failure() -> None:
+    consumer_started = asyncio.Event()
+    dam_started = asyncio.Event()
+    fail_now = asyncio.Event()
+    hold = asyncio.Event()
+    error = RuntimeError(_SENTINEL_TEXT)
+    consumer_model = _GatedModel(consumer_started, fail_now, error=error)
+    dam_model = _GatedModel(dam_started, hold, (_price_point(),))
+    executor, _consumer_agent, _dam_agent = _executor(consumer_model, dam_model)
+    execute_task = asyncio.create_task(executor.execute(plan=_plan()))
+    await consumer_started.wait()
+    await dam_started.wait()
+    fail_now.set()
+    with pytest.raises(ExceptionGroup) as caught:
+        await execute_task
+    leaves = _attributed_failures(caught.value)
+    assert tuple(item.agent_name for item in leaves) == (AgentName.CONSUMER_LOAD_FORECAST,)
+    assert leaves[0].__cause__ is error
+    assert _SENTINEL_TEXT not in str(leaves[0])
+    assert dam_model.cancelled
+    cancelled_as_agent_failure = [
+        item for item in leaves if item.agent_name is AgentName.DAM_PRICE_FORECAST
+    ]
+    assert cancelled_as_agent_failure == []
 
 
 async def test_dual_failure_does_not_invent_precedence_or_partial_success() -> None:
@@ -352,7 +425,29 @@ async def test_dual_failure_does_not_invent_precedence_or_partial_success() -> N
     assert not isinstance(exc_info.value, ForecastingSuccess)
     assert not hasattr(exc_info.value, "consumer_load_forecast")
     assert not hasattr(exc_info.value, "dam_price_forecast")
-    assert {consumer_error, dam_error} & set(exc_info.value.exceptions)
+    leaves = _attributed_failures(exc_info.value)
+    assert leaves
+    allowed_names = {
+        AgentName.CONSUMER_LOAD_FORECAST,
+        AgentName.DAM_PRICE_FORECAST,
+    }
+    allowed_causes = {consumer_error, dam_error}
+    by_name: dict[AgentName, ForecastingAgentFailure] = {}
+    for leaf in leaves:
+        assert type(leaf) is ForecastingAgentFailure
+        assert leaf.agent_name in allowed_names
+        assert leaf.__cause__ in allowed_causes
+        by_name[leaf.agent_name] = leaf
+    assert set(by_name) <= allowed_names
+    if AgentName.CONSUMER_LOAD_FORECAST in by_name:
+        assert by_name[AgentName.CONSUMER_LOAD_FORECAST].__cause__ is consumer_error
+        assert "consumer load unavailable" not in str(by_name[AgentName.CONSUMER_LOAD_FORECAST])
+    if AgentName.DAM_PRICE_FORECAST in by_name:
+        assert by_name[AgentName.DAM_PRICE_FORECAST].__cause__ is dam_error
+        assert "dam price unavailable" not in str(by_name[AgentName.DAM_PRICE_FORECAST])
+    rendered = " ".join(str(leaf) for leaf in leaves).lower()
+    assert "winner" not in rendered
+    assert "priority" not in rendered
 
 
 async def test_executor_does_not_mutate_plan_requests_or_result_items() -> None:

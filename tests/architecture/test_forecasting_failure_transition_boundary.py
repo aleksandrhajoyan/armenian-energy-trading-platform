@@ -97,6 +97,7 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "ForecastingWorkflowContextPort",
         "ForecastingWorkflowStep",
         "ParallelForecastingExecutionService",
+        "ForecastingAgentFailure",
         "ConsumerLoadForecastAgent",
         "DAMPriceForecastAgent",
         "ConsumerLoadForecastModelPort",
@@ -140,6 +141,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "ForecastingWorkflowContextPort",
         "ForecastingWorkflowStep",
         "ParallelForecastingExecutionService",
+        "ForecastingAgentFailure",
         "ConsumerLoadForecastAgent",
         "DAMPriceForecastAgent",
         "ConsumerLoadForecastModelPort",
@@ -470,7 +472,7 @@ def test_workflow_step_executor_and_ports_remain_unwired_to_the_failure_transiti
     assert "langgraph" not in workflow_source
     executor_source = EXECUTOR_MODULE.read_text(encoding="utf-8")
     assert "fail_after_forecasting" not in executor_source
-    assert "try:" not in executor_source
+    assert "forecasting_failure_transition" not in executor_source
 
 
 def test_graph_does_not_import_or_call_the_failure_transition() -> None:
