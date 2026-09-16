@@ -39,6 +39,7 @@ FORBIDDEN_PREFIXES = (
     "energy_trading.application.orchestration.forecasting_context",
     "energy_trading.application.orchestration.forecasting_workflow",
     "energy_trading.application.orchestration.forecasting_transition",
+    "energy_trading.application.orchestration.forecasting_failure_transition",
     "energy_trading.application.orchestration.graph",
     "fastapi",
     "starlette",
@@ -360,6 +361,7 @@ def test_executor_does_not_own_context_or_workflow_state() -> None:
     assert "record_success" not in identifiers
     assert "WorkflowState" not in identifiers
     assert "advance_after_forecasting" not in identifiers
+    assert "fail_after_forecasting" not in identifiers
     source = EXECUTOR_MODULE.read_text(encoding="utf-8")
     assert "resolve_plan" not in source
     assert "record_success" not in source

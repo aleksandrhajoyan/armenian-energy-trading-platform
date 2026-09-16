@@ -136,6 +136,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "AgentFactory",
         "ServiceLocator",
         "advance_after_forecasting",
+        "fail_after_forecasting",
         "complete_forecasting",
     }
 )
@@ -375,6 +376,7 @@ def test_workflow_step_public_contract_excludes_payload_and_runtime_types() -> N
     assert "asyncio.gather" not in source
     assert "create_task" not in source
     assert "advance_after_forecasting" not in source
+    assert "fail_after_forecasting" not in source
     assert "complete_forecasting" not in source
 
 

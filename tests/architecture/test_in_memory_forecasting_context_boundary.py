@@ -146,6 +146,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "wait",
         "to_thread",
         "advance_after_forecasting",
+        "fail_after_forecasting",
         "ForecastingWorkflowStep",
         "ForecastingExecutionPort",
         "ConsumerLoadForecastAgent",
@@ -263,6 +264,7 @@ def test_adapter_does_not_import_outer_layers_or_vendors() -> None:
     assert "ConsumerLoadForecastAgent" not in names
     assert "DAMPriceForecastAgent" not in names
     assert "advance_after_forecasting" not in names
+    assert "fail_after_forecasting" not in names
 
 
 def test_adapter_exposes_exactly_one_structural_class() -> None:
@@ -334,6 +336,7 @@ def test_adapter_uses_asyncio_lock_and_not_execution_or_durable_stores() -> None
     assert "threading" not in source
     assert "multiprocessing" not in source
     assert "advance_after_forecasting" not in source
+    assert "fail_after_forecasting" not in source
     assert ".forecast(" not in source
     assert ".run(" not in source
     lowered = source.lower()

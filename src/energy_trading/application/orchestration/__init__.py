@@ -23,6 +23,7 @@ parallel forecasting execution service,
 forecasting workflow context port,
 forecasting workflow step,
 forecasting success transition,
+forecasting failure transition,
 and
 LangGraph runtime.
 """
@@ -52,6 +53,9 @@ from energy_trading.application.orchestration.forecasting_execution import (
 )
 from energy_trading.application.orchestration.forecasting_executor import (
     ParallelForecastingExecutionService,
+)
+from energy_trading.application.orchestration.forecasting_failure_transition import (
+    fail_after_forecasting,
 )
 from energy_trading.application.orchestration.forecasting_plan import ForecastingPlan
 from energy_trading.application.orchestration.forecasting_success import ForecastingSuccess
@@ -196,5 +200,6 @@ __all__ = [
     "classify_parallel_ingestion_agent_failures",
     "execute_parallel_ingestion_failure_action",
     "extract_parallel_ingestion_agent_failures",
+    "fail_after_forecasting",
     "fail_parallel_ingestion",
 ]
