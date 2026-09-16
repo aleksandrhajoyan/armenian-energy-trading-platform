@@ -264,6 +264,7 @@ def test_executor_does_not_import_outer_layers_or_vendors() -> None:
     assert "ForecastingWorkflowContextPort" not in names
     assert "WorkflowState" not in names
     assert "ExceptionGroup" not in names
+    assert "extract_forecasting_agent_failures" not in names
 
 
 def test_executor_module_exposes_exactly_one_concrete_class() -> None:
@@ -490,6 +491,8 @@ def test_graph_remains_unwired_to_the_executor() -> None:
     assert "forecasting_executor" not in source
     assert "ForecastingAgentFailure" not in names
     assert "forecasting_agent_failure" not in source
+    assert "extract_forecasting_agent_failures" not in names
+    assert "forecasting_exception_group" not in source
 
 
 def test_api_composition_does_not_import_or_construct_executor() -> None:

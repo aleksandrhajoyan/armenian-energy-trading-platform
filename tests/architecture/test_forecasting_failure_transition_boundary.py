@@ -98,6 +98,7 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "ForecastingWorkflowStep",
         "ParallelForecastingExecutionService",
         "ForecastingAgentFailure",
+        "extract_forecasting_agent_failures",
         "ConsumerLoadForecastAgent",
         "DAMPriceForecastAgent",
         "ConsumerLoadForecastModelPort",
@@ -142,6 +143,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "ForecastingWorkflowStep",
         "ParallelForecastingExecutionService",
         "ForecastingAgentFailure",
+        "extract_forecasting_agent_failures",
         "ConsumerLoadForecastAgent",
         "DAMPriceForecastAgent",
         "ConsumerLoadForecastModelPort",
@@ -480,8 +482,10 @@ def test_graph_does_not_import_or_call_the_failure_transition() -> None:
     assert "fail_after_forecasting" not in names
     assert "advance_after_forecasting" in names
     assert "FailurePolicyPort" not in names
+    assert "extract_forecasting_agent_failures" not in names
     modules = imported_modules(GRAPH_MODULE)
     assert "energy_trading.application.orchestration.forecasting_failure_transition" not in modules
+    assert "energy_trading.application.orchestration.forecasting_exception_group" not in modules
     assert "energy_trading.application.orchestration.forecasting_transition" in modules
     graph_source = GRAPH_MODULE.read_text(encoding="utf-8")
     parsed = ast.parse(graph_source, filename=str(GRAPH_MODULE))

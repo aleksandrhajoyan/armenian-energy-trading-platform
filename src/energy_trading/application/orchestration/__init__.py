@@ -21,6 +21,7 @@ forecasting success,
 forecasting execution,
 parallel forecasting execution service,
 forecasting agent-failure attribution,
+forecasting ExceptionGroup attributed-leaf extraction,
 forecasting workflow context port,
 forecasting workflow step,
 forecasting success transition,
@@ -51,6 +52,9 @@ from energy_trading.application.orchestration.forecasting_agent_failure import (
 )
 from energy_trading.application.orchestration.forecasting_context import (
     ForecastingWorkflowContextPort,
+)
+from energy_trading.application.orchestration.forecasting_exception_group import (
+    extract_forecasting_agent_failures,
 )
 from energy_trading.application.orchestration.forecasting_execution import (
     ForecastingExecutionPort,
@@ -204,6 +208,7 @@ __all__ = [
     "classify_parallel_ingestion_agent_failure",
     "classify_parallel_ingestion_agent_failures",
     "execute_parallel_ingestion_failure_action",
+    "extract_forecasting_agent_failures",
     "extract_parallel_ingestion_agent_failures",
     "fail_after_forecasting",
     "fail_parallel_ingestion",

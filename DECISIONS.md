@@ -2521,3 +2521,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Ordinary forecasting TaskGroup leaves can now carry canonical agent identity without putting raw exception text on `WorkflowState`. Phase 3 still has no extraction, classification, policy decision, action execution, terminal runtime routing, or retry/fallback.
 
 ---
+
+## ADR-163 — Forecasting ExceptionGroup attributed-leaf extraction is application-owned and fail-closed
+
+- **Status:** Accepted
+- **Context:** Chunk 152 published `ForecastingAgentFailure` attribution at the concurrent forecasting executor boundary. Native `asyncio.TaskGroup` aggregation can still present those leaves inside a nested `ExceptionGroup` / `BaseExceptionGroup`. The published Phase 2 analogue extracts already-attributed `ParallelIngestionAgentFailure` leaves through `extract_parallel_ingestion_agent_failures` before classification or policy. Reusing that Phase-2 extractor or `ParallelIngestionAgentFailure` for Phase 3 would mix ingestion identity into forecasting. Classification, selection, `FailurePolicyPort`, `fail_after_forecasting` wiring, and LangGraph catching remain separately reviewed. Catching groups in the workflow step or graph and calling the terminal transition would skip this extraction seam.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-128 through ADR-162 remain Accepted and are not superseded.
+  - Application owns `extract_forecasting_agent_failures(failure: BaseExceptionGroup[BaseException]) -> tuple[ForecastingAgentFailure, ...]` in `forecasting_exception_group.py`. It is one synchronous Phase-3-specific function, not a DTO, service class, Protocol, visitor, registry, or generic exception framework.
+  - Input is an already-formed `BaseExceptionGroup`. Nested `BaseExceptionGroup` / `ExceptionGroup` members are traversed recursively in depth-first left-to-right encounter order. Exact original `ForecastingAgentFailure` objects are returned by identity. Duplicates are retained. There is no Consumer versus DAM ranking and no primary-failure selection.
+  - The function does not inspect or transform `__cause__`, does not classify `ApplicationError`, does not generate error codes, does not alter wrapper messages, and does not construct new `ForecastingAgentFailure` instances.
+  - Any leaf that is not a `ForecastingAgentFailure` fails closed as existing `InvalidRequestError` with a stable sanitized message. Unattributed `Exception` and unattributed `BaseException` leaves, including `CancelledError`, are rejected. No partial tuple is returned. The outward message does not include raw exception text, repr, class name, traceback, or provider/model details.
+  - There is no runtime `try/except` handling. The function receives a group as data and inspects `.exceptions`. Native Chunk 152 TaskGroup cancellation behavior is not reinterpreted.
+  - This ADR does **not** authorize failure classification, failure-fact DTOs, selection, attempt tracking, `FailurePolicyContext`, `FailurePolicyPort` runtime composition, `FailureAction` execution, `fail_after_forecasting` invocation, LangGraph wiring, retry/fallback, diagnostics mutation, or `WorkflowState` expansion.
+  - `ParallelForecastingExecutionService`, `ForecastingWorkflowStep`, `fail_after_forecasting`, graph topology, and `WorkflowState` remain unchanged.
+- **Consequences:** Callers can extract attributed forecasting TaskGroup leaves without putting raw exception text on `WorkflowState`. Phase 3 still has no classification, policy decision, action execution, terminal runtime routing, or retry/fallback.
+
+---
