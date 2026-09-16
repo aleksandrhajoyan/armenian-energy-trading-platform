@@ -19,6 +19,7 @@ Regulatory Intelligence workflow node adapter,
 forecasting plan,
 forecasting success,
 forecasting execution,
+parallel forecasting execution service,
 forecasting workflow context port,
 forecasting workflow step,
 forecasting success transition,
@@ -48,6 +49,9 @@ from energy_trading.application.orchestration.forecasting_context import (
 )
 from energy_trading.application.orchestration.forecasting_execution import (
     ForecastingExecutionPort,
+)
+from energy_trading.application.orchestration.forecasting_executor import (
+    ParallelForecastingExecutionService,
 )
 from energy_trading.application.orchestration.forecasting_plan import ForecastingPlan
 from energy_trading.application.orchestration.forecasting_success import ForecastingSuccess
@@ -160,6 +164,7 @@ __all__ = [
     "ForecastingWorkflowStep",
     "InitialParallelIngestionAttemptNumberSource",
     "InitialParallelIngestionFailurePolicy",
+    "ParallelForecastingExecutionService",
     "ParallelIngestionAgentFailure",
     "ParallelIngestionAttemptNumberPort",
     "ParallelIngestionExecutionPort",

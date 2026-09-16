@@ -300,6 +300,8 @@ def test_workflow_state_has_only_construction_validation() -> None:
     assert "energy_trading.application.orchestration.regulatory_intelligence_context" not in modules
     assert "ForecastingWorkflowContextPort" not in names
     assert "energy_trading.application.orchestration.forecasting_context" not in modules
+    assert "ParallelForecastingExecutionService" not in names
+    assert "energy_trading.application.orchestration.forecasting_executor" not in modules
     assert "ForecastingWorkflowStep" not in names
     assert "energy_trading.application.orchestration.forecasting_workflow" not in modules
     assert "advance_after_forecasting" not in names
@@ -337,6 +339,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
         "FailurePolicyPort",
         "ForecastingWorkflowContextPort",
         "ForecastingExecutionPort",
+        "ParallelForecastingExecutionService",
         "ForecastingPlan",
         "ForecastingSuccess",
         "ForecastingWorkflowStep",

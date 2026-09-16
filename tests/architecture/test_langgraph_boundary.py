@@ -51,6 +51,7 @@ REGULATORY_INTELLIGENCE_WORKFLOW_NODE_MODULE = (
 FORECASTING_PLAN_MODULE = ORCHESTRATION_ROOT / "forecasting_plan.py"
 FORECASTING_SUCCESS_MODULE = ORCHESTRATION_ROOT / "forecasting_success.py"
 FORECASTING_EXECUTION_MODULE = ORCHESTRATION_ROOT / "forecasting_execution.py"
+FORECASTING_EXECUTOR_MODULE = ORCHESTRATION_ROOT / "forecasting_executor.py"
 FORECASTING_CONTEXT_MODULE = ORCHESTRATION_ROOT / "forecasting_context.py"
 FORECASTING_WORKFLOW_MODULE = ORCHESTRATION_ROOT / "forecasting_workflow.py"
 FORECASTING_TRANSITION_MODULE = ORCHESTRATION_ROOT / "forecasting_transition.py"
@@ -401,6 +402,17 @@ def test_forecasting_execution_module_remains_langgraph_free() -> None:
     )
 
 
+def test_forecasting_executor_module_remains_langgraph_free() -> None:
+    names = imported_names(FORECASTING_EXECUTOR_MODULE)
+    assert "langgraph" not in names
+    assert "langchain" not in names
+    assert "langchain_core" not in names
+    modules = imported_modules(FORECASTING_EXECUTOR_MODULE)
+    assert not any(
+        is_forbidden(module, ("langgraph", "langchain", "langchain_core")) for module in modules
+    )
+
+
 def test_forecasting_context_module_remains_langgraph_free() -> None:
     names = imported_names(FORECASTING_CONTEXT_MODULE)
     assert "langgraph" not in names
@@ -526,6 +538,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "ForecastingPlan" not in names
     assert "ForecastingSuccess" not in names
     assert "ForecastingExecutionPort" not in names
+    assert "ParallelForecastingExecutionService" not in names
     assert "ForecastingWorkflowContextPort" not in names
     assert "ForecastingWorkflowStep" in names
     assert "advance_after_forecasting" in names
@@ -549,6 +562,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "energy_trading.application.orchestration.forecasting_plan" not in modules
     assert "energy_trading.application.orchestration.forecasting_success" not in modules
     assert "energy_trading.application.orchestration.forecasting_execution" not in modules
+    assert "energy_trading.application.orchestration.forecasting_executor" not in modules
     assert "energy_trading.application.orchestration.forecasting_context" not in modules
     assert "energy_trading.application.orchestration.forecasting_workflow" in modules
     assert "energy_trading.application.orchestration.forecasting_transition" in modules

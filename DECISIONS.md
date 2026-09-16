@@ -2470,3 +2470,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** The architecture now has a concrete trained two-feature OLS candidate that can satisfy the existing Consumer Load inference port when the numerical result is representable as `NonNegativeMW`. Offline signed evaluation evidence is unchanged. No production model is selected. Phase 3 execution remains future work.
 
 ---
+
+## ADR-160 — Phase 3 Consumer Load and DAM forecasts execute concurrently behind ForecastingExecutionPort
+
+- **Status:** Accepted
+- **Context:** `ForecastingPlan` already contains two complete, independently prepared requests. Neither request consumes the other branch's result. Published DAM Price forecasting does not consume `LoadForecastPoint`. No published domain dependency requires Consumer Load → DAM sequencing. Imposing sequential order would create an artificial dependency. `ForecastingWorkflowStep` already owns resolve → execute → record composition over `ForecastingWorkflowContextPort` and `ForecastingExecutionPort`. A second context-backed execution service would duplicate that composition. Chunk 149 remains an unwired OLS candidate and must not be selected by a Phase 3 executor.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-159 remain Accepted and are not superseded.
+  - Consumer Load forecasting and DAM price forecasting are independent parallel Phase 3 branches. This concurrency rule is owned by the concrete `ForecastingExecutionPort` implementation, not by widening `ForecastingPlan`.
+  - Chunk 150 adds application-owned `ParallelForecastingExecutionService` under `application.orchestration`. It structurally implements existing `ForecastingExecutionPort` without modifying that Protocol. Constructor dependencies are the published `ConsumerLoadForecastAgent` and `DAMPriceForecastAgent`.
+  - `async execute(*, plan: ForecastingPlan) -> ForecastingSuccess` starts both `run` calls concurrently with `asyncio.TaskGroup`. `ForecastingSuccess` is constructed only after both branches complete successfully, preserving the returned tuples exactly. Empty tuples remain valid successful data.
+  - `ForecastingWorkflowStep` continues to own resolve → execute → record composition. The executor does not inject `ForecastingWorkflowContextPort`, receive `WorkflowState`, resolve plans, or record success.
+  - If either branch raises, the executor does not return `ForecastingSuccess`, does not create a partial result, and does not translate the failure into a workflow transition. Native `asyncio.TaskGroup` structured cancellation and exception aggregation may propagate outward. There is no branch-priority or winner rule. `ForecastingWorkflowStep` therefore never reaches `record_success` on that path. Forecasting failure-transition handling remains a separate architecture concern.
+  - The executor is model-neutral. It does not import or select `PreviousDayPersistenceConsumerLoadForecastModel`, `Lag24h168hOLSConsumerLoadForecastModel`, or any DAM concrete implementation. Chunk 149 remains an unwired candidate. There is no champion, fallback, registry, scoring, or MAE at this boundary.
+  - `WorkflowState` remains the seven-field snapshot. LangGraph/`create_app()` remain unwired to the executor.
+- **Consequences:** Phase 3 now has an explicit published concurrency rule and a concrete application executor that fits the existing execution port. Production Phase 3 composition, model selection, forecasting failure transitions, and durable context remain future work.
+
+---
