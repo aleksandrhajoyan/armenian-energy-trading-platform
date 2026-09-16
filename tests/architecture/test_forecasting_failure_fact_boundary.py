@@ -43,6 +43,7 @@ FORBIDDEN_PREFIXES = (
     "energy_trading.application.orchestration.parallel_ingestion_failure_fact",
     "energy_trading.application.orchestration.parallel_ingestion_failure_classification",
     "energy_trading.application.orchestration.forecasting_failure_classification",
+    "energy_trading.application.orchestration.forecasting_failure_selection",
     "fastapi",
     "starlette",
     "langgraph",
@@ -144,6 +145,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "ParallelIngestionFailureFact",
         "classify_parallel_ingestion_agent_failure",
         "classify_forecasting_agent_failures",
+        "ForecastingFailureSelectionPort",
         "ParallelForecastingExecutionService",
         "ForecastingWorkflowStep",
         "registry",
@@ -455,6 +457,7 @@ def test_classifier_reuses_application_error_code_without_text_or_class_names() 
     assert "FailurePolicyContext" not in source
     assert "extract_forecasting_agent_failures" not in source
     assert "classify_forecasting_agent_failures" not in source
+    assert "ForecastingFailureSelectionPort" not in source
 
 
 def test_graph_policy_extractor_and_executor_remain_unwired_to_classification() -> None:

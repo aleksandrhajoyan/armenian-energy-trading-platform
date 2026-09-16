@@ -2572,3 +2572,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Callers can turn an attributed forecasting failure tuple into a sanitized fact tuple without selecting among failures or invoking policy. Phase 3 still has no selection, attempt tracking, policy decision, action execution, terminal runtime routing, or retry/fallback.
 
 ---
+
+## ADR-166 — Forecasting failure selection contract is application-owned and implementation-neutral
+
+- **Status:** Accepted
+- **Context:** Concurrent Phase 3 can yield multiple sanitized `ForecastingFailureFact` values. Chunk 155 can produce that tuple from already-attributed leaves. Existing single-failure `FailurePolicyContext` later needs one fact, but no Phase 3 winner rule is approved. Embedding a selector algorithm, exact-one fail-closed rule, ranking, AgentName preference, or error-code priority into classification, context construction, exception handling, or LangGraph would couple independently reviewable concerns. Reusing `ParallelIngestionFailureSelectionPort` would mix Phase 2 identity into forecasting.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-064, ADR-128 through ADR-165 remain Accepted and are not superseded.
+  - Application owns a Phase-3-specific, LangGraph-free, non-generic Protocol `ForecastingFailureSelectionPort` in `forecasting_failure_selection.py`.
+  - The only public operation is synchronous `select(facts: tuple[ForecastingFailureFact, ...]) -> ForecastingFailureFact`.
+  - The port accepts already-sanitized `ForecastingFailureFact` values only. Concrete winner semantics, exact-one fail-closed behavior, ranking, AgentName priority, and error-code priority are not defined here.
+  - Chunk 156 introduces no concrete implementation, no ABC, no registry, no factory, no `InvalidRequestError` selection behavior, and no empty-tuple production default.
+  - No first-element, last-element, Consumer-vs-DAM, error-code, retryability, severity, frequency, majority, or aggregation winner rule is approved. Concrete selection semantics require separate architectural review.
+  - Attempt tracking, `FailurePolicyContext` construction/resolution, policy/action execution, `fail_after_forecasting` invocation, and LangGraph routing remain deferred.
+  - `ParallelForecastingExecutionService`, `extract_forecasting_agent_failures`, `classify_forecasting_agent_failure`, `classify_forecasting_agent_failures`, `ForecastingWorkflowStep`, `fail_after_forecasting`, graph topology, and `WorkflowState` remain unchanged.
+- **Consequences:** Runtime composition gains a stable Phase 3 selection seam. Tests can use structural fakes without inheriting a production base. Production cannot silently choose among simultaneous forecasting failures until a later concrete-policy chunk.
+
+---

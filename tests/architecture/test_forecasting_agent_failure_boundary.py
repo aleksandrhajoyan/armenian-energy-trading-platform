@@ -30,6 +30,7 @@ STATE_MODULE = ORCHESTRATION_ROOT / "state.py"
 EXCEPTION_GROUP_MODULE = ORCHESTRATION_ROOT / "forecasting_exception_group.py"
 FAILURE_FACT_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_fact.py"
 FAILURE_CLASSIFICATION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_classification.py"
+FAILURE_SELECTION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_selection.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 
@@ -268,6 +269,7 @@ def test_policy_graph_and_handling_remain_unwired_to_attribution() -> None:
         FAILURE_TRANSITION_MODULE,
         SUCCESS_TRANSITION_MODULE,
         STATE_MODULE,
+        FAILURE_SELECTION_MODULE,
     ):
         names = imported_names(path)
         assert "ForecastingAgentFailure" not in names

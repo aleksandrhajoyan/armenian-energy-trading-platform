@@ -24,6 +24,7 @@ forecasting agent-failure attribution,
 forecasting ExceptionGroup attributed-leaf extraction,
 forecasting sanitized one-leaf failure classification,
 forecasting tuple-level failure-fact classification,
+forecasting failure-fact selection contract,
 forecasting workflow context port,
 forecasting workflow step,
 forecasting success transition,
@@ -70,6 +71,9 @@ from energy_trading.application.orchestration.forecasting_failure_classification
 from energy_trading.application.orchestration.forecasting_failure_fact import (
     ForecastingFailureFact,
     classify_forecasting_agent_failure,
+)
+from energy_trading.application.orchestration.forecasting_failure_selection import (
+    ForecastingFailureSelectionPort,
 )
 from energy_trading.application.orchestration.forecasting_failure_transition import (
     fail_after_forecasting,
@@ -181,6 +185,7 @@ __all__ = [
     "ForecastingAgentFailure",
     "ForecastingExecutionPort",
     "ForecastingFailureFact",
+    "ForecastingFailureSelectionPort",
     "ForecastingPlan",
     "ForecastingSuccess",
     "ForecastingWorkflowContextPort",

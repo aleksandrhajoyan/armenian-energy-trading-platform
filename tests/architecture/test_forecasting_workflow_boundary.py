@@ -141,6 +141,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "extract_forecasting_agent_failures",
         "classify_forecasting_agent_failure",
         "classify_forecasting_agent_failures",
+        "ForecastingFailureSelectionPort",
         "ForecastingFailureFact",
         "complete_forecasting",
     }
@@ -386,6 +387,7 @@ def test_workflow_step_public_contract_excludes_payload_and_runtime_types() -> N
     assert "extract_forecasting_agent_failures" not in source
     assert "classify_forecasting_agent_failure" not in source
     assert "classify_forecasting_agent_failures" not in source
+    assert "ForecastingFailureSelectionPort" not in source
     assert "ForecastingFailureFact" not in source
 
 

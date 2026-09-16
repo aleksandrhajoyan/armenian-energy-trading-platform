@@ -20,6 +20,7 @@ ORCHESTRATION_ROOT = PRODUCTION_ROOT / "application" / "orchestration"
 CLASSIFICATION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_classification.py"
 FACT_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_fact.py"
 AGENT_FAILURE_MODULE = ORCHESTRATION_ROOT / "forecasting_agent_failure.py"
+SELECTION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_selection.py"
 EXTRACTION_MODULE = ORCHESTRATION_ROOT / "forecasting_exception_group.py"
 EXECUTOR_MODULE = ORCHESTRATION_ROOT / "forecasting_executor.py"
 EXECUTION_MODULE = ORCHESTRATION_ROOT / "forecasting_execution.py"
@@ -45,6 +46,7 @@ FORBIDDEN_PREFIXES = (
     "energy_trading.application.orchestration.parallel_ingestion_exception_group",
     "energy_trading.application.orchestration.parallel_ingestion_failure_fact",
     "energy_trading.application.orchestration.parallel_ingestion_failure_classification",
+    "energy_trading.application.orchestration.forecasting_failure_selection",
     "fastapi",
     "starlette",
     "langgraph",
@@ -152,6 +154,7 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "ParallelIngestionFailureFact",
         "classify_parallel_ingestion_agent_failure",
         "classify_parallel_ingestion_agent_failures",
+        "ForecastingFailureSelectionPort",
         "ParallelForecastingExecutionService",
         "ForecastingWorkflowStep",
         "registry",
@@ -211,6 +214,7 @@ UNWIRED_MODULES = (
     STATE_MODULE,
     AGENT_FAILURE_MODULE,
     FACT_MODULE,
+    SELECTION_MODULE,
 )
 
 
