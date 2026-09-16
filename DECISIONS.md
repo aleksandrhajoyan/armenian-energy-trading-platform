@@ -2456,3 +2456,17 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Persistence, one-feature OLS, and two-feature OLS MAE can be reported side by side only after identity and actual-label alignment of all three cohorts. The comparison is evidence machinery, not a production-model choice and not empirical proof that any model is better. LightGBM/XGBoost and Phase 3 execution remain future work.
 
 ---
+
+## ADR-159 — Consumer Load OLS live inference preserves offline signed predictions but rejects negative values at the canonical live-output boundary
+
+- **Status:** Accepted
+- **Context:** ADR-142 remains Accepted for the unwired previous-day persistence live baseline. ADR-153 remains Accepted: offline two-feature OLS evaluation predictions may be negative finite floats and must not be clamped. Canonical `LoadForecastPoint.value_mw` remains `NonNegativeMW`. Chunk 148 did not select a production model. A candidate live adapter can apply already-fitted Chunk 143 parameters to exact `T - 24h` and `T - 168h` history on the existing `ConsumerLoadForecastModelPort` without widening that port. Silently clamping a negative OLS result, leaking Pydantic `ValidationError`, widening `NonNegativeMW`, or treating the candidate as champion would hide the offline/live contract distinction or invent model-selection policy.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-128 through ADR-158 remain Accepted and are not superseded.
+  - Chunk 149 adds ML-owned `Lag24h168hOLSConsumerLoadForecastModel` under `energy_trading.ml.consumer_load`. It structurally implements existing `ConsumerLoadForecastModelPort` without modifying the application port, `LoadForecastPoint`, or `NonNegativeMW`. Construction consumes already-fitted `ConsumerLoadLag24h168hLinearRegressionFit`. Inference does not fit, retrain, or load a model registry.
+  - Live lookup uses exact `target - 24h` and exact `target - 168h` `ConsumptionRecord` observations from the existing request history. Missing or duplicate required timestamps fail closed. There is no interpolation, nearest-neighbor substitution, persistence fallback, or partial success.
+  - Raw prediction uses published Chunk 144 mathematics: `intercept_mw + lag_24h_coefficient * lag_24h_mw + lag_168h_coefficient * lag_168h_mw`. Non-finite fitted parameters fail at construction. Non-finite raw predictions fail closed. A finite raw prediction `< 0` fails closed with sanitized `InvalidRequestError` before `LoadForecastPoint` construction. A finite raw prediction `>= 0`, including exact `0.0`, is admitted. Clamping, `abs`, rounding up, and silent omission are forbidden.
+  - Chunk 144 offline `predicted_value_mw` remains an unconstrained finite float. Negative offline experimental evidence remains valid and unclamped. This live-output admissibility rule is not altered OLS mathematics, not fallback policy, and not model selection. The candidate adapter remains unwired from agents, API composition, FastAPI, LangGraph, and `ForecastingExecutionPort`.
+- **Consequences:** The architecture now has a concrete trained two-feature OLS candidate that can satisfy the existing Consumer Load inference port when the numerical result is representable as `NonNegativeMW`. Offline signed evaluation evidence is unchanged. No production model is selected. Phase 3 execution remains future work.
+
+---
