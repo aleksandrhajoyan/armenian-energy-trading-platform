@@ -25,6 +25,7 @@ forecasting ExceptionGroup attributed-leaf extraction,
 forecasting sanitized one-leaf failure classification,
 forecasting tuple-level failure-fact classification,
 forecasting failure-fact selection contract,
+forecasting strict single-failure selector,
 forecasting workflow context port,
 forecasting workflow step,
 forecasting success transition,
@@ -79,6 +80,9 @@ from energy_trading.application.orchestration.forecasting_failure_transition imp
     fail_after_forecasting,
 )
 from energy_trading.application.orchestration.forecasting_plan import ForecastingPlan
+from energy_trading.application.orchestration.forecasting_strict_single_failure_selector import (
+    StrictSingleForecastingFailureSelector,
+)
 from energy_trading.application.orchestration.forecasting_success import ForecastingSuccess
 from energy_trading.application.orchestration.forecasting_transition import (
     advance_after_forecasting,
@@ -212,6 +216,7 @@ __all__ = [
     "RegulatoryIntelligenceWorkflowNodeAdapter",
     "RegulatoryIntelligenceWorkflowRequest",
     "RegulatoryIntelligenceWorkflowStep",
+    "StrictSingleForecastingFailureSelector",
     "StrictSingleParallelIngestionFailureSelector",
     "WorkflowPhase",
     "WorkflowState",

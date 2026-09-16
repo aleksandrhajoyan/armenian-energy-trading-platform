@@ -268,6 +268,7 @@ def test_executor_does_not_import_outer_layers_or_vendors() -> None:
     assert "classify_forecasting_agent_failure" not in names
     assert "classify_forecasting_agent_failures" not in names
     assert "ForecastingFailureSelectionPort" not in names
+    assert "StrictSingleForecastingFailureSelector" not in names
     assert "ForecastingFailureFact" not in names
 
 
@@ -504,6 +505,8 @@ def test_graph_remains_unwired_to_the_executor() -> None:
     assert "forecasting_failure_classification" not in source
     assert "ForecastingFailureSelectionPort" not in names
     assert "forecasting_failure_selection" not in source
+    assert "StrictSingleForecastingFailureSelector" not in names
+    assert "forecasting_strict_single_failure_selector" not in source
 
 
 def test_api_composition_does_not_import_or_construct_executor() -> None:

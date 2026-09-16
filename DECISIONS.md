@@ -2589,3 +2589,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Runtime composition gains a stable Phase 3 selection seam. Tests can use structural fakes without inheriting a production base. Production cannot silently choose among simultaneous forecasting failures until a later concrete-policy chunk.
 
 ---
+
+## ADR-167 — Forecasting strict-single failure selection is deterministic and fail-closed
+
+- **Status:** Accepted
+- **Context:** Concurrent Phase 3 can yield zero, one, or multiple sanitized `ForecastingFailureFact` values. Chunk 156 published `ForecastingFailureSelectionPort` without a concrete selector or winner rule. Existing single-failure `FailurePolicyContext` later needs one fact, but no Phase 3 business rule for choosing among simultaneous Consumer Load and DAM failures is approved. Allowing first/last/native TaskGroup order, AgentName preference, or error-code priority to determine that fact would introduce accidental semantics.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-067, ADR-128 through ADR-166 remain Accepted and are not superseded.
+  - Application owns LangGraph-free `StrictSingleForecastingFailureSelector` in `forecasting_strict_single_failure_selector.py`.
+  - The class implements the published `ForecastingFailureSelectionPort` structurally and does not inherit the Protocol.
+  - Exactly one sanitized fact is returned as the same instance. Zero facts fail closed. Multiple facts fail closed.
+  - Empty and multi-fact inputs raise the same sanitized `InvalidRequestError` with the stable message `Forecasting failure selection requires exactly one failure fact.`
+  - Duplicate agent identities and value-equal facts remain multiple facts. There is no ranking, sorting, deduplication, aggregation, first/last winner, AgentName priority, or error-code priority.
+  - Attempt tracking, `FailurePolicyContext` construction/resolution, policy/action execution, `fail_after_forecasting` invocation, and LangGraph routing remain deferred.
+  - `ForecastingFailureSelectionPort`, `ParallelForecastingExecutionService`, `extract_forecasting_agent_failures`, `classify_forecasting_agent_failure`, `classify_forecasting_agent_failures`, `ForecastingWorkflowStep`, `fail_after_forecasting`, graph topology, and `WorkflowState` remain unchanged.
+- **Consequences:** The prepared Phase 3 failure pipeline can proceed for unambiguous single-agent failure cases. Multiple simultaneous forecasting failures remain unsupported and explicit. A future multi-failure policy requires separate architectural review and is not defined here. Attempt tracking and LangGraph failure routing remain later work.
+
+---

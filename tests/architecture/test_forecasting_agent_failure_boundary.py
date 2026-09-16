@@ -31,6 +31,7 @@ EXCEPTION_GROUP_MODULE = ORCHESTRATION_ROOT / "forecasting_exception_group.py"
 FAILURE_FACT_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_fact.py"
 FAILURE_CLASSIFICATION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_classification.py"
 FAILURE_SELECTION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_selection.py"
+FAILURE_SELECTOR_MODULE = ORCHESTRATION_ROOT / "forecasting_strict_single_failure_selector.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 
@@ -132,6 +133,8 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "payload",
         "error_code",
         "classify",
+        "ForecastingFailureSelectionPort",
+        "StrictSingleForecastingFailureSelector",
     }
 )
 
@@ -270,6 +273,7 @@ def test_policy_graph_and_handling_remain_unwired_to_attribution() -> None:
         SUCCESS_TRANSITION_MODULE,
         STATE_MODULE,
         FAILURE_SELECTION_MODULE,
+        FAILURE_SELECTOR_MODULE,
     ):
         names = imported_names(path)
         assert "ForecastingAgentFailure" not in names

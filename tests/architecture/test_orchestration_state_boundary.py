@@ -136,6 +136,7 @@ FORBIDDEN_FIELD_NAMES = frozenset(
         "forecasting_failure_fact",
         "forecasting_failure_classification",
         "forecasting_failure_selection",
+        "forecasting_strict_single_failure_selector",
         "forecasting_context",
         "risk_assessment",
         "market_bids",
@@ -328,6 +329,11 @@ def test_workflow_state_has_only_construction_validation() -> None:
     )
     assert "ForecastingFailureSelectionPort" not in names
     assert "energy_trading.application.orchestration.forecasting_failure_selection" not in modules
+    assert "StrictSingleForecastingFailureSelector" not in names
+    assert (
+        "energy_trading.application.orchestration.forecasting_strict_single_failure_selector"
+        not in modules
+    )
 
 
 def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
@@ -366,6 +372,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
         "ForecastingFailureFact",
         "ForecastingFailureSelectionPort",
         "ForecastingPlan",
+        "StrictSingleForecastingFailureSelector",
         "ForecastingSuccess",
         "ForecastingWorkflowStep",
         "ParallelIngestionPlan",
