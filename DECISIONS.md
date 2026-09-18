@@ -2606,3 +2606,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** The prepared Phase 3 failure pipeline can proceed for unambiguous single-agent failure cases. Multiple simultaneous forecasting failures remain unsupported and explicit. A future multi-failure policy requires separate architectural review and is not defined here. Attempt tracking and LangGraph failure routing remain later work.
 
 ---
+
+## ADR-168 — Forecasting attempt number is read through an explicit application boundary
+
+- **Status:** Accepted
+- **Context:** Existing Phase 3 failure classification and strict single-failure selection can produce one sanitized `ForecastingFailureFact`, but current runtime orchestration has no approved source for the 1-based forecasting attempt that a later `FailurePolicyContext` would need. Attempt storage and retry mechanics must not leak into `WorkflowState`, failure classification, failure selection, context construction, or LangGraph nodes.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-065, ADR-128 through ADR-167 remain Accepted and are not superseded.
+  - Application owns a Phase-3-specific, LangGraph-free, non-generic Protocol `ForecastingAttemptNumberPort` in `forecasting_attempt_number.py`.
+  - The only public operation is async `get_attempt_number(self, workflow_id: str) -> int`.
+  - The port accepts only workflow identity and returns the current 1-based Phase 3 forecasting execution attempt. It is read-only, implementation-free, and storage-neutral.
+  - Chunk 158 introduces no concrete implementation, no ABC, no registry, no factory, and no increment/reset/set/record/begin/complete write API.
+  - Chunk 158 defines no mutation semantics, concurrency policy, maximum attempts, or durable backend. Concrete tracking requires separate architectural review.
+  - The port does not construct `FailurePolicyContext`, invoke policy or action, call `fail_after_forecasting`, or wire LangGraph.
+  - `WorkflowState` remains the existing seven-field snapshot.
+- **Consequences:** Future runtime composition has an explicit seam for the forecasting attempt number. Later infrastructure may read from an appropriate store without changing application consumers. How attempts are initialized, when increment occurs, concurrency, reset, retry ownership, and durable implementation remain deferred. This contract is Phase-3-specific and does not alias `ParallelIngestionAttemptNumberPort`.
+
+---
