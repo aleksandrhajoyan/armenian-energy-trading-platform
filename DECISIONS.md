@@ -2655,6 +2655,24 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - The service does not duplicate validation owned by the selector, attempt-number source, `ForecastingFailureFact`, `FailurePolicyContext`, or the published builder. It does not enforce `phase == FORECASTING`.
   - The service does not inspect exceptions, mutate attempts, invoke `FailurePolicyPort`, execute a `FailureAction`, call `fail_after_forecasting`, or wire LangGraph. Retry/fallback remain absent. The Phase 2 resolver remains separate. Later exception-to-context preparation remains separately reviewed.
   - `WorkflowState` remains the existing seven-field snapshot.
-- **Consequences:** Application callers can resolve a published Phase 3 failure-policy context from sanitized facts without implementing a selector, tracking attempts, or executing policy. Production still has no concrete forecasting attempt source, no exception-to-context preparation, no policy/action runtime, and no LangGraph failure routing.
+- **Consequences:** Application callers can resolve a published Phase 3 failure-policy context from sanitized facts without implementing a selector, tracking attempts, or executing policy. Production still has no concrete forecasting attempt source, no policy/action runtime, and no LangGraph failure routing. Exception-to-context preparation is owned by a later Phase-3-specific service.
+
+---
+
+## ADR-171 — Phase 3 failure-policy context preparation composes extraction, classification, and context resolution
+
+- **Status:** Accepted
+- **Context:** Chunk 160 published `ForecastingFailureContextResolutionService` as selection + attempt lookup + context construction. Phase 3 already has ExceptionGroup extraction and tuple-level sanitized classification. Folding those independently reviewed seams into one mapper, or reusing `ParallelIngestionFailureContextPreparationService` as the production Phase 3 service, would mix separately reviewable concerns and Phase 2 identity into forecasting.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-057, ADR-128 through ADR-170 remain Accepted and are not superseded.
+  - Application owns `ForecastingFailureContextPreparationService` in `forecasting_failure_context_preparation.py`. It is one Phase-3-specific concrete class, not a Protocol, ABC, dataclass, generic, registry, factory, selector, classifier, policy, tracker, or framework adapter.
+  - Constructor injects exactly `ForecastingFailureContextResolutionService`. It does not inject selection or attempt-number dependencies again and does not instantiate the resolver internally.
+  - Keyword-only `async prepare(*, workflow_id: str, phase: WorkflowPhase, error: BaseException) -> FailurePolicyContext` extracts once, classifies the extracted tuple once, then awaits existing resolution once.
+  - Incoming `error` is forwarded unchanged to extraction. The extraction result is forwarded unchanged to tuple classification. The classifier result is forwarded unchanged to resolution together with the original `workflow_id` and `phase`.
+  - Order, cardinality, and duplicates remain owned by the published extractor and classifier. The service does not copy, sort, deduplicate, rank, slice, index, filter, mutate, or otherwise transform extracted failures or facts.
+  - No validation is duplicated. The service does not implement selection, attempt lookup, policy decision, action execution, state mutation, graph coupling, retries, or fallback. If extraction, classification, or resolution raises, the same exception propagates and later steps do not run.
+  - The Phase 2 preparation service remains separate. Runtime integration remains a later chunk.
+  - `WorkflowState` remains the existing seven-field snapshot.
+- **Consequences:** Application callers can prepare a published Phase 3 failure-policy context from a `BaseException` without reimplementing extraction, classification, selection, or attempt lookup. Production still has no concrete forecasting attempt source, no retry-capable attempt tracking, no policy/action runtime, and no LangGraph forecasting-failure routing.
 
 ---
