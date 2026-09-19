@@ -2640,3 +2640,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Application callers can construct a published Phase 3 failure-policy context from typed facts without selecting failures, looking up attempts, or executing policy. Production still has no forecasting context-resolution service, no concrete attempt source, no policy/action runtime, and no LangGraph failure routing.
 
 ---
+
+## ADR-170 — Phase 3 failure-policy context resolution composes selection, attempt lookup, and context construction
+
+- **Status:** Accepted
+- **Context:** Chunk 159 published `build_forecasting_failure_policy_context` as a one-for-one constructor of existing `FailurePolicyContext`. Phase 3 already has sanitized facts, a selection contract, a strict single-failure selector, and an attempt-number source contract. Folding those independently reviewed seams, exception objects, `WorkflowState`, and policy decision into one mapper would freeze separately reviewable concerns. Reusing `ParallelIngestionFailureContextResolutionService` as the production Phase 3 service would mix Phase 2 identity into forecasting.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-057, ADR-128 through ADR-169 remain Accepted and are not superseded.
+  - Application owns `ForecastingFailureContextResolutionService` in `forecasting_failure_context_resolution.py`. It is one Phase-3-specific concrete class, not a Protocol, ABC, dataclass, registry, factory, generic resolver, or Phase 2 alias.
+  - Constructor injects exactly `ForecastingFailureSelectionPort` and `ForecastingAttemptNumberPort`. It does not inject `StrictSingleForecastingFailureSelector` or any concrete attempt source.
+  - Keyword-only `async resolve(*, workflow_id: str, phase: WorkflowPhase, facts: tuple[ForecastingFailureFact, ...]) -> FailurePolicyContext` selects once, awaits attempt lookup once, then delegates construction to existing `build_forecasting_failure_policy_context`.
+  - Incoming `facts` are passed unchanged to selection. Incoming `workflow_id` is passed unchanged to attempt lookup and is not stripped or normalized. Incoming `phase`, the selected `error_code`, the returned attempt number, and the selected `agent_name` are forwarded unchanged to the published builder.
+  - Selection occurs before attempt-number lookup. If selection raises, attempt lookup is not called. If attempt lookup raises, context construction does not proceed. Existing failures propagate naturally. The service does not catch, wrap, translate, retry, suppress, aggregate, or inspect exceptions.
+  - The service does not duplicate validation owned by the selector, attempt-number source, `ForecastingFailureFact`, `FailurePolicyContext`, or the published builder. It does not enforce `phase == FORECASTING`.
+  - The service does not inspect exceptions, mutate attempts, invoke `FailurePolicyPort`, execute a `FailureAction`, call `fail_after_forecasting`, or wire LangGraph. Retry/fallback remain absent. The Phase 2 resolver remains separate. Later exception-to-context preparation remains separately reviewed.
+  - `WorkflowState` remains the existing seven-field snapshot.
+- **Consequences:** Application callers can resolve a published Phase 3 failure-policy context from sanitized facts without implementing a selector, tracking attempts, or executing policy. Production still has no concrete forecasting attempt source, no exception-to-context preparation, no policy/action runtime, and no LangGraph failure routing.
+
+---
