@@ -2623,3 +2623,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** Future runtime composition has an explicit seam for the forecasting attempt number. Later infrastructure may read from an appropriate store without changing application consumers. How attempts are initialized, when increment occurs, concurrency, reset, retry ownership, and durable implementation remain deferred. This contract is Phase-3-specific and does not alias `ParallelIngestionAttemptNumberPort`.
 
 ---
+
+## ADR-169 — Phase 3 failure-policy context construction stays separate from selection, attempt lookup, and policy decision
+
+- **Status:** Accepted
+- **Context:** Chunk 29 published `FailurePolicyContext` as a frozen sanitized DTO. Phase 3 now has attributed failures, ExceptionGroup extraction, sanitized facts, a selection contract, a strict single-failure selector, and an attempt-number source contract. Existing single-failure policy later needs that published context, but folding selection, attempt lookup, exception objects, `WorkflowState`, and policy decision into one mapper would freeze independently reviewable concerns. Reusing `build_parallel_ingestion_failure_policy_context` as the production Phase 3 function would mix Phase 2 identity into forecasting.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-057, ADR-128 through ADR-168 remain Accepted and are not superseded.
+  - Application owns `build_forecasting_failure_policy_context` in `forecasting_failure_context.py`. It is one synchronous Phase-3-specific function, not a service class, Protocol, factory, registry, generic mapper, or Phase 2 alias.
+  - Keyword-only parameters are a one-for-one source for the published `FailurePolicyContext` fields: `phase: WorkflowPhase`, `error_code: str`, `attempt_number: int`, and `agent_name: AgentName | None = None`. The published optional default for `agent_name` is preserved; omitting it yields `None` rather than a fabricated identity.
+  - The function calls the published `FailurePolicyContext(...)` constructor once and returns that object. Existing `__post_init__` validation remains authoritative. The builder does not duplicate strip/type/range checks, does not enforce `phase == FORECASTING`, and does not strip, normalize, map, increment, clamp, rank, default, or infer caller-supplied values.
+  - The caller supplies the already-sanitized error code, the attempt number, and the optional canonical agent identity. The function does not accept `Exception`, `BaseException`, traceback, `ExceptionGroup`, `ForecastingFailureFact`, `WorkflowState`, or a selector/attempt-number port.
+  - The function does not select among failures, look up an attempt number, invoke `FailurePolicyPort`, execute a `FailureAction`, call `fail_after_forecasting`, or wire LangGraph.
+  - Chunk 157 still owns selection. Chunk 158 still owns attempt-number reading. Existing `FailurePolicyContext` validation remains the only validation. Retry/fallback remain absent. Later context-resolution composition remains separately reviewed.
+  - `WorkflowState` remains the existing seven-field snapshot. The Phase 2 builder is unchanged.
+- **Consequences:** Application callers can construct a published Phase 3 failure-policy context from typed facts without selecting failures, looking up attempts, or executing policy. Production still has no forecasting context-resolution service, no concrete attempt source, no policy/action runtime, and no LangGraph failure routing.
+
+---
