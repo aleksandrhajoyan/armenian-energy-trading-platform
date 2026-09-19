@@ -2655,7 +2655,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - The service does not duplicate validation owned by the selector, attempt-number source, `ForecastingFailureFact`, `FailurePolicyContext`, or the published builder. It does not enforce `phase == FORECASTING`.
   - The service does not inspect exceptions, mutate attempts, invoke `FailurePolicyPort`, execute a `FailureAction`, call `fail_after_forecasting`, or wire LangGraph. Retry/fallback remain absent. The Phase 2 resolver remains separate. Later exception-to-context preparation remains separately reviewed.
   - `WorkflowState` remains the existing seven-field snapshot.
-- **Consequences:** Application callers can resolve a published Phase 3 failure-policy context from sanitized facts without implementing a selector, tracking attempts, or executing policy. Production still has no concrete forecasting attempt source, no policy/action runtime, and no LangGraph failure routing. Exception-to-context preparation is owned by a later Phase-3-specific service.
+- **Consequences:** Application callers can resolve a published Phase 3 failure-policy context from sanitized facts without implementing a selector, tracking attempts, or executing policy. Production still has no retry-capable attempt tracking, no policy/action runtime, and no LangGraph failure routing. Exception-to-context preparation is owned by a later Phase-3-specific service.
 
 ---
 
@@ -2673,6 +2673,23 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - No validation is duplicated. The service does not implement selection, attempt lookup, policy decision, action execution, state mutation, graph coupling, retries, or fallback. If extraction, classification, or resolution raises, the same exception propagates and later steps do not run.
   - The Phase 2 preparation service remains separate. Runtime integration remains a later chunk.
   - `WorkflowState` remains the existing seven-field snapshot.
-- **Consequences:** Application callers can prepare a published Phase 3 failure-policy context from a `BaseException` without reimplementing extraction, classification, selection, or attempt lookup. Production still has no concrete forecasting attempt source, no retry-capable attempt tracking, no policy/action runtime, and no LangGraph forecasting-failure routing.
+- **Consequences:** Application callers can prepare a published Phase 3 failure-policy context from a `BaseException` without reimplementing extraction, classification, selection, or attempt lookup. Production still has no retry-capable attempt tracking, no policy/action runtime, and no LangGraph forecasting-failure routing.
+
+---
+
+## ADR-172 — The no-retry Phase 3 runtime resolves the initial attempt as one
+
+- **Status:** Accepted
+- **Context:** `FailurePolicyContext` requires an attempt number. The application now has a Phase 3 attempt-number port, but runtime retry execution and attempt tracking do not exist. Introducing mutable or persistent tracking before retries exist would design unsupported semantics. Reusing `InitialParallelIngestionAttemptNumberSource` as the production Phase 3 class would mix Phase 2 identity into forecasting.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-057, ADR-068, ADR-128 through ADR-171 remain Accepted and are not superseded.
+  - Application owns LangGraph-free `InitialForecastingAttemptNumberSource` in `forecasting_initial_attempt_number_source.py`.
+  - The class satisfies existing `ForecastingAttemptNumberPort` structurally and does not inherit the Protocol.
+  - The method remains async `get_attempt_number(self, workflow_id: str) -> int`.
+  - The source is stateless and returns exactly `1` for every workflow identity.
+  - The workflow ID remains opaque: it is not stripped, normalized, validated, hashed, stored, or mapped.
+  - There is no increment, reset, persistence, per-workflow map, or retry ownership.
+  - The Phase 2 source remains a separately named class.
+- **Consequences:** The existing single-failure Phase 3 application pipeline can construct a real `FailurePolicyContext` using concrete selection and concrete initial-attempt resolution when a caller injects this source behind the published port. This source is intentionally insufficient for future retry execution. Retry-capable attempt tracking requires separate architectural review.
 
 ---

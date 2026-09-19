@@ -1,4 +1,4 @@
-"""Forecasting attempt-number source stays a Protocol-only application boundary."""
+"""Initial Phase 3 attempt-number source stays application-owned and stateless."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from tests.architecture.import_inspection import (
 
 PRODUCTION_ROOT = SRC_ROOT / "energy_trading"
 ORCHESTRATION_ROOT = PRODUCTION_ROOT / "application" / "orchestration"
+SOURCE_MODULE = ORCHESTRATION_ROOT / "forecasting_initial_attempt_number_source.py"
 ATTEMPT_NUMBER_MODULE = ORCHESTRATION_ROOT / "forecasting_attempt_number.py"
 SELECTION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_selection.py"
 SELECTOR_MODULE = ORCHESTRATION_ROOT / "forecasting_strict_single_failure_selector.py"
@@ -24,15 +25,21 @@ FACT_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_fact.py"
 CLASSIFICATION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_classification.py"
 AGENT_FAILURE_MODULE = ORCHESTRATION_ROOT / "forecasting_agent_failure.py"
 EXTRACTION_MODULE = ORCHESTRATION_ROOT / "forecasting_exception_group.py"
-EXECUTOR_MODULE = ORCHESTRATION_ROOT / "forecasting_executor.py"
-WORKFLOW_MODULE = ORCHESTRATION_ROOT / "forecasting_workflow.py"
-FAILURE_TRANSITION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_transition.py"
 FAILURE_POLICY_MODULE = ORCHESTRATION_ROOT / "failure_policy.py"
+CONTEXT_BUILDER_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_context.py"
+RESOLUTION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_context_resolution.py"
+PREPARATION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_context_preparation.py"
+FAILURE_TRANSITION_MODULE = ORCHESTRATION_ROOT / "forecasting_failure_transition.py"
+SUCCESS_TRANSITION_MODULE = ORCHESTRATION_ROOT / "forecasting_transition.py"
+WORKFLOW_MODULE = ORCHESTRATION_ROOT / "forecasting_workflow.py"
 GRAPH_MODULE = ORCHESTRATION_ROOT / "graph.py"
+EXECUTOR_MODULE = ORCHESTRATION_ROOT / "forecasting_executor.py"
+WORKFLOW_CONTEXT_MODULE = ORCHESTRATION_ROOT / "forecasting_context.py"
+PLAN_MODULE = ORCHESTRATION_ROOT / "forecasting_plan.py"
 STATE_MODULE = ORCHESTRATION_ROOT / "state.py"
+PHASE_2_SOURCE_MODULE = ORCHESTRATION_ROOT / "parallel_ingestion_initial_attempt_number_source.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
-APPLICATION_ROOT = PRODUCTION_ROOT / "application"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -40,18 +47,7 @@ FORBIDDEN_PREFIXES = (
     "energy_trading.api",
     "energy_trading.application.agents",
     "energy_trading.application.errors",
-    "energy_trading.application.orchestration.state",
-    "energy_trading.application.orchestration.failure_policy",
-    "energy_trading.application.orchestration.graph",
-    "energy_trading.application.orchestration.forecasting_failure_fact",
-    "energy_trading.application.orchestration.forecasting_failure_selection",
-    "energy_trading.application.orchestration.forecasting_strict_single_failure_selector",
-    "energy_trading.application.orchestration.forecasting_agent_failure",
-    "energy_trading.application.orchestration.forecasting_exception_group",
-    "energy_trading.application.orchestration.forecasting_failure_classification",
-    "energy_trading.application.orchestration.forecasting_executor",
-    "energy_trading.application.orchestration.forecasting_workflow",
-    "energy_trading.application.orchestration.parallel_ingestion_attempt_number",
+    "energy_trading.application.orchestration",
     "fastapi",
     "starlette",
     "langgraph",
@@ -86,6 +82,13 @@ FORBIDDEN_PREFIXES = (
     "backoff",
     "traceback",
     "pathlib",
+    "sqlite3",
+    "json",
+    "random",
+    "hashlib",
+    "time",
+    "datetime",
+    "uuid",
 )
 
 FORBIDDEN_TYPE_NAMES = frozenset(
@@ -100,6 +103,7 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "TypedDict",
         "Callable",
         "Optional",
+        "Protocol",
         "ABC",
         "Exception",
         "BaseException",
@@ -111,29 +115,30 @@ FORBIDDEN_TYPE_NAMES = frozenset(
         "WorkflowState",
         "WorkflowPhase",
         "WorkflowStatus",
+        "FailureAction",
         "FailurePolicyContext",
         "FailurePolicyPort",
-        "FailureAction",
         "ForecastingFailureFact",
         "ForecastingFailureSelectionPort",
+        "ForecastingAttemptNumberPort",
         "StrictSingleForecastingFailureSelector",
+        "ForecastingFailureContextResolutionService",
+        "ForecastingFailureContextPreparationService",
         "ForecastingAgentFailure",
-        "ForecastingPlan",
-        "ForecastingSuccess",
-        "ForecastingExecutionPort",
-        "ForecastingWorkflowContextPort",
         "ParallelForecastingExecutionService",
         "ForecastingWorkflowStep",
+        "InitialParallelIngestionAttemptNumberSource",
         "ParallelIngestionAttemptNumberPort",
-        "ConsumerLoadForecastAgent",
-        "DAMPriceForecastAgent",
         "StateGraph",
         "CompiledStateGraph",
         "Send",
         "RetryPolicy",
         "AdapterDiagnostic",
+        "AgentName",
+        "AgentPort",
         "Path",
         "PurePath",
+        "ClassVar",
     }
 )
 
@@ -144,6 +149,10 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "Generic",
         "dict",
         "Mapping",
+        "set",
+        "list",
+        "Counter",
+        "Protocol",
         "ABC",
         "traceback",
         "exc_info",
@@ -154,41 +163,50 @@ FORBIDDEN_IDENTIFIERS = frozenset(
         "WorkflowState",
         "WorkflowPhase",
         "WorkflowStatus",
+        "FailureAction",
         "FailurePolicyContext",
         "FailurePolicyPort",
-        "FailureAction",
-        "ForecastingFailureFact",
-        "ForecastingFailureSelectionPort",
+        "build_forecasting_failure_policy_context",
+        "ForecastingFailureContextResolutionService",
+        "ForecastingFailureContextPreparationService",
+        "ForecastingAttemptNumberPort",
         "StrictSingleForecastingFailureSelector",
-        "ForecastingAgentFailure",
+        "ForecastingFailureSelectionPort",
+        "ForecastingFailureFact",
+        "fail_after_forecasting",
+        "advance_after_forecasting",
         "extract_forecasting_agent_failures",
         "classify_forecasting_agent_failure",
         "classify_forecasting_agent_failures",
-        "fail_after_forecasting",
-        "advance_after_forecasting",
+        "ForecastingAgentFailure",
         "ParallelForecastingExecutionService",
         "ForecastingWorkflowStep",
+        "InitialParallelIngestionAttemptNumberSource",
         "ParallelIngestionAttemptNumberPort",
-        "ConsumerLoadForecastAgent",
-        "DAMPriceForecastAgent",
-        "build_parallel_ingestion_failure_policy_context",
-        "execute_parallel_ingestion_failure_action",
         "registry",
         "factory",
-        "visitor",
         "tenacity",
         "backoff",
+        "asyncio",
         "TaskGroup",
         "sleep",
         "retry",
         "fallback",
         "increment",
         "reset",
-        "Path",
-        "open",
+        "hash",
+        "random",
+        "time",
+        "datetime",
+        "uuid",
+        "cache",
+        "lock",
+        "Lock",
         "Redis",
         "Engine",
         "Session",
+        "open",
+        "Path",
         "__cause__",
         "__context__",
         "__traceback__",
@@ -211,6 +229,7 @@ FORBIDDEN_MUTATION_NAMES = frozenset(
         "record",
         "begin",
         "complete",
+        "__init__",
     }
 )
 
@@ -222,24 +241,10 @@ FORBIDDEN_IMPLEMENTATION_NAMES = frozenset(
         "DefaultForecastingAttemptNumber",
         "ForecastingAttemptTracker",
         "AttemptNumberCounter",
+        "AttemptRepository",
+        "AttemptNumberStore",
+        "InitialParallelIngestionAttemptNumberSource",
     }
-)
-
-ALLOWED_MODULE_IMPORTS = frozenset({"typing"})
-
-UNWIRED_MODULES = (
-    GRAPH_MODULE,
-    WORKFLOW_MODULE,
-    EXECUTOR_MODULE,
-    EXTRACTION_MODULE,
-    CLASSIFICATION_MODULE,
-    FACT_MODULE,
-    AGENT_FAILURE_MODULE,
-    FAILURE_POLICY_MODULE,
-    FAILURE_TRANSITION_MODULE,
-    SELECTION_MODULE,
-    SELECTOR_MODULE,
-    STATE_MODULE,
 )
 
 STORAGE_SUBSTRINGS = (
@@ -253,6 +258,33 @@ STORAGE_SUBSTRINGS = (
     "persistence",
     "compare-and-set",
     "compare_and_set",
+    "sqlite",
+    "json",
+    "qdrant",
+    "checkpointer",
+)
+
+UNWIRED_MODULES = (
+    GRAPH_MODULE,
+    WORKFLOW_MODULE,
+    EXECUTOR_MODULE,
+    EXTRACTION_MODULE,
+    CLASSIFICATION_MODULE,
+    FACT_MODULE,
+    AGENT_FAILURE_MODULE,
+    FAILURE_POLICY_MODULE,
+    CONTEXT_BUILDER_MODULE,
+    RESOLUTION_MODULE,
+    PREPARATION_MODULE,
+    FAILURE_TRANSITION_MODULE,
+    SUCCESS_TRANSITION_MODULE,
+    WORKFLOW_CONTEXT_MODULE,
+    PLAN_MODULE,
+    STATE_MODULE,
+    SELECTION_MODULE,
+    SELECTOR_MODULE,
+    ATTEMPT_NUMBER_MODULE,
+    PHASE_2_SOURCE_MODULE,
 )
 
 
@@ -263,6 +295,16 @@ def _class_def(path: Path, class_name: str) -> ast.ClassDef:
             return node
     msg = f"class {class_name!r} not found in {path}"
     raise AssertionError(msg)
+
+
+def _base_names(class_def: ast.ClassDef) -> set[str]:
+    names: set[str] = set()
+    for base in class_def.bases:
+        if isinstance(base, ast.Name):
+            names.add(base.id)
+        elif isinstance(base, ast.Attribute):
+            names.add(base.attr)
+    return names
 
 
 def _module_class_names(path: Path) -> list[str]:
@@ -278,16 +320,6 @@ def _public_function_defs(path: Path) -> list[ast.FunctionDef | ast.AsyncFunctio
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         and not node.name.startswith("_")
     ]
-
-
-def _base_names(class_def: ast.ClassDef) -> set[str]:
-    names: set[str] = set()
-    for base in class_def.bases:
-        if isinstance(base, ast.Name):
-            names.add(base.id)
-        elif isinstance(base, ast.Attribute):
-            names.add(base.attr)
-    return names
 
 
 def _identifier_names(path: Path) -> set[str]:
@@ -314,65 +346,75 @@ def _async_method(class_def: ast.ClassDef, method_name: str) -> ast.AsyncFunctio
     raise AssertionError(msg)
 
 
-def test_attempt_number_module_belongs_to_application_orchestration() -> None:
-    assert ATTEMPT_NUMBER_MODULE.parent == ORCHESTRATION_ROOT
-    assert ATTEMPT_NUMBER_MODULE.exists()
+def test_source_module_belongs_to_application_orchestration() -> None:
+    assert SOURCE_MODULE.parent == ORCHESTRATION_ROOT
+    assert SOURCE_MODULE.exists()
 
 
-def test_attempt_number_module_does_not_import_outer_layers_or_vendors() -> None:
+def test_source_does_not_import_outer_layers_or_vendors() -> None:
     leaked = sorted(
         module
-        for module in imported_modules(ATTEMPT_NUMBER_MODULE)
+        for module in imported_modules(SOURCE_MODULE)
         if is_forbidden(module, FORBIDDEN_PREFIXES)
     )
     assert leaked == []
-    extras = imported_modules(ATTEMPT_NUMBER_MODULE) - ALLOWED_MODULE_IMPORTS
-    assert extras == set()
-    names = imported_names(ATTEMPT_NUMBER_MODULE)
-    assert "Protocol" in names
-    assert "ApplicationError" not in names
-    assert "InvalidRequestError" not in names
+    assert imported_modules(SOURCE_MODULE) == set()
+    leaked_names = sorted(
+        name for name in imported_names(SOURCE_MODULE) if name in FORBIDDEN_TYPE_NAMES
+    )
+    assert leaked_names == []
+    names = imported_names(SOURCE_MODULE)
+    assert "ForecastingAttemptNumberPort" not in names
+    assert "Protocol" not in names
     assert "WorkflowState" not in names
-    assert "WorkflowPhase" not in names
-    assert "WorkflowStatus" not in names
     assert "FailurePolicyContext" not in names
     assert "FailurePolicyPort" not in names
     assert "FailureAction" not in names
-    assert "ForecastingFailureFact" not in names
+    assert "ForecastingFailureContextResolutionService" not in names
+    assert "ForecastingFailureContextPreparationService" not in names
     assert "ForecastingFailureSelectionPort" not in names
     assert "StrictSingleForecastingFailureSelector" not in names
+    assert "ForecastingFailureFact" not in names
     assert "ForecastingAgentFailure" not in names
-    assert "extract_forecasting_agent_failures" not in names
-    assert "classify_forecasting_agent_failure" not in names
-    assert "classify_forecasting_agent_failures" not in names
+    assert "ParallelForecastingExecutionService" not in names
+    assert "ForecastingWorkflowStep" not in names
+    assert "InitialParallelIngestionAttemptNumberSource" not in names
     assert "ParallelIngestionAttemptNumberPort" not in names
-    leaked_names = sorted(name for name in names if name in FORBIDDEN_TYPE_NAMES)
-    assert leaked_names == []
 
 
-def test_attempt_number_module_exposes_exactly_one_nongeneric_protocol() -> None:
-    public_functions = _public_function_defs(ATTEMPT_NUMBER_MODULE)
-    assert public_functions == []
-    assert _module_class_names(ATTEMPT_NUMBER_MODULE) == ["ForecastingAttemptNumberPort"]
-    class_def = _class_def(ATTEMPT_NUMBER_MODULE, "ForecastingAttemptNumberPort")
-    bases = _base_names(class_def)
-    assert "Protocol" in bases
-    assert "ABC" not in bases
-    assert "Generic" not in bases
-    assert list(class_def.type_params) == []
-    source = ATTEMPT_NUMBER_MODULE.read_text(encoding="utf-8")
-    assert "abstractmethod" not in source
-    assert "runtime_checkable" not in source
+def test_source_module_exposes_exactly_one_production_class() -> None:
+    assert _public_function_defs(SOURCE_MODULE) == []
+    assert _module_class_names(SOURCE_MODULE) == ["InitialForecastingAttemptNumberSource"]
+    class_def = _class_def(SOURCE_MODULE, "InitialForecastingAttemptNumberSource")
+    assert _base_names(class_def) == set()
+    assert class_def.type_params == []
+    assert not any(
+        (isinstance(decorator, ast.Name) and decorator.id == "dataclass")
+        or (isinstance(decorator, ast.Attribute) and decorator.attr == "dataclass")
+        for decorator in class_def.decorator_list
+    )
+    production_classes: list[str] = []
+    for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
+        parsed = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in parsed.body:
+            if (
+                isinstance(node, ast.ClassDef)
+                and node.name == "InitialForecastingAttemptNumberSource"
+            ):
+                production_classes.append(path.relative_to(SRC_ROOT).as_posix())
+    assert production_classes == [
+        "energy_trading/application/orchestration/forecasting_initial_attempt_number_source.py"
+    ]
     leaked_implementations = sorted(
         name
-        for name in _module_class_names(ATTEMPT_NUMBER_MODULE)
+        for name in _module_class_names(SOURCE_MODULE)
         if name in FORBIDDEN_IMPLEMENTATION_NAMES
     )
     assert leaked_implementations == []
 
 
 def test_get_attempt_number_is_the_only_public_operation() -> None:
-    class_def = _class_def(ATTEMPT_NUMBER_MODULE, "ForecastingAttemptNumberPort")
+    class_def = _class_def(SOURCE_MODULE, "InitialForecastingAttemptNumberSource")
     defined_nodes = [
         node for node in class_def.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     ]
@@ -384,7 +426,6 @@ def test_get_attempt_number_is_the_only_public_operation() -> None:
     assert method.args.kwonlyargs == []
     assert method.args.vararg is None
     assert method.args.kwarg is None
-    assert method.args.defaults == []
     assert ast.unparse(method.args.args[1].annotation) == "str"
     assert ast.unparse(method.returns) == "int"
     leaked_mutation = sorted(
@@ -393,48 +434,83 @@ def test_get_attempt_number_is_the_only_public_operation() -> None:
     assert leaked_mutation == []
 
 
-def test_attempt_number_module_has_no_tracker_storage_or_mutation_machinery() -> None:
-    identifiers = _identifier_names(ATTEMPT_NUMBER_MODULE)
+def test_get_attempt_number_returns_literal_integer_one() -> None:
+    class_def = _class_def(SOURCE_MODULE, "InitialForecastingAttemptNumberSource")
+    method = _async_method(class_def, "get_attempt_number")
+    returns = [node for node in ast.walk(method) if isinstance(node, ast.Return)]
+    assert len(returns) == 1
+    value = returns[0].value
+    assert isinstance(value, ast.Constant)
+    assert value.value == 1
+    assert not any(isinstance(node, ast.BinOp) for node in ast.walk(method))
+    assert not any(isinstance(node, ast.Call) for node in ast.walk(method))
+    assert not any(
+        isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)) for node in ast.walk(method)
+    )
+    control = [
+        type(node).__name__
+        for node in ast.walk(method)
+        if isinstance(
+            node,
+            (
+                ast.For,
+                ast.While,
+                ast.Match,
+                ast.Try,
+                ast.With,
+                ast.If,
+                ast.IfExp,
+                ast.ListComp,
+                ast.SetComp,
+                ast.DictComp,
+                ast.GeneratorExp,
+            ),
+        )
+    ]
+    assert control == []
+    identifiers = _identifier_names(SOURCE_MODULE)
     leaked = sorted(name for name in identifiers if name in FORBIDDEN_IDENTIFIERS)
     assert leaked == []
-    names = annotation_type_names(ATTEMPT_NUMBER_MODULE)
+    names = annotation_type_names(SOURCE_MODULE)
     leaked_types = sorted(name for name in names if name in FORBIDDEN_TYPE_NAMES)
     assert leaked_types == []
     leaked_mutation = sorted(name for name in identifiers if name in FORBIDDEN_MUTATION_NAMES)
     assert leaked_mutation == []
-    application_implementations: list[str] = []
-    for path in sorted(APPLICATION_ROOT.rglob("*.py")):
-        parsed = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in parsed.body:
-            if isinstance(node, ast.ClassDef) and node.name in FORBIDDEN_IMPLEMENTATION_NAMES:
-                application_implementations.append(node.name)
-    assert application_implementations == []
-    source = ATTEMPT_NUMBER_MODULE.read_text(encoding="utf-8")
+    source = SOURCE_MODULE.read_text(encoding="utf-8")
     lowered = source.lower()
     assert "langgraph" not in lowered
     assert "langchain" not in lowered
     leaked_storage = sorted(term for term in STORAGE_SUBSTRINGS if term in lowered)
     assert leaked_storage == []
-    assert "cache" not in identifiers
-    assert "lock" not in identifiers
-    assert "FailurePolicyContext" not in source
     assert "WorkflowState" not in source
-    assert "enum" not in identifiers
-    assert "Enum" not in identifiers
+    assert "FailurePolicyContext" not in source
+    assert "InitialParallelIngestionAttemptNumberSource" not in source
 
 
-def test_graph_policy_and_classification_remain_unwired_to_attempt_number() -> None:
+def test_graph_policy_and_lower_layers_remain_unwired_to_the_source() -> None:
     for path in UNWIRED_MODULES:
         names = imported_names(path)
-        assert "ForecastingAttemptNumberPort" not in names
+        assert "InitialForecastingAttemptNumberSource" not in names
         modules = imported_modules(path)
-        assert "energy_trading.application.orchestration.forecasting_attempt_number" not in modules
+        assert (
+            "energy_trading.application.orchestration.forecasting_initial_attempt_number_source"
+            not in modules
+        )
         source = path.read_text(encoding="utf-8")
-        assert "ForecastingAttemptNumberPort" not in source
-        assert "forecasting_attempt_number" not in source
+        assert "InitialForecastingAttemptNumberSource" not in source
+        assert "forecasting_initial_attempt_number_source" not in source
 
 
-def test_workflow_state_shape_is_unchanged_by_attempt_number() -> None:
+def test_resolution_and_preparation_depend_on_the_port_not_the_source() -> None:
+    resolution_names = imported_names(RESOLUTION_MODULE)
+    assert "ForecastingAttemptNumberPort" in resolution_names
+    assert "InitialForecastingAttemptNumberSource" not in resolution_names
+    preparation_names = imported_names(PREPARATION_MODULE)
+    assert "InitialForecastingAttemptNumberSource" not in preparation_names
+    assert "ForecastingAttemptNumberPort" not in preparation_names
+
+
+def test_workflow_state_shape_is_unchanged_by_the_source() -> None:
     tree = ast.parse(STATE_MODULE.read_text(encoding="utf-8"), filename=str(STATE_MODULE))
     fields: list[str] = []
     for node in ast.walk(tree):
@@ -453,15 +529,15 @@ def test_workflow_state_shape_is_unchanged_by_attempt_number() -> None:
     )
 
 
-def test_api_composition_does_not_import_or_construct_attempt_number() -> None:
+def test_api_composition_does_not_import_or_construct_the_source() -> None:
     forbidden_wiring = (
         "energy_trading.application.orchestration",
-        "energy_trading.application.orchestration.forecasting_attempt_number",
+        "energy_trading.application.orchestration.forecasting_initial_attempt_number_source",
     )
     assert collect_http_api_import_violations(API_ROOT, forbidden_wiring) == []
     for path in http_transport_api_paths(API_ROOT):
         names = imported_names(path)
-        assert "ForecastingAttemptNumberPort" not in names
+        assert "InitialForecastingAttemptNumberSource" not in names
     app_source = API_APP.read_text(encoding="utf-8").lower()
-    assert "forecastingattemptnumberport" not in app_source
-    assert "forecasting_attempt_number" not in app_source
+    assert "initialforecastingattemptnumbersource" not in app_source
+    assert "forecasting_initial_attempt_number_source" not in app_source
