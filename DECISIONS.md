@@ -2655,7 +2655,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - The service does not duplicate validation owned by the selector, attempt-number source, `ForecastingFailureFact`, `FailurePolicyContext`, or the published builder. It does not enforce `phase == FORECASTING`.
   - The service does not inspect exceptions, mutate attempts, invoke `FailurePolicyPort`, execute a `FailureAction`, call `fail_after_forecasting`, or wire LangGraph. Retry/fallback remain absent. The Phase 2 resolver remains separate. Later exception-to-context preparation remains separately reviewed.
   - `WorkflowState` remains the existing seven-field snapshot.
-- **Consequences:** Application callers can resolve a published Phase 3 failure-policy context from sanitized facts without implementing a selector, tracking attempts, or executing policy. Production still has no retry-capable attempt tracking, no policy/action runtime, and no LangGraph failure routing. Exception-to-context preparation is owned by a later Phase-3-specific service.
+- **Consequences:** Application callers can resolve a published Phase 3 failure-policy context from sanitized facts without implementing a selector, tracking attempts, or executing policy. Production still has no retry-capable attempt tracking, no Phase 3 failure-action execution, and no LangGraph failure routing. Exception-to-context preparation is owned by a later Phase-3-specific service.
 
 ---
 
@@ -2673,7 +2673,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - No validation is duplicated. The service does not implement selection, attempt lookup, policy decision, action execution, state mutation, graph coupling, retries, or fallback. If extraction, classification, or resolution raises, the same exception propagates and later steps do not run.
   - The Phase 2 preparation service remains separate. Runtime integration remains a later chunk.
   - `WorkflowState` remains the existing seven-field snapshot.
-- **Consequences:** Application callers can prepare a published Phase 3 failure-policy context from a `BaseException` without reimplementing extraction, classification, selection, or attempt lookup. Production still has no retry-capable attempt tracking, no policy/action runtime, and no LangGraph forecasting-failure routing.
+- **Consequences:** Application callers can prepare a published Phase 3 failure-policy context from a `BaseException` without reimplementing extraction, classification, selection, or attempt lookup. Production still has no retry-capable attempt tracking, no Phase 3 failure-action execution, and no LangGraph forecasting-failure routing.
 
 ---
 
@@ -2691,5 +2691,23 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - There is no increment, reset, persistence, per-workflow map, or retry ownership.
   - The Phase 2 source remains a separately named class.
 - **Consequences:** The existing single-failure Phase 3 application pipeline can construct a real `FailurePolicyContext` using concrete selection and concrete initial-attempt resolution when a caller injects this source behind the published port. This source is intentionally insufficient for future retry execution. Retry-capable attempt tracking requires separate architectural review.
+
+---
+
+## ADR-173 — The current no-retry Phase 3 failure policy always terminates
+
+- **Status:** Accepted
+- **Context:** Phase 3 can now prepare a real `FailurePolicyContext`. Retry execution does not exist, fallback execution does not exist, retry-capable attempt tracking does not exist, and retryability semantics are not approved. Reusing `InitialParallelIngestionFailurePolicy` as the production Phase 3 class would mix Phase 2 identity into forecasting.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-057, ADR-068, ADR-070, ADR-128 through ADR-172 remain Accepted and are not superseded.
+  - Application owns LangGraph-free `InitialForecastingFailurePolicy` in `forecasting_initial_failure_policy.py`.
+  - The class satisfies existing `FailurePolicyPort` structurally and does not inherit the Protocol.
+  - The method remains async `decide(self, context: FailurePolicyContext) -> FailureAction`.
+  - The policy is stateless and returns exactly `FailureAction.FAIL` for every valid context.
+  - It does not branch on phase, error code, attempt number, or agent.
+  - No retry or fallback mechanics exist in this policy. No retryability semantics are approved.
+  - It does not execute an action, mutate state, or couple to LangGraph.
+  - The Phase 2 policy remains a separately named class.
+- **Consequences:** The current no-retry/no-fallback Phase 3 runtime has an honest initial policy decision. The system does not silently pretend retries or fallback are supported. Future RETRY/FALLBACK behavior requires separate architectural review plus supporting runtime mechanics. Action execution, outer runtime failure handling, and LangGraph forecasting-failure routing remain deferred.
 
 ---
