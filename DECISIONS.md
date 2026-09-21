@@ -2711,3 +2711,21 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 - **Consequences:** The current no-retry/no-fallback Phase 3 runtime has an honest initial policy decision. The system does not silently pretend retries or fallback are supported. Future RETRY/FALLBACK behavior requires separate architectural review plus supporting runtime mechanics. Action execution, outer runtime failure handling, and LangGraph forecasting-failure routing remain deferred.
 
 ---
+
+## ADR-174 — Phase 3 failure-policy decision stays separate from context preparation and action execution
+
+- **Status:** Accepted
+- **Context:** Chunk 29 published `FailureAction`, `FailurePolicyContext`, and `FailurePolicyPort.decide`. Chunk 161 published Phase 3 exception-to-context preparation. Chunk 163 published an always-`FAIL` initial policy. Nothing yet composed those seams for Phase 3 decision delegation. Folding context construction, exception inspection, policy decision, and action execution into one service would freeze independently reviewable concerns. Reusing `ParallelIngestionFailureDecisionService` as the production Phase 3 class would mix Phase 2 identity into forecasting. Constructing `InitialForecastingFailurePolicy` inside the decision service would couple the seam to one concrete policy.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-056, ADR-057, ADR-128 through ADR-173 remain Accepted and are not superseded.
+  - Application owns `ForecastingFailureDecisionService` in `forecasting_failure_decision.py`. It is one Phase-3-specific concrete class, not a Protocol, ABC, dataclass, generic, registry, factory, policy implementation, or Phase 2 alias.
+  - Constructor injects exactly `FailurePolicyPort`. It does not construct or depend directly on `InitialForecastingFailurePolicy`.
+  - The only public operation is `async decide(self, context: FailurePolicyContext) -> FailureAction`. The caller must supply an already-valid published context object. The service does not accept `Exception`, `BaseException`, error strings, or `WorkflowState` for derivation, and it does not construct `FailurePolicyContext`.
+  - `decide` forwards the exact supplied context object to the injected `FailurePolicyPort.decide(...)`, awaits that operation exactly once, and returns the exact resulting `FailureAction` unchanged. `RETRY`, `FALLBACK`, and `FAIL` all pass through without branching, remapping, retry counters, delays, fallback targets, or a call to `fail_after_forecasting`.
+  - The service does not inspect `context.phase`, `context.error_code`, `context.attempt_number`, or `context.agent_name`. It does not mutate `WorkflowState`, append diagnostics, or track attempts.
+  - If the injected policy raises, that exception propagates unchanged. The service does not catch, wrap, translate, retry, or return a default action. No new exception class is introduced.
+  - The Phase 2 decision service remains a separately named class. LangGraph, FastAPI, infrastructure, and ML remain unwired.
+  - `WorkflowState` remains the existing seven-field snapshot.
+- **Consequences:** Phase 3 can obtain a policy decision from a prepared context. Production still lacks Phase 3 failure-action execution, prepared failure-handling composition, outer runtime failure handling, LangGraph forecasting-failure routing, RETRY execution, FALLBACK execution, and retry-capable attempt tracking.
+
+---

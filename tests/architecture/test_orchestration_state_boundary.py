@@ -372,6 +372,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
         "ParallelForecastingExecutionService",
         "ForecastingFailureContextPreparationService",
         "ForecastingFailureContextResolutionService",
+        "ForecastingFailureDecisionService",
         "ForecastingFailureFact",
         "ForecastingFailureSelectionPort",
         "InitialForecastingAttemptNumberSource",
