@@ -2726,7 +2726,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - If the injected policy raises, that exception propagates unchanged. The service does not catch, wrap, translate, retry, or return a default action. No new exception class is introduced.
   - The Phase 2 decision service remains a separately named class. LangGraph, FastAPI, infrastructure, and ML remain unwired.
   - `WorkflowState` remains the existing seven-field snapshot.
-- **Consequences:** Phase 3 can obtain a policy decision from a prepared context. Production still lacks prepared failure-handling composition, outer runtime failure handling, LangGraph forecasting-failure routing, RETRY execution, FALLBACK execution, and retry-capable attempt tracking.
+- **Consequences:** Phase 3 can obtain a policy decision from a prepared context. Production still lacks outer runtime failure handling, LangGraph forecasting-failure routing, RETRY execution, FALLBACK execution, and retry-capable attempt tracking.
 
 ---
 
@@ -2745,6 +2745,23 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - The function does not consult policy, build context, inspect exceptions, mutate diagnostics, implement retry tracking, or couple to LangGraph.
   - The Phase 2 action executor remains a separately named function. LangGraph, FastAPI, infrastructure, and ML remain unwired.
   - `WorkflowState` remains the existing seven-field snapshot.
-- **Consequences:** Application callers can apply a terminal Phase 3 `FAIL` decision in application code without a graph runtime. Production still lacks prepared failure-handling composition, outer runtime failure handling, LangGraph forecasting-failure routing, RETRY execution, FALLBACK execution, and retry-capable attempt tracking.
+- **Consequences:** Application callers can apply a terminal Phase 3 `FAIL` decision in application code without a graph runtime. Production still lacks outer runtime failure handling, LangGraph forecasting-failure routing, RETRY execution, FALLBACK execution, and retry-capable attempt tracking.
+
+---
+
+## ADR-176 — Prepared Phase 3 failure handling is composed before runtime exception routing
+
+- **Status:** Accepted
+- **Context:** Chunk 164 published `ForecastingFailureDecisionService`, which returns an already-decided `FailureAction` from a prepared `FailurePolicyContext`. Chunk 165 published `execute_forecasting_failure_action`, which applies terminal `FAIL` and rejects `RETRY`/`FALLBACK`. Folding those two steps into context preparation, raw-exception routing, or LangGraph would freeze independently reviewable concerns: how a prepared context is decided, how that action is applied, and when graph catch/conditional routing exists. Reusing `ParallelIngestionFailureHandlingService` as the production Phase 3 class would mix Phase 2 identity into forecasting. Injecting `FailurePolicyPort` or constructing `InitialForecastingFailurePolicy` inside the handling service would couple composition to one concrete policy and skip the published decision seam.
+- **Decision:**
+  - ADR-008, ADR-037, ADR-055, ADR-058, ADR-128 through ADR-175 remain Accepted and are not superseded.
+  - Application owns `ForecastingFailureHandlingService` in `forecasting_failure_handling.py`. It is one Phase-3-specific concrete class, not a Protocol, ABC, dataclass, generic, registry, factory, policy implementation, or Phase 2 alias.
+  - Constructor injects exactly `ForecastingFailureDecisionService`. It does not inject `FailurePolicyPort`, does not construct `InitialForecastingFailurePolicy`, and does not own an action-executor object.
+  - The only public operation is `async handle(self, *, state: WorkflowState, context: FailurePolicyContext) -> WorkflowState`. The caller must supply an already-prepared published context and a `WorkflowState`. The service does not construct `FailurePolicyContext`, inspect raw exceptions or `BaseExceptionGroup`, or inspect `context.phase`, `context.error_code`, `context.attempt_number`, or `context.agent_name`.
+  - `handle` awaits the injected `ForecastingFailureDecisionService.decide(context)` exactly once, forwards the returned `FailureAction` unchanged to `execute_forecasting_failure_action(state=state, action=action)` together with the exact supplied state, and returns the exact resulting `WorkflowState`. There is no action branching, no direct `fail_after_forecasting` call, no diagnostics mutation, and no retry/fallback mechanics.
+  - Decision-service exceptions propagate unchanged. Action-execution errors propagate unchanged. The service does not catch, wrap, translate, retry, or return a default action.
+  - The Phase 2 handling service remains a separately named class. LangGraph, FastAPI, infrastructure, and ML remain unwired.
+  - `WorkflowState` remains the existing seven-field snapshot.
+- **Consequences:** Phase 3 now supports complete handling of an already-prepared context through decision and terminal action execution. Production still lacks outer raw-runtime failure handling, composition from a raw forecasting exception group through context preparation into handling, LangGraph forecasting-failure capture/routing, RETRY execution, FALLBACK execution, and retry-capable attempt tracking.
 
 ---
