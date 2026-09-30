@@ -161,6 +161,8 @@ ALLOWED_MODULE_IMPORTS = frozenset(
 )
 
 ALLOWED_REQUEST_FIELDS = {
+    "forecast_run_id": "EntityId",
+    "generated_at": "UtcDateTime",
     "market_id": "EntityId",
     "currency": "CurrencyCode",
     "history": "tuple[MarketPriceRecord, ...]",
@@ -384,13 +386,20 @@ def test_forecast_is_async_and_narrowly_typed() -> None:
     assert ast.unparse(forecast_fn.returns) == "tuple[PriceForecastPoint, ...]"
 
 
-def test_request_contains_only_market_currency_canonical_history_and_explicit_targets() -> None:
+def test_request_contains_only_identity_market_currency_canonical_history_and_targets() -> None:
     request_def = _class_def(PORT_MODULE, "DAMPriceForecastModelRequest")
     keywords = _dataclass_keywords(request_def)
     assert keywords == {"frozen": True, "slots": True}
     annotations = _annassign_field_annotations(PORT_MODULE, "DAMPriceForecastModelRequest")
     assert annotations == ALLOWED_REQUEST_FIELDS
-    assert tuple(annotations) == ("market_id", "currency", "history", "target_timestamps")
+    assert tuple(annotations) == (
+        "forecast_run_id",
+        "generated_at",
+        "market_id",
+        "currency",
+        "history",
+        "target_timestamps",
+    )
     leaked = sorted(name for name in annotations if name in FORBIDDEN_REQUEST_FIELDS)
     assert leaked == []
     assert "horizon" not in annotations
@@ -406,6 +415,40 @@ def test_request_contains_only_market_currency_canonical_history_and_explicit_ta
     assert "CurrencyCode" in quantities
     money = MONEY_MODULE.read_text(encoding="utf-8")
     assert "currency: CurrencyCode" in money
+
+
+def test_request_identity_fields_have_no_defaults_or_generated_metadata() -> None:
+    request_def = _class_def(PORT_MODULE, "DAMPriceForecastModelRequest")
+    defaults: dict[str, str | None] = {}
+    for item in request_def.body:
+        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+            defaults[item.target.id] = None if item.value is None else ast.unparse(item.value)
+    assert defaults["forecast_run_id"] is None
+    assert defaults["generated_at"] is None
+    assert defaults["market_id"] is None
+    assert defaults["currency"] is None
+    source = PORT_MODULE.read_text(encoding="utf-8")
+    for forbidden_call in (
+        "uuid",
+        "random",
+        "secrets",
+        "datetime.now",
+        "utcnow",
+        "time.time",
+        "monotonic",
+    ):
+        assert forbidden_call not in source
+    tree = ast.parse(source, filename=str(PORT_MODULE))
+    identifier_names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)} | {
+        node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)
+    }
+    assert "replace" not in identifier_names
+    imported = imported_names(PORT_MODULE)
+    assert "model_version" not in imported
+    annotations = _annassign_field_annotations(PORT_MODULE, "DAMPriceForecastModelRequest")
+    assert "model_version" not in annotations
+    assert "provider" not in annotations
+    assert "WorkflowState" not in imported
 
 
 def test_historical_market_price_and_forecast_types_are_reused_not_duplicated() -> None:

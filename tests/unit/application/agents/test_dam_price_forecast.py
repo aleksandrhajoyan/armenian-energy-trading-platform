@@ -75,6 +75,8 @@ def _point(**overrides: object) -> PriceForecastPoint:
 
 def _request(**overrides: object) -> DAMPriceForecastModelRequest:
     values: dict[str, object] = {
+        "forecast_run_id": "forecast-run-1",
+        "generated_at": utc(hour=9),
         "market_id": "market-1",
         "currency": "AMD",
         "history": (_market(),),

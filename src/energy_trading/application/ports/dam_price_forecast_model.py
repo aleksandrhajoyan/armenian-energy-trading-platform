@@ -13,6 +13,11 @@ Ownership:
   LightGBM/XGBoost/sklearn classes, vendor arrays, training
   configuration, and feature engineering remain ML-layer concerns. There is
   no ML base class and no generic ``ModelPort``.
+* ``forecast_run_id`` and ``generated_at`` are caller-supplied inference
+  identity. This module does not invent those values, clocks, or defaults.
+  Future adapters must pass those values through rather than invent them.
+  ``forecast_run_id`` is not assumed equal to ``workflow_id``; Consumer Load
+  and DAM Price are not required to share one inference identity.
 * Historical observations reuse canonical ``MarketPriceRecord``. Forecast
   points reuse canonical ``PriceForecastPoint``. Currency is explicit
   ``CurrencyCode`` on both sides. This port does not convert currencies or
@@ -38,28 +43,44 @@ from energy_trading.domain.value_objects.time import UtcDateTime, to_utc
 
 @dataclass(frozen=True, slots=True)
 class DAMPriceForecastModelRequest:
-    """Immutable model-inference request: market, currency, history, targets.
+    """Immutable model-inference request: identity, market, currency, targets.
 
     This is an application orchestration DTO, not a domain entity and not a
     workflow snapshot. It carries no model path, hyperparameters, provider,
     feature registry, load series, or persistence handles.
 
-    ``market_id`` identifies the market being forecast and is required even
-    when ``history`` is empty. ``currency`` is the explicit target
-    ``CurrencyCode`` and is likewise required when history is empty. Neither
-    identity is inferred from observations. ``history`` reuses existing
+    ``forecast_run_id`` is the caller-supplied opaque identity for this
+    inference run. ``generated_at`` is the caller-supplied UTC generation
+    timestamp for the same run. Neither is derived from history, targets,
+    ``workflow_id``, ``market_id``, or a clock. ``market_id`` identifies the
+    market being forecast and is required even when ``history`` is empty.
+    ``currency`` is the explicit target ``CurrencyCode`` and is likewise
+    required when history is empty. Neither market nor currency identity is
+    inferred from observations. ``history`` reuses existing
     ``MarketPriceRecord`` values; when present, every record must belong to
     that same market and carry that same currency. ``target_timestamps`` are
     explicit timezone-aware UTC instants; an integer horizon such as ``24``
     is not a substitute.
     """
 
+    forecast_run_id: EntityId
+    generated_at: UtcDateTime
     market_id: EntityId
     currency: CurrencyCode
     history: tuple[MarketPriceRecord, ...]
     target_timestamps: tuple[UtcDateTime, ...]
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "forecast_run_id",
+            _require_non_empty("forecast_run_id", self.forecast_run_id),
+        )
+        object.__setattr__(
+            self,
+            "generated_at",
+            _require_aware_utc("generated_at", self.generated_at),
+        )
         object.__setattr__(self, "market_id", _require_non_empty("market_id", self.market_id))
         object.__setattr__(self, "currency", _require_currency_code(self.currency))
         history = _require_market_price_records(self.history)

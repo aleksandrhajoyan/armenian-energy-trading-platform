@@ -127,6 +127,8 @@ ALLOWED_AGENT_IMPORTS = frozenset(
 )
 
 ALLOWED_REQUEST_FIELDS = {
+    "forecast_run_id": "EntityId",
+    "generated_at": "UtcDateTime",
     "market_id": "EntityId",
     "currency": "CurrencyCode",
     "history": "tuple[MarketPriceRecord, ...]",
@@ -376,9 +378,17 @@ def test_run_delegates_exactly_once_to_forecast_without_reconstruction() -> None
     assert "EnergyPrice(" not in source
 
 
-def test_chunk_120_port_shape_is_unchanged() -> None:
+def test_request_shape_is_identity_market_currency_history_and_targets() -> None:
     annotations = _annassign_field_annotations(PORT_MODULE, "DAMPriceForecastModelRequest")
     assert annotations == ALLOWED_REQUEST_FIELDS
+    assert tuple(annotations) == (
+        "forecast_run_id",
+        "generated_at",
+        "market_id",
+        "currency",
+        "history",
+        "target_timestamps",
+    )
     port_def = _class_def(PORT_MODULE, "DAMPriceForecastModelPort")
     operations = [
         item for item in port_def.body if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))

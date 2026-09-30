@@ -83,6 +83,8 @@ def _point(**overrides: object) -> PriceForecastPoint:
 
 def _request(**overrides: object) -> DAMPriceForecastModelRequest:
     values: dict[str, object] = {
+        "forecast_run_id": "forecast-run-1",
+        "generated_at": utc(hour=9),
         "market_id": "market-1",
         "currency": "AMD",
         "history": (_market(),),
@@ -118,7 +120,14 @@ def test_fake_provides_async_keyword_only_forecast() -> None:
 
 def test_request_is_frozen_and_slots_based() -> None:
     request = _request()
-    assert request.__slots__ == ("market_id", "currency", "history", "target_timestamps")
+    assert request.__slots__ == (
+        "forecast_run_id",
+        "generated_at",
+        "market_id",
+        "currency",
+        "history",
+        "target_timestamps",
+    )
     with pytest.raises(FrozenInstanceError):
         request.history = ()  # type: ignore[misc]
 
@@ -252,6 +261,8 @@ def test_request_rejects_non_datetime_target_timestamp() -> None:
 def test_request_public_contract_has_no_dict_or_any_payload() -> None:
     annotations = DAMPriceForecastModelRequest.__annotations__
     assert annotations == {
+        "forecast_run_id": EntityId,
+        "generated_at": UtcDateTime,
         "market_id": EntityId,
         "currency": CurrencyCode,
         "history": tuple[MarketPriceRecord, ...],
@@ -259,6 +270,71 @@ def test_request_public_contract_has_no_dict_or_any_payload() -> None:
     }
     assert "Any" not in {str(item) for item in annotations.values()}
     assert dict not in annotations.values()
+
+
+def test_request_requires_explicit_forecast_run_id() -> None:
+    with pytest.raises(TypeError, match="forecast_run_id"):
+        DAMPriceForecastModelRequest(
+            generated_at=utc(hour=9),
+            market_id="market-1",
+            currency="AMD",
+            history=(_market(),),
+            target_timestamps=(utc(hour=16),),
+        )  # type: ignore[call-arg]
+
+
+def test_request_requires_explicit_generated_at() -> None:
+    with pytest.raises(TypeError, match="generated_at"):
+        DAMPriceForecastModelRequest(
+            forecast_run_id="forecast-run-1",
+            market_id="market-1",
+            currency="AMD",
+            history=(_market(),),
+            target_timestamps=(utc(hour=16),),
+        )  # type: ignore[call-arg]
+
+
+def test_request_preserves_explicit_forecast_run_id() -> None:
+    request = _request(forecast_run_id="run-explicit")
+    assert request.forecast_run_id == "run-explicit"
+    assert request.forecast_run_id != request.market_id
+
+
+def test_request_rejects_blank_forecast_run_id() -> None:
+    with pytest.raises(ValueError, match="forecast_run_id must be a non-empty string"):
+        _request(forecast_run_id="   ")
+
+
+def test_request_rejects_whitespace_only_forecast_run_id() -> None:
+    with pytest.raises(ValueError, match="forecast_run_id must be a non-empty string"):
+        _request(forecast_run_id="\t\n ")
+
+
+def test_request_rejects_naive_generated_at() -> None:
+    naive = datetime(2026, 10, 1, 10, 0, 0)
+    with pytest.raises(ValueError, match="generated_at must be timezone-aware"):
+        _request(generated_at=naive)
+
+
+def test_request_normalizes_aware_non_utc_generated_at() -> None:
+    yerevan = timezone(timedelta(hours=4))
+    request = _request(generated_at=datetime(2026, 10, 1, 14, 0, 0, tzinfo=yerevan))
+    assert request.generated_at == datetime(2026, 10, 1, 10, 0, 0, tzinfo=UTC)
+
+
+def test_request_identity_fields_are_not_derived_from_targets_or_history() -> None:
+    generated_at = utc(hour=9)
+    request = _request(
+        forecast_run_id="run-explicit",
+        generated_at=generated_at,
+        history=(_market(timestamp=utc(hour=10)),),
+        target_timestamps=(utc(hour=16),),
+    )
+    assert request.forecast_run_id == "run-explicit"
+    assert request.generated_at == generated_at
+    assert request.generated_at != request.target_timestamps[0]
+    assert request.generated_at != request.history[0].timestamp
+    assert request.forecast_run_id != request.market_id
 
 
 async def test_empty_forecast_tuple_is_valid() -> None:

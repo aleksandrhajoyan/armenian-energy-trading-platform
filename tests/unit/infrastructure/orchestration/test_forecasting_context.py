@@ -55,6 +55,8 @@ def _dam_request(*, market_id: str = "market-1") -> DAMPriceForecastModelRequest
         }
     )
     return DAMPriceForecastModelRequest(
+        forecast_run_id="forecast-run-1",
+        generated_at=utc(hour=9),
         market_id=market_id,
         currency="AMD",
         history=(market,),
