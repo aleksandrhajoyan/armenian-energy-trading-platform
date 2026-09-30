@@ -281,6 +281,13 @@ def _production_python_files() -> list[Path]:
     return sorted(path for path in PRODUCTION_ROOT.rglob("*.py") if path.is_file())
 
 
+AUTHORIZED_ML_ADAPTER = ML_ROOT / "dam_price" / "previous_day_persistence.py"
+AUTHORIZED_ML_IMPLEMENTATION = (
+    f"{AUTHORIZED_ML_ADAPTER.relative_to(PRODUCTION_ROOT)}"
+    ":PreviousDayPersistenceDAMPriceForecastModel"
+)
+
+
 def test_dam_price_forecast_model_port_lives_under_application_ports() -> None:
     assert PORT_MODULE.is_relative_to(PORTS_ROOT)
     assert PORT_MODULE.name == "dam_price_forecast_model.py"
@@ -570,10 +577,17 @@ def test_api_composition_remains_unaware_of_dam_price_forecast_model_port() -> N
     assert transport_leaks == []
 
 
-def test_no_production_dam_price_forecast_model_adapter() -> None:
+def test_only_the_authorized_dam_price_ml_baseline_exists() -> None:
+    """Chunk 170 added exactly one unwired DAM concrete model.
+
+    The application port module must not define a concrete implementation,
+    and the ML layer may define exactly the authorized exact ``T - 24h``
+    persistence baseline and nothing else.
+    """
+
     production_impls: list[str] = []
     for path in _production_python_files():
-        if path == PORT_MODULE:
+        if path in {PORT_MODULE, AUTHORIZED_ML_ADAPTER}:
             continue
         for name in _module_class_names(path):
             if name in {
@@ -593,7 +607,11 @@ def test_no_production_dam_price_forecast_model_adapter() -> None:
                     "DAMMarketPriceRecord",
                 } or name.endswith("DAMPriceForecastModel"):
                     dam_ml_impls.append(f"{path.relative_to(PRODUCTION_ROOT)}:{name}")
-        assert dam_ml_impls == []
+        assert dam_ml_impls == [AUTHORIZED_ML_IMPLEMENTATION]
+    assert AUTHORIZED_ML_ADAPTER.exists()
+    assert _module_class_names(AUTHORIZED_ML_ADAPTER) == [
+        "PreviousDayPersistenceDAMPriceForecastModel"
+    ]
     port_classes = set(_module_class_names(PORT_MODULE))
     assert port_classes == {
         "DAMPriceForecastModelRequest",

@@ -27,6 +27,11 @@ STATE_MODULE = PRODUCTION_ROOT / "application" / "orchestration" / "state.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 ML_ROOT = PRODUCTION_ROOT / "ml"
+AUTHORIZED_ML_ADAPTER = ML_ROOT / "dam_price" / "previous_day_persistence.py"
+AUTHORIZED_ML_IMPLEMENTATION = (
+    f"{AUTHORIZED_ML_ADAPTER.relative_to(PRODUCTION_ROOT).as_posix()}"
+    ":PreviousDayPersistenceDAMPriceForecastModel"
+)
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -479,10 +484,17 @@ def test_api_composition_remains_unaware_of_the_agent() -> None:
     assert transport_leaks == []
 
 
-def test_no_production_model_adapter_or_ml_package() -> None:
+def test_only_the_authorized_unwired_model_adapter_exists() -> None:
+    """Chunk 170 added exactly one unwired DAM concrete model.
+
+    The agent must remain unaware of it: the only permitted ML class is the
+    authorized exact ``T - 24h`` persistence baseline, which the agent never
+    imports, injects, or constructs.
+    """
+
     production_impls: list[str] = []
     for path in _production_python_files():
-        if path == PORT_MODULE:
+        if path in {PORT_MODULE, AUTHORIZED_ML_ADAPTER}:
             continue
         for name in _module_class_names(path):
             if name in {
@@ -500,7 +512,13 @@ def test_no_production_model_adapter_or_ml_package() -> None:
                     "DAMPriceForecastPoint",
                 } or name.endswith("DAMPriceForecastModel"):
                     dam_ml_impls.append(f"{path.relative_to(PRODUCTION_ROOT).as_posix()}:{name}")
-        assert dam_ml_impls == []
+        assert dam_ml_impls == [AUTHORIZED_ML_IMPLEMENTATION]
+    agent_names = imported_names(AGENT_MODULE)
+    assert "PreviousDayPersistenceDAMPriceForecastModel" not in agent_names
+    agent_source = AGENT_MODULE.read_text(encoding="utf-8")
+    assert "PreviousDayPersistenceDAMPriceForecastModel" not in agent_source
+    assert "previous_day_persistence" not in agent_source
+    assert "dam_price." not in agent_source
     port_classes = set(_module_class_names(PORT_MODULE))
     assert port_classes == {
         "DAMPriceForecastModelRequest",
