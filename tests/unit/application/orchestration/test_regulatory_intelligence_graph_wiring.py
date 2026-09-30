@@ -97,6 +97,18 @@ class _RecordingForecastingStep:
         return state
 
 
+class _UnusedForecastingFailureRuntimeHandler:
+    """Test-only stand-in for the injected Phase 3 runtime failure handler."""
+
+    async def handle(
+        self,
+        *,
+        state: WorkflowState,
+        failure_group: BaseExceptionGroup,
+    ) -> WorkflowState:
+        return state
+
+
 def _state(**overrides: object) -> WorkflowState:
     values: dict[str, object] = {
         "workflow_id": "workflow-regulatory-1",
@@ -151,15 +163,17 @@ def _compile(
         parallel_ingestion_step=injected_step,  # type: ignore[arg-type]
         parallel_ingestion_failure_runtime_handler=injected_handler,  # type: ignore[arg-type]
         forecasting_step=injected_forecasting,  # type: ignore[arg-type]
+        forecasting_failure_runtime_handler=_UnusedForecastingFailureRuntimeHandler(),  # type: ignore[arg-type]
     )
     return compiled, injected_regulatory, injected_step, injected_handler, injected_forecasting
 
 
-def test_factory_requires_four_keyword_only_dependencies() -> None:
+def test_factory_requires_five_keyword_only_dependencies() -> None:
     regulatory = _RecordingRegulatoryIntelligenceNode()
     step = _RecordingParallelIngestionStep()
     handler = _RecordingParallelIngestionFailureRuntimeHandler()
     forecasting = _RecordingForecastingStep()
+    forecasting_handler = _UnusedForecastingFailureRuntimeHandler()
     with pytest.raises(TypeError):
         build_workflow_graph()  # type: ignore[call-arg]
     with pytest.raises(TypeError):
@@ -167,24 +181,35 @@ def test_factory_requires_four_keyword_only_dependencies() -> None:
             parallel_ingestion_step=step,
             parallel_ingestion_failure_runtime_handler=handler,
             forecasting_step=forecasting,
+            forecasting_failure_runtime_handler=forecasting_handler,
         )
     with pytest.raises(TypeError):
         build_workflow_graph(  # type: ignore[call-arg]
             regulatory_intelligence_node=regulatory,
             parallel_ingestion_failure_runtime_handler=handler,
             forecasting_step=forecasting,
+            forecasting_failure_runtime_handler=forecasting_handler,
         )
     with pytest.raises(TypeError):
         build_workflow_graph(  # type: ignore[call-arg]
             regulatory_intelligence_node=regulatory,
             parallel_ingestion_step=step,
             forecasting_step=forecasting,
+            forecasting_failure_runtime_handler=forecasting_handler,
         )
     with pytest.raises(TypeError):
         build_workflow_graph(  # type: ignore[call-arg]
             regulatory_intelligence_node=regulatory,
             parallel_ingestion_step=step,
             parallel_ingestion_failure_runtime_handler=handler,
+            forecasting_failure_runtime_handler=forecasting_handler,
+        )
+    with pytest.raises(TypeError):
+        build_workflow_graph(  # type: ignore[call-arg]
+            regulatory_intelligence_node=regulatory,
+            parallel_ingestion_step=step,
+            parallel_ingestion_failure_runtime_handler=handler,
+            forecasting_step=forecasting,
         )
 
 
@@ -211,6 +236,7 @@ def test_topology_includes_terminal_regulatory_slice() -> None:
         ("parallel_ingestion", END),
         ("parallel_ingestion_success_transition", END),
         ("forecasting", "forecasting_success_transition"),
+        ("forecasting", END),
         ("forecasting_success_transition", END),
     }
     conditional = {
@@ -224,6 +250,8 @@ def test_topology_includes_terminal_regulatory_slice() -> None:
         ("workflow_entry", "forecasting"),
         ("parallel_ingestion", "parallel_ingestion_success_transition"),
         ("parallel_ingestion", END),
+        ("forecasting", "forecasting_success_transition"),
+        ("forecasting", END),
     }
 
 

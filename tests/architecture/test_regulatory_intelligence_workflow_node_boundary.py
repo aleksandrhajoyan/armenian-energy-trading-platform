@@ -502,8 +502,8 @@ def test_graph_may_import_node_adapter_but_not_context_or_step() -> None:
         elif name == "add_conditional_edges":
             add_conditional_edges_count += 1
     assert add_node_count == 6
-    assert add_edge_count == 5
-    assert add_conditional_edges_count == 2
+    assert add_edge_count == 4
+    assert add_conditional_edges_count == 3
 
 
 def test_context_and_step_modules_do_not_import_the_node_adapter() -> None:

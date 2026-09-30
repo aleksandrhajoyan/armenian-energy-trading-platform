@@ -543,7 +543,7 @@ def test_graph_does_not_import_or_call_the_failure_transition() -> None:
         elif name == "fail_after_forecasting":
             failure_calls += 1
     assert add_node_count == 6
-    assert add_edge_count == 5
+    assert add_edge_count == 4
     assert success_calls == 1
     assert failure_calls == 0
     assert "fail_after_forecasting" not in graph_source

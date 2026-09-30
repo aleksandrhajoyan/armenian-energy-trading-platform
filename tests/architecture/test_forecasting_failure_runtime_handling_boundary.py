@@ -237,7 +237,6 @@ ALLOWED_INIT_ANNOTATIONS = {
 }
 
 UNWIRED_MODULES = (
-    GRAPH_MODULE,
     WORKFLOW_MODULE,
     EXECUTOR_MODULE,
 )
@@ -548,7 +547,7 @@ def test_handle_delegates_prepare_then_handle_without_duplicate_logic() -> None:
     assert "FailureAction.FALLBACK" not in source
 
 
-def test_graph_workflow_and_executor_remain_unwired_to_the_runtime_handling_service() -> None:
+def test_workflow_and_executor_remain_unwired_to_the_runtime_handling_service() -> None:
     for path in UNWIRED_MODULES:
         names = imported_names(path)
         assert "ForecastingFailureRuntimeHandlingService" not in names
@@ -560,6 +559,28 @@ def test_graph_workflow_and_executor_remain_unwired_to_the_runtime_handling_serv
         source = path.read_text(encoding="utf-8")
         assert "ForecastingFailureRuntimeHandlingService" not in source
         assert "forecasting_failure_runtime_handling" not in source
+
+
+def test_graph_may_import_only_the_outer_runtime_handling_service() -> None:
+    names = imported_names(GRAPH_MODULE)
+    assert "ForecastingFailureRuntimeHandlingService" in names
+    assert "ForecastingFailureContextPreparationService" not in names
+    assert "ForecastingFailureHandlingService" not in names
+    modules = imported_modules(GRAPH_MODULE)
+    assert (
+        "energy_trading.application.orchestration.forecasting_failure_runtime_handling" in modules
+    )
+    assert (
+        "energy_trading.application.orchestration.forecasting_failure_context_preparation"
+        not in modules
+    )
+    assert "energy_trading.application.orchestration.forecasting_failure_handling" not in modules
+    source = GRAPH_MODULE.read_text(encoding="utf-8")
+    assert "ForecastingFailureRuntimeHandlingService" in source
+    assert "forecasting_failure_runtime_handling" in source
+    assert "ForecastingFailureContextPreparationService" not in source
+    assert "forecasting_failure_context_preparation" not in source
+    assert "ForecastingFailureHandlingService" not in source
 
 
 def test_workflow_state_shape_is_unchanged_by_the_runtime_handling_service() -> None:

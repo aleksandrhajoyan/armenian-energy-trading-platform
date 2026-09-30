@@ -142,7 +142,7 @@ def test_graph_imports_published_node_adapter_only() -> None:
     assert leaked_modules == []
 
 
-def test_factory_requires_four_injected_dependencies_without_defaults() -> None:
+def test_factory_requires_five_injected_dependencies_without_defaults() -> None:
     tree = ast.parse(GRAPH_MODULE.read_text(encoding="utf-8"), filename=str(GRAPH_MODULE))
     factory = next(
         node
@@ -158,6 +158,7 @@ def test_factory_requires_four_injected_dependencies_without_defaults() -> None:
         "parallel_ingestion_step",
         "parallel_ingestion_failure_runtime_handler",
         "forecasting_step",
+        "forecasting_failure_runtime_handler",
     ]
     annotations = [ast.unparse(arg.annotation) for arg in factory.args.kwonlyargs]
     assert annotations == [
@@ -165,8 +166,9 @@ def test_factory_requires_four_injected_dependencies_without_defaults() -> None:
         "ParallelIngestionWorkflowStep",
         "ParallelIngestionFailureRuntimeHandlingService",
         "ForecastingWorkflowStep",
+        "ForecastingFailureRuntimeHandlingService",
     ]
-    assert factory.args.kw_defaults == [None, None, None, None]
+    assert factory.args.kw_defaults == [None, None, None, None, None]
 
 
 def test_graph_does_not_construct_the_node_adapter() -> None:
@@ -275,8 +277,8 @@ def test_topology_keeps_terminal_regulatory_slice_with_forecasting_branch() -> N
         elif name == "add_conditional_edges":
             add_conditional_edges_count += 1
     assert add_node_count == 6
-    assert add_edge_count == 5
-    assert add_conditional_edges_count == 2
+    assert add_edge_count == 4
+    assert add_conditional_edges_count == 3
     assert "advance_after_regulatory" not in source
     assert "advance_after_contract" not in source
     assert "CONTRACT → INGESTION" not in source

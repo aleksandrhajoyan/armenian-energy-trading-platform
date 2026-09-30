@@ -130,6 +130,7 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
         "langgraph.graph",
         "langgraph.graph.state",
         "energy_trading.application.errors",
+        "energy_trading.application.orchestration.forecasting_failure_runtime_handling",
         "energy_trading.application.orchestration.forecasting_transition",
         "energy_trading.application.orchestration.forecasting_workflow",
         "energy_trading.application.orchestration.parallel_ingestion_failure_runtime_handling",
@@ -142,6 +143,7 @@ ALLOWED_GRAPH_IMPORTS = frozenset(
         "StateGraph",
         "CompiledStateGraph",
         "InvalidRequestError",
+        "ForecastingFailureRuntimeHandlingService",
         "ForecastingWorkflowStep",
         "ParallelIngestionFailureRuntimeHandlingService",
         "ParallelIngestionWorkflowStep",
@@ -629,6 +631,7 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "ParallelForecastingExecutionService" not in names
     assert "ForecastingWorkflowContextPort" not in names
     assert "ForecastingWorkflowStep" in names
+    assert "ForecastingFailureRuntimeHandlingService" in names
     assert "advance_after_forecasting" in names
     assert "fail_after_forecasting" not in names
     assert "ForecastingAgentFailure" not in names
@@ -638,6 +641,13 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "ForecastingFailureSelectionPort" not in names
     assert "StrictSingleForecastingFailureSelector" not in names
     assert "ForecastingFailureFact" not in names
+    assert "ForecastingAttemptNumberPort" not in names
+    assert "InitialForecastingAttemptNumberSource" not in names
+    assert "InitialForecastingFailurePolicy" not in names
+    assert "ForecastingFailureDecisionService" not in names
+    assert "ForecastingFailureHandlingService" not in names
+    assert "ForecastingFailureContextPreparationService" not in names
+    assert "ForecastingFailureContextResolutionService" not in names
     assert "RegulatoryIntelligenceQueryExecutionService" not in names
     assert "RegulatoryIntelligenceWorkflowStep" not in names
     assert "RegulatoryIntelligenceWorkflowRequest" not in names
@@ -662,6 +672,9 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert "energy_trading.application.orchestration.forecasting_context" not in modules
     assert "energy_trading.application.orchestration.forecasting_workflow" in modules
     assert "energy_trading.application.orchestration.forecasting_transition" in modules
+    assert (
+        "energy_trading.application.orchestration.forecasting_failure_runtime_handling" in modules
+    )
     assert "energy_trading.application.orchestration.forecasting_failure_transition" not in modules
     assert "energy_trading.application.orchestration.forecasting_agent_failure" not in modules
     assert "energy_trading.application.orchestration.forecasting_exception_group" not in modules
@@ -673,6 +686,26 @@ def test_graph_module_depends_on_workflow_state_phase2_step_and_transition() -> 
     assert (
         "energy_trading.application.orchestration.forecasting_strict_single_failure_selector"
         not in modules
+    )
+    assert (
+        "energy_trading.application.orchestration.forecasting_failure_context_preparation"
+        not in modules
+    )
+    assert "energy_trading.application.orchestration.forecasting_failure_handling" not in modules
+    assert "energy_trading.application.orchestration.forecasting_failure_decision" not in modules
+    assert "energy_trading.application.orchestration.forecasting_failure_action" not in modules
+    assert "energy_trading.application.orchestration.forecasting_failure_context" not in modules
+    assert (
+        "energy_trading.application.orchestration.forecasting_failure_context_resolution"
+        not in modules
+    )
+    assert "energy_trading.application.orchestration.forecasting_attempt_number" not in modules
+    assert (
+        "energy_trading.application.orchestration.forecasting_initial_attempt_number_source"
+        not in modules
+    )
+    assert (
+        "energy_trading.application.orchestration.forecasting_initial_failure_policy" not in modules
     )
     assert "energy_trading.application.orchestration.parallel_ingestion_context" not in modules
     assert "energy_trading.application.orchestration.parallel_ingestion_executor" not in modules
@@ -799,23 +832,27 @@ def test_graph_factory_requires_injected_step_and_runtime_failure_handler() -> N
         "parallel_ingestion_step",
         "parallel_ingestion_failure_runtime_handler",
         "forecasting_step",
+        "forecasting_failure_runtime_handler",
     ]
     regulatory_annotation = factory.args.kwonlyargs[0].annotation
     step_annotation = factory.args.kwonlyargs[1].annotation
     handler_annotation = factory.args.kwonlyargs[2].annotation
     forecasting_annotation = factory.args.kwonlyargs[3].annotation
+    forecasting_handler_annotation = factory.args.kwonlyargs[4].annotation
     assert regulatory_annotation is not None
     assert step_annotation is not None
     assert handler_annotation is not None
     assert forecasting_annotation is not None
+    assert forecasting_handler_annotation is not None
     assert ast.unparse(regulatory_annotation) == "RegulatoryIntelligenceWorkflowNodeAdapter"
     assert ast.unparse(step_annotation) == "ParallelIngestionWorkflowStep"
     assert ast.unparse(handler_annotation) == "ParallelIngestionFailureRuntimeHandlingService"
     assert ast.unparse(forecasting_annotation) == "ForecastingWorkflowStep"
-    assert factory.args.kw_defaults == [None, None, None, None]
+    assert ast.unparse(forecasting_handler_annotation) == "ForecastingFailureRuntimeHandlingService"
+    assert factory.args.kw_defaults == [None, None, None, None, None]
 
 
-def test_forecasting_node_delegates_once_to_step_run_without_try_except() -> None:
+def test_forecasting_node_catches_base_exception_group_and_delegates_to_runtime_handler() -> None:
     tree = ast.parse(GRAPH_MODULE.read_text(encoding="utf-8"), filename=str(GRAPH_MODULE))
     class_def = next(
         node
@@ -830,16 +867,17 @@ def test_forecasting_node_delegates_once_to_step_run_without_try_except() -> Non
     except_handlers = [
         node for node in ast.walk(call_method) if isinstance(node, ast.ExceptHandler)
     ]
-    assert except_handlers == []
-    control = [
-        type(node).__name__
-        for node in ast.walk(call_method)
-        if isinstance(node, (ast.If, ast.IfExp, ast.Match, ast.For, ast.While, ast.Try, ast.With))
-    ]
-    assert control == []
+    assert len(except_handlers) == 1
+    handler = except_handlers[0]
+    assert isinstance(handler.type, ast.Name)
+    assert handler.type.id == "BaseExceptionGroup"
+    assert handler.name == "failure_group"
+    tries = [node for node in call_method.body if isinstance(node, ast.Try)]
+    assert len(tries) == 1
+    try_node = tries[0]
     run_calls = [
         node
-        for node in ast.walk(call_method)
+        for node in ast.walk(try_node)
         if isinstance(node, ast.Call)
         and (
             (isinstance(node.func, ast.Name) and node.func.id == "run")
@@ -849,12 +887,26 @@ def test_forecasting_node_delegates_once_to_step_run_without_try_except() -> Non
     assert len(run_calls) == 1
     run_call = run_calls[0]
     assert [ast.unparse(arg) for arg in run_call.args] == ["state"]
-    statements = [node for node in call_method.body if not isinstance(node, ast.Expr)]
-    assert len(statements) == 1
-    returned = statements[0]
-    assert isinstance(returned, ast.Return)
-    assert isinstance(returned.value, ast.Await)
-    assert isinstance(returned.value.value, ast.Call)
+    handle_calls = [
+        node
+        for node in ast.walk(handler)
+        if isinstance(node, ast.Call)
+        and (
+            (isinstance(node.func, ast.Name) and node.func.id == "handle")
+            or (isinstance(node.func, ast.Attribute) and node.func.attr == "handle")
+        )
+    ]
+    assert len(handle_calls) == 1
+    handle_call = handle_calls[0]
+    assert handle_call.args == []
+    keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in handle_call.keywords}
+    assert keywords == {"state": "state", "failure_group": "failure_group"}
+    control = [
+        type(node).__name__
+        for node in ast.walk(call_method)
+        if isinstance(node, (ast.If, ast.IfExp, ast.Match, ast.For, ast.While, ast.With))
+    ]
+    assert control == []
 
 
 def test_forecasting_success_transition_node_delegates_once_without_try_except() -> None:
@@ -976,14 +1028,17 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
             "RegulatoryIntelligenceWorkflowNodeAdapter",
             "ForecastingWorkflowContextPort",
             "ForecastingWorkflowStep",
+            "ForecastingFailureRuntimeHandlingService",
+            "ForecastingFailureContextPreparationService",
+            "ForecastingFailureHandlingService",
         }:
             constructed.append(name)
     assert add_node_count == 6
-    assert add_edge_count == 5
-    assert add_conditional_edges_count == 2
+    assert add_edge_count == 4
+    assert add_conditional_edges_count == 3
     assert transition_calls == 1
     assert forecasting_transition_calls == 1
-    assert handler_calls == 1
+    assert handler_calls == 2
     assert constructed == []
     assert "FailurePolicyPort" not in source
     assert "FailureAction" not in source
@@ -1021,10 +1076,20 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "forecasting_context" not in source
     assert "ForecastingWorkflowStep" in source
     assert "forecasting_workflow" in source
+    assert "ForecastingFailureRuntimeHandlingService" in source
+    assert "forecasting_failure_runtime_handling" in source
     assert "advance_after_forecasting" in source
     assert "forecasting_transition" in source
     assert "fail_after_forecasting" not in source
     assert "forecasting_failure_transition" not in source
+    assert "ForecastingFailureContextPreparationService" not in source
+    assert "forecasting_failure_context_preparation" not in source
+    assert "ForecastingFailureHandlingService" not in source
+    assert "ForecastingFailureDecisionService" not in source
+    assert "execute_forecasting_failure_action" not in source
+    assert "ForecastingFailureContextResolutionService" not in source
+    assert "InitialForecastingAttemptNumberSource" not in source
+    assert "InitialForecastingFailurePolicy" not in source
     assert "ForecastingAgentFailure" not in source
     assert "forecasting_agent_failure" not in source
     assert "extract_forecasting_agent_failures" not in source
@@ -1053,17 +1118,18 @@ def test_graph_topology_includes_transition_node_without_lower_deps() -> None:
     assert "__cause__" not in source
 
 
-def test_graph_catches_only_base_exception_group_at_phase2_step_boundary() -> None:
+def test_graph_catches_only_base_exception_group_at_phase2_and_phase3_step_boundaries() -> None:
     tree = ast.parse(GRAPH_MODULE.read_text(encoding="utf-8"), filename=str(GRAPH_MODULE))
     handlers = [node for node in ast.walk(tree) if isinstance(node, ast.ExceptHandler)]
-    assert len(handlers) == 1
-    handler = handlers[0]
-    assert isinstance(handler.type, ast.Name)
-    assert handler.type.id == "BaseExceptionGroup"
+    assert len(handlers) == 2
     caught_types = {ast.unparse(node.type) for node in handlers if node.type is not None}
     assert caught_types == {"BaseExceptionGroup"}
     assert "Exception" not in caught_types
     assert "BaseException" not in caught_types
+    for handler in handlers:
+        assert isinstance(handler.type, ast.Name)
+        assert handler.type.id == "BaseExceptionGroup"
+        assert handler.name == "failure_group"
 
 
 def test_graph_module_has_no_type_ignore_or_private_langgraph_imports() -> None:

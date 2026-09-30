@@ -2780,6 +2780,20 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - Preparation exceptions propagate unchanged. Handling exceptions propagate unchanged. There is no retry, default state, or fallback state.
   - The Phase 2 runtime handler remains a separately named class. LangGraph, FastAPI, infrastructure, and ML remain unwired.
   - `WorkflowState` remains the existing seven-field snapshot.
-- **Consequences:** The currently supported single-attributed-failure terminal Phase 3 path is now executable entirely inside application code. Production still lacks LangGraph forecasting exception-group capture, LangGraph forecasting failed/success conditional routing, graph injection of this runtime handler, RETRY execution, FALLBACK execution, retry-capable attempt tracking, and approved multi-failure winner semantics beyond strict-single fail-closed behavior.
+- **Consequences:** The currently supported single-attributed-failure terminal Phase 3 path is now executable entirely inside application code. Chunk 168 injects this outer runtime handler into LangGraph for `BaseExceptionGroup` capture and terminal `FORECASTING`/`FAILED` routing. Production still lacks RETRY execution, FALLBACK execution, retry-capable attempt tracking, and approved multi-failure winner semantics beyond strict-single fail-closed behavior.
 
 ---
+
+## ADR-178 — LangGraph captures Phase 3 exception groups at the forecasting workflow-step boundary and delegates terminal failure handling
+
+- **Status:** Accepted for the implemented local Chunk 168 state.
+- **Context:** Chunk 167 published `ForecastingFailureRuntimeHandlingService` as the outer application composition for Phase 3 `BaseExceptionGroup` handling. Without a narrow graph catch and route, successful Phase 3 still reached `RISK_AND_BID` / `RUNNING`, while exception groups still escaped the graph. Duplicating extraction, classification, selection, policy, or `fail_after_forecasting` inside `graph.py` would violate the already-published application ownership of those seams. ADR-071, ADR-072, and ADR-177 remain Accepted and are not superseded.
+- **Decision:**
+  - `build_workflow_graph` injects the published `ForecastingFailureRuntimeHandlingService` through keyword-only dependency injection alongside `ForecastingWorkflowStep`.
+  - The graph factory does not construct the handler or any of its dependencies.
+  - Node `forecasting` awaits the injected step and catches only `BaseExceptionGroup`. The exact group object and the original current `WorkflowState` are forwarded to `handle` exactly once.
+  - Ordinary non-group exceptions continue to propagate and are not sent through the Phase 3 ExceptionGroup pipeline.
+  - A Phase-3-specific conditional edge after `forecasting` routes `FORECASTING` / `RUNNING` to `forecasting_success_transition` and `FORECASTING` / `FAILED` to `END`.
+  - Unexpected post-forecasting phase/status combinations fail closed as `InvalidRequestError`.
+  - Lower-level failure interpretation stays outside `graph.py`. There is no RETRY/FALLBACK graph routing, no multi-failure winner semantics, no retry-capable attempt tracking, no Risk & Bid execution, and no `WorkflowState` expansion.
+- **Consequences:** The currently supported one-attributed-failure path can terminate at `FORECASTING` / `FAILED` through LangGraph without expanding `WorkflowState` or adding a checkpointer, store, retry/fallback execution, multi-failure selector, diagnostics mapping, or Risk & Bid node. Direct non-group failures retain existing propagation. Successful Phase 3 still ends at `RISK_AND_BID` / `RUNNING` through the existing success-transition node. Multi-failure selection and retry/fallback remain deferred.

@@ -8,7 +8,10 @@ delegates Phase 2 ingestion to an injected
 to an injected ``ForecastingWorkflowStep``. After Phase 2 it either
 applies the published successful control-state transition or
 delegates a caught ``BaseExceptionGroup`` to the injected
-``ParallelIngestionFailureRuntimeHandlingService``.
+``ParallelIngestionFailureRuntimeHandlingService``. After Phase 3 it
+either applies the published successful control-state transition or
+delegates a caught ``BaseExceptionGroup`` to the injected
+``ForecastingFailureRuntimeHandlingService``.
 
 Ownership:
 
@@ -31,6 +34,9 @@ Ownership:
 * Chunk 127 ``advance_after_forecasting``: owns the
   forecasting/running → risk_and_bid/running replacement. The graph
   does not reimplement that policy.
+* Chunk 167 ``ForecastingFailureRuntimeHandlingService``: owns
+  ExceptionGroup preparation through terminal FAIL. The graph does not
+  reconstruct that pipeline.
 
 The topology is ``START → workflow_entry``, then conditional routing:
 
@@ -38,18 +44,23 @@ The topology is ``START → workflow_entry``, then conditional routing:
 * ingestion/running → ``parallel_ingestion``, then
   ingestion/running → ``parallel_ingestion_success_transition`` → ``END``
   or ingestion/failed → ``END``
-* forecasting/running → ``forecasting`` →
-  ``forecasting_success_transition`` → ``END``
+* forecasting/running → ``forecasting``, then
+  forecasting/running → ``forecasting_success_transition`` → ``END``
+  or forecasting/failed → ``END``
 
 ``workflow_entry`` remains an async no-op. There is no Pricing & Sales
 node, no contract-to-ingestion phase transition, no persistence, retry,
-fallback, or Phase-3 failure-transition wiring in this module.
+or fallback wiring in this module. Lower-level Phase 3 failure
+interpretation stays outside this module.
 """
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from energy_trading.application.errors import InvalidRequestError
+from energy_trading.application.orchestration.forecasting_failure_runtime_handling import (
+    ForecastingFailureRuntimeHandlingService,
+)
 from energy_trading.application.orchestration.forecasting_transition import (
     advance_after_forecasting,
 )
@@ -86,6 +97,9 @@ _INVALID_ENTRY_ROUTE_MESSAGE = (
 )
 _INVALID_POST_PHASE2_ROUTE_MESSAGE = (
     "Parallel-ingestion routing requires ingestion phase and running or failed status."
+)
+_INVALID_POST_PHASE3_ROUTE_MESSAGE = (
+    "Forecasting routing requires forecasting phase and running or failed status."
 )
 
 
@@ -143,20 +157,36 @@ def _route_after_parallel_ingestion(state: WorkflowState) -> str:
     raise InvalidRequestError(_INVALID_POST_PHASE2_ROUTE_MESSAGE)
 
 
+def _route_after_forecasting(state: WorkflowState) -> str:
+    """Return the Phase 3 success or terminal-failure destination.
+
+    Valid only for ``forecasting`` / ``running`` and ``forecasting`` / ``failed``.
+    Any other phase/status combination fails closed.
+    """
+
+    if state.phase is WorkflowPhase.FORECASTING and state.status is WorkflowStatus.RUNNING:
+        return _FORECASTING_SUCCESS_TRANSITION_NODE
+    if state.phase is WorkflowPhase.FORECASTING and state.status is WorkflowStatus.FAILED:
+        return END
+    raise InvalidRequestError(_INVALID_POST_PHASE3_ROUTE_MESSAGE)
+
+
 def build_workflow_graph(
     *,
     regulatory_intelligence_node: RegulatoryIntelligenceWorkflowNodeAdapter,
     parallel_ingestion_step: ParallelIngestionWorkflowStep,
     parallel_ingestion_failure_runtime_handler: ParallelIngestionFailureRuntimeHandlingService,
     forecasting_step: ForecastingWorkflowStep,
+    forecasting_failure_runtime_handler: ForecastingFailureRuntimeHandlingService,
 ) -> CompiledStateGraph[WorkflowState, None, WorkflowState, WorkflowState]:
     """Compile a fresh workflow graph over ``WorkflowState``.
 
     Every call constructs and compiles a new graph. The Regulatory node
-    adapter, Phase 2 workflow step, outer runtime failure handler, and
-    Phase 3 forecasting step are required through keyword-only
-    dependency injection. Compilation is plain: no checkpointer, store,
-    cache, interrupt, or durability configuration.
+    adapter, Phase 2 workflow step, outer Phase 2 runtime failure handler,
+    Phase 3 forecasting step, and outer Phase 3 runtime failure handler
+    are required through keyword-only dependency injection. Compilation
+    is plain: no checkpointer, store, cache, interrupt, or durability
+    configuration.
     """
 
     graph = StateGraph(WorkflowState)
@@ -185,7 +215,13 @@ def build_workflow_graph(
 
     class _ForecastingNode:
         async def __call__(self, state: WorkflowState) -> WorkflowState:
-            return await forecasting_step.run(state)
+            try:
+                return await forecasting_step.run(state)
+            except BaseExceptionGroup as failure_group:
+                return await forecasting_failure_runtime_handler.handle(
+                    state=state,
+                    failure_group=failure_group,
+                )
 
     class _Phase3SuccessTransitionNode:
         async def __call__(self, state: WorkflowState) -> WorkflowState:
@@ -225,6 +261,13 @@ def build_workflow_graph(
         },
     )
     graph.add_edge(_PARALLEL_INGESTION_SUCCESS_TRANSITION_NODE, END)
-    graph.add_edge(_FORECASTING_NODE, _FORECASTING_SUCCESS_TRANSITION_NODE)
+    graph.add_conditional_edges(
+        _FORECASTING_NODE,
+        _route_after_forecasting,
+        {
+            _FORECASTING_SUCCESS_TRANSITION_NODE: _FORECASTING_SUCCESS_TRANSITION_NODE,
+            END: END,
+        },
+    )
     graph.add_edge(_FORECASTING_SUCCESS_TRANSITION_NODE, END)
     return graph.compile()
