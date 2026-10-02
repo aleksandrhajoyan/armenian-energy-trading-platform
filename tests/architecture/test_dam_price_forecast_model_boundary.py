@@ -282,9 +282,15 @@ def _production_python_files() -> list[Path]:
 
 
 AUTHORIZED_ML_ADAPTER = ML_ROOT / "dam_price" / "previous_day_persistence.py"
-AUTHORIZED_ML_IMPLEMENTATION = (
-    f"{AUTHORIZED_ML_ADAPTER.relative_to(PRODUCTION_ROOT)}"
-    ":PreviousDayPersistenceDAMPriceForecastModel"
+AUTHORIZED_OLS_ML_ADAPTER = ML_ROOT / "dam_price" / "lag_24h_168h_ols_forecast.py"
+AUTHORIZED_ML_ADAPTERS = {AUTHORIZED_ML_ADAPTER, AUTHORIZED_OLS_ML_ADAPTER}
+AUTHORIZED_ML_IMPLEMENTATIONS = sorted(
+    (
+        f"{AUTHORIZED_ML_ADAPTER.relative_to(PRODUCTION_ROOT)}"
+        ":PreviousDayPersistenceDAMPriceForecastModel",
+        f"{AUTHORIZED_OLS_ML_ADAPTER.relative_to(PRODUCTION_ROOT)}"
+        ":Lag24h168hOLSDAMPriceForecastModel",
+    )
 )
 
 
@@ -577,17 +583,18 @@ def test_api_composition_remains_unaware_of_dam_price_forecast_model_port() -> N
     assert transport_leaks == []
 
 
-def test_only_the_authorized_dam_price_ml_baseline_exists() -> None:
-    """Chunk 170 added exactly one unwired DAM concrete model.
+def test_only_the_authorized_dam_price_ml_models_exist() -> None:
+    """Chunks 170 and 187 added exactly two unwired DAM concrete models.
 
     The application port module must not define a concrete implementation,
-    and the ML layer may define exactly the authorized exact ``T - 24h``
-    persistence baseline and nothing else.
+    and the ML layer may define exactly the exact ``T - 24h`` persistence
+    baseline and the exact ``T - 24h`` / ``T - 168h`` two-feature OLS
+    candidate and nothing else. Neither is selected or preferred.
     """
 
     production_impls: list[str] = []
     for path in _production_python_files():
-        if path in {PORT_MODULE, AUTHORIZED_ML_ADAPTER}:
+        if path in {PORT_MODULE, *AUTHORIZED_ML_ADAPTERS}:
             continue
         for name in _module_class_names(path):
             if name in {
@@ -607,11 +614,16 @@ def test_only_the_authorized_dam_price_ml_baseline_exists() -> None:
                     "DAMMarketPriceRecord",
                 } or name.endswith("DAMPriceForecastModel"):
                     dam_ml_impls.append(f"{path.relative_to(PRODUCTION_ROOT)}:{name}")
-        assert dam_ml_impls == [AUTHORIZED_ML_IMPLEMENTATION]
+        assert sorted(dam_ml_impls) == AUTHORIZED_ML_IMPLEMENTATIONS
     assert AUTHORIZED_ML_ADAPTER.exists()
     assert _module_class_names(AUTHORIZED_ML_ADAPTER) == [
         "PreviousDayPersistenceDAMPriceForecastModel"
     ]
+    assert AUTHORIZED_OLS_ML_ADAPTER.exists()
+    assert _module_class_names(AUTHORIZED_OLS_ML_ADAPTER) == ["Lag24h168hOLSDAMPriceForecastModel"]
+    port_source = PORT_MODULE.read_text(encoding="utf-8")
+    assert "PreviousDayPersistenceDAMPriceForecastModel" not in port_source
+    assert "Lag24h168hOLSDAMPriceForecastModel" not in port_source
     port_classes = set(_module_class_names(PORT_MODULE))
     assert port_classes == {
         "DAMPriceForecastModelRequest",
