@@ -21,10 +21,16 @@ EVALUATION_MODULE = DAM_ML_ROOT / "lag_24h_168h_linear_regression_evaluation.py"
 PREDICTION_MODULE = DAM_ML_ROOT / "lag_24h_168h_linear_regression_prediction.py"
 COMPARISON_MODULE = DAM_ML_ROOT / "lag_24h_vs_lag_24h_168h_ols_comparison.py"
 PERSISTENCE_COMPARISON_MODULE = DAM_ML_ROOT / "persistence_vs_lag_24h_168h_ols_comparison.py"
+THREE_WAY_COMPARISON_MODULE = (
+    DAM_ML_ROOT / "persistence_vs_lag_24h_vs_lag_24h_168h_ols_comparison.py"
+)
 # Explicit allowlist of downstream modules permitted to consume the evaluator:
-# only the Chunk 184 one-feature versus two-feature comparison and the Chunk 185
-# persistence versus two-feature comparison.
-EVALUATOR_CONSUMER_MODULES = frozenset({COMPARISON_MODULE, PERSISTENCE_COMPARISON_MODULE})
+# only the Chunk 184 one-feature versus two-feature comparison, the Chunk 185
+# persistence versus two-feature comparison, and the Chunk 186 three-way
+# persistence versus one-feature versus two-feature comparison.
+EVALUATOR_CONSUMER_MODULES = frozenset(
+    {COMPARISON_MODULE, PERSISTENCE_COMPARISON_MODULE, THREE_WAY_COMPARISON_MODULE}
+)
 DAM_PRICE_PORT_MODULE = PRODUCTION_ROOT / "application" / "ports" / "dam_price_forecast_model.py"
 AGENTS_ROOT = PRODUCTION_ROOT / "application" / "agents"
 ORCHESTRATION_ROOT = PRODUCTION_ROOT / "application" / "orchestration"
@@ -672,17 +678,21 @@ def test_existing_dam_price_modules_remain_unaware_of_the_evaluator() -> None:
     assert EVALUATOR not in port_source
 
 
-def test_evaluator_consumers_are_exactly_the_two_comparisons() -> None:
-    # The Chunk 184 and Chunk 185 comparisons are the only authorized downstream
-    # consumers of the evaluator. Each imports the evaluator function, never the
-    # result type, and invokes it exactly once.
+def test_evaluator_consumers_are_exactly_the_three_comparisons() -> None:
+    # The Chunk 184, Chunk 185, and Chunk 186 comparisons are the only
+    # authorized downstream consumers of the evaluator. Each imports the
+    # evaluator function, never the result type, and invokes it exactly once.
     assert EVALUATOR_CONSUMER_MODULES == frozenset(
-        {COMPARISON_MODULE, PERSISTENCE_COMPARISON_MODULE}
+        {COMPARISON_MODULE, PERSISTENCE_COMPARISON_MODULE, THREE_WAY_COMPARISON_MODULE}
     )
     assert COMPARISON_MODULE.parent == DAM_ML_ROOT
     assert COMPARISON_MODULE.name == "lag_24h_vs_lag_24h_168h_ols_comparison.py"
     assert PERSISTENCE_COMPARISON_MODULE.parent == DAM_ML_ROOT
     assert PERSISTENCE_COMPARISON_MODULE.name == "persistence_vs_lag_24h_168h_ols_comparison.py"
+    assert THREE_WAY_COMPARISON_MODULE.parent == DAM_ML_ROOT
+    assert THREE_WAY_COMPARISON_MODULE.name == (
+        "persistence_vs_lag_24h_vs_lag_24h_168h_ols_comparison.py"
+    )
     for consumer in sorted(EVALUATOR_CONSUMER_MODULES):
         assert consumer.is_file()
         names = imported_names(consumer)
