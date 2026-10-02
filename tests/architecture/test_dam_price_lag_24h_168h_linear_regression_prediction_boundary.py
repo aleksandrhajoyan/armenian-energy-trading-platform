@@ -20,10 +20,14 @@ DAM_ML_ROOT = ML_ROOT / "dam_price"
 PREDICTION_MODULE = DAM_ML_ROOT / "lag_24h_168h_linear_regression_prediction.py"
 EVALUATION_MODULE = DAM_ML_ROOT / "lag_24h_168h_linear_regression_evaluation.py"
 COMPARISON_MODULE = DAM_ML_ROOT / "lag_24h_vs_lag_24h_168h_ols_comparison.py"
+PERSISTENCE_COMPARISON_MODULE = DAM_ML_ROOT / "persistence_vs_lag_24h_168h_ols_comparison.py"
 # Explicit allowlist of downstream modules permitted to consume the prediction
-# artifact type (never the predictor function): the Chunk 183 evaluator and the
-# Chunk 184 one-feature versus two-feature comparison.
-PREDICTION_ARTIFACT_CONSUMER_MODULES = frozenset({EVALUATION_MODULE, COMPARISON_MODULE})
+# artifact type (never the predictor function): the Chunk 183 evaluator, the
+# Chunk 184 one-feature versus two-feature comparison, and the Chunk 185
+# persistence versus two-feature comparison.
+PREDICTION_ARTIFACT_CONSUMER_MODULES = frozenset(
+    {EVALUATION_MODULE, COMPARISON_MODULE, PERSISTENCE_COMPARISON_MODULE}
+)
 AGENTS_ROOT = PRODUCTION_ROOT / "application" / "agents"
 ORCHESTRATION_ROOT = PRODUCTION_ROOT / "application" / "orchestration"
 GRAPH_MODULE = ORCHESTRATION_ROOT / "graph.py"
@@ -777,16 +781,20 @@ def test_existing_dam_price_modules_remain_unaware_of_the_predictor() -> None:
         assert MODULE_NAME not in source
 
 
-def test_prediction_artifact_consumers_are_exactly_the_evaluator_and_comparison() -> None:
-    # The Chunk 183 evaluator and the Chunk 184 comparison are the only
-    # authorized downstream consumers of the prediction artifact type. Each may
-    # import the DTO from the prediction module but must never reference or
-    # invoke the predictor function itself.
-    assert PREDICTION_ARTIFACT_CONSUMER_MODULES == frozenset({EVALUATION_MODULE, COMPARISON_MODULE})
+def test_prediction_artifact_consumers_are_exactly_the_evaluator_and_comparisons() -> None:
+    # The Chunk 183 evaluator, the Chunk 184 comparison, and the Chunk 185
+    # comparison are the only authorized downstream consumers of the prediction
+    # artifact type. Each may import the DTO from the prediction module but must
+    # never reference or invoke the predictor function itself.
+    assert PREDICTION_ARTIFACT_CONSUMER_MODULES == frozenset(
+        {EVALUATION_MODULE, COMPARISON_MODULE, PERSISTENCE_COMPARISON_MODULE}
+    )
     assert EVALUATION_MODULE.parent == DAM_ML_ROOT
     assert EVALUATION_MODULE.name == "lag_24h_168h_linear_regression_evaluation.py"
     assert COMPARISON_MODULE.parent == DAM_ML_ROOT
     assert COMPARISON_MODULE.name == "lag_24h_vs_lag_24h_168h_ols_comparison.py"
+    assert PERSISTENCE_COMPARISON_MODULE.parent == DAM_ML_ROOT
+    assert PERSISTENCE_COMPARISON_MODULE.name == "persistence_vs_lag_24h_168h_ols_comparison.py"
     for consumer in sorted(PREDICTION_ARTIFACT_CONSUMER_MODULES):
         assert consumer.is_file()
         source = consumer.read_text(encoding="utf-8")
