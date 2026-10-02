@@ -19,9 +19,11 @@ ML_ROOT = PRODUCTION_ROOT / "ml"
 DAM_ML_ROOT = ML_ROOT / "dam_price"
 PREDICTION_MODULE = DAM_ML_ROOT / "lag_24h_168h_linear_regression_prediction.py"
 EVALUATION_MODULE = DAM_ML_ROOT / "lag_24h_168h_linear_regression_evaluation.py"
+COMPARISON_MODULE = DAM_ML_ROOT / "lag_24h_vs_lag_24h_168h_ols_comparison.py"
 # Explicit allowlist of downstream modules permitted to consume the prediction
-# artifact type (never the predictor function).
-PREDICTION_ARTIFACT_CONSUMER_MODULES = frozenset({EVALUATION_MODULE})
+# artifact type (never the predictor function): the Chunk 183 evaluator and the
+# Chunk 184 one-feature versus two-feature comparison.
+PREDICTION_ARTIFACT_CONSUMER_MODULES = frozenset({EVALUATION_MODULE, COMPARISON_MODULE})
 AGENTS_ROOT = PRODUCTION_ROOT / "application" / "agents"
 ORCHESTRATION_ROOT = PRODUCTION_ROOT / "application" / "orchestration"
 GRAPH_MODULE = ORCHESTRATION_ROOT / "graph.py"
@@ -775,31 +777,36 @@ def test_existing_dam_price_modules_remain_unaware_of_the_predictor() -> None:
         assert MODULE_NAME not in source
 
 
-def test_chunk_183_evaluator_is_the_sole_prediction_artifact_consumer() -> None:
-    # Chunk 183 is the only authorized downstream consumer of the prediction
-    # artifact type. It may import the DTO from the prediction module but must
-    # never reference or invoke the predictor function itself.
-    assert PREDICTION_ARTIFACT_CONSUMER_MODULES == frozenset({EVALUATION_MODULE})
+def test_prediction_artifact_consumers_are_exactly_the_evaluator_and_comparison() -> None:
+    # The Chunk 183 evaluator and the Chunk 184 comparison are the only
+    # authorized downstream consumers of the prediction artifact type. Each may
+    # import the DTO from the prediction module but must never reference or
+    # invoke the predictor function itself.
+    assert PREDICTION_ARTIFACT_CONSUMER_MODULES == frozenset({EVALUATION_MODULE, COMPARISON_MODULE})
     assert EVALUATION_MODULE.parent == DAM_ML_ROOT
     assert EVALUATION_MODULE.name == "lag_24h_168h_linear_regression_evaluation.py"
-    source = EVALUATION_MODULE.read_text(encoding="utf-8")
-    assert PREDICTOR not in source
-    names = imported_names(EVALUATION_MODULE)
-    assert PREDICTION_CLASS in names
-    assert PREDICTOR not in names
-    assert f"energy_trading.ml.dam_price.{MODULE_NAME}" in imported_modules(EVALUATION_MODULE)
-    tree = ast.parse(source, filename=str(EVALUATION_MODULE))
-    call_names: set[str] = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        if isinstance(func, ast.Name):
-            call_names.add(func.id)
-        elif isinstance(func, ast.Attribute):
-            call_names.add(func.attr)
-    assert PREDICTOR not in call_names
-    assert PREDICTION_CLASS not in call_names
+    assert COMPARISON_MODULE.parent == DAM_ML_ROOT
+    assert COMPARISON_MODULE.name == "lag_24h_vs_lag_24h_168h_ols_comparison.py"
+    for consumer in sorted(PREDICTION_ARTIFACT_CONSUMER_MODULES):
+        assert consumer.is_file()
+        source = consumer.read_text(encoding="utf-8")
+        assert PREDICTOR not in source
+        names = imported_names(consumer)
+        assert PREDICTION_CLASS in names
+        assert PREDICTOR not in names
+        assert f"energy_trading.ml.dam_price.{MODULE_NAME}" in imported_modules(consumer)
+        tree = ast.parse(source, filename=str(consumer))
+        call_names: set[str] = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if isinstance(func, ast.Name):
+                call_names.add(func.id)
+            elif isinstance(func, ast.Attribute):
+                call_names.add(func.attr)
+        assert PREDICTOR not in call_names
+        assert PREDICTION_CLASS not in call_names
 
 
 def test_application_agents_do_not_import_the_predictor() -> None:

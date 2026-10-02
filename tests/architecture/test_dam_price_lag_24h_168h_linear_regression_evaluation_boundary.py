@@ -19,6 +19,10 @@ ML_ROOT = PRODUCTION_ROOT / "ml"
 DAM_ML_ROOT = ML_ROOT / "dam_price"
 EVALUATION_MODULE = DAM_ML_ROOT / "lag_24h_168h_linear_regression_evaluation.py"
 PREDICTION_MODULE = DAM_ML_ROOT / "lag_24h_168h_linear_regression_prediction.py"
+COMPARISON_MODULE = DAM_ML_ROOT / "lag_24h_vs_lag_24h_168h_ols_comparison.py"
+# Explicit allowlist of downstream modules permitted to consume the evaluator:
+# only the Chunk 184 one-feature versus two-feature comparison.
+EVALUATOR_CONSUMER_MODULES = frozenset({COMPARISON_MODULE})
 DAM_PRICE_PORT_MODULE = PRODUCTION_ROOT / "application" / "ports" / "dam_price_forecast_model.py"
 AGENTS_ROOT = PRODUCTION_ROOT / "application" / "agents"
 ORCHESTRATION_ROOT = PRODUCTION_ROOT / "application" / "orchestration"
@@ -650,7 +654,11 @@ def test_evaluator_has_no_io_clock_randomness_or_environment_access() -> None:
 
 
 def test_existing_dam_price_modules_remain_unaware_of_the_evaluator() -> None:
-    others = [path for path in sorted(DAM_ML_ROOT.rglob("*.py")) if path != EVALUATION_MODULE]
+    others = [
+        path
+        for path in sorted(DAM_ML_ROOT.rglob("*.py"))
+        if path not in {EVALUATION_MODULE, *EVALUATOR_CONSUMER_MODULES}
+    ]
     assert PREDICTION_MODULE in others
     for path in others:
         source = path.read_text(encoding="utf-8")
@@ -660,6 +668,33 @@ def test_existing_dam_price_modules_remain_unaware_of_the_evaluator() -> None:
     port_source = DAM_PRICE_PORT_MODULE.read_text(encoding="utf-8")
     assert RESULT_CLASS not in port_source
     assert EVALUATOR not in port_source
+
+
+def test_evaluator_consumer_is_exactly_the_comparison() -> None:
+    # The Chunk 184 comparison is the only authorized downstream consumer of the
+    # evaluator. It imports the evaluator function, never the result type, and
+    # invokes it exactly once.
+    assert EVALUATOR_CONSUMER_MODULES == frozenset({COMPARISON_MODULE})
+    assert COMPARISON_MODULE.parent == DAM_ML_ROOT
+    assert COMPARISON_MODULE.name == "lag_24h_vs_lag_24h_168h_ols_comparison.py"
+    assert COMPARISON_MODULE.is_file()
+    names = imported_names(COMPARISON_MODULE)
+    assert EVALUATOR in names
+    assert RESULT_CLASS not in names
+    assert f"energy_trading.ml.dam_price.{MODULE_NAME}" in imported_modules(COMPARISON_MODULE)
+    source = COMPARISON_MODULE.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(COMPARISON_MODULE))
+    call_names: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Name):
+            call_names.append(func.id)
+        elif isinstance(func, ast.Attribute):
+            call_names.append(func.attr)
+    assert call_names.count(EVALUATOR) == 1
+    assert PREDICTOR not in call_names
 
 
 def test_application_agents_do_not_import_the_evaluator() -> None:
