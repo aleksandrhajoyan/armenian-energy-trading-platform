@@ -26,6 +26,8 @@ GRAPH_MODULE = PRODUCTION_ROOT / "application" / "orchestration" / "graph.py"
 STATE_MODULE = PRODUCTION_ROOT / "application" / "orchestration" / "state.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
+# Chunk 188: the one API composition module authorized to construct forecasting agents.
+FORECASTING_EXECUTION_COMPOSITION = API_ROOT / "composition" / "forecasting_execution.py"
 ML_ROOT = PRODUCTION_ROOT / "ml"
 AUTHORIZED_ML_ADAPTER = ML_ROOT / "dam_price" / "previous_day_persistence.py"
 AUTHORIZED_OLS_ML_ADAPTER = ML_ROOT / "dam_price" / "lag_24h_168h_ols_forecast.py"
@@ -475,6 +477,8 @@ def test_api_composition_remains_unaware_of_the_agent() -> None:
     assert "DAMPriceForecastModelPort" not in app_names
     api_leaks: list[str] = []
     for path in sorted(API_ROOT.rglob("*.py")):
+        if path == FORECASTING_EXECUTION_COMPOSITION:
+            continue
         names = imported_names(path)
         modules = imported_modules(path)
         if DAM_PRICE_FORECAST_NAMES & names:

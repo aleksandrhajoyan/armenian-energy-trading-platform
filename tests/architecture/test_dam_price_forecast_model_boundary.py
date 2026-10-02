@@ -29,6 +29,8 @@ GRAPH_MODULE = PRODUCTION_ROOT / "application" / "orchestration" / "graph.py"
 STATE_MODULE = PRODUCTION_ROOT / "application" / "orchestration" / "state.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
+# Chunk 188: the one API composition module authorized to construct forecasting agents.
+FORECASTING_EXECUTION_COMPOSITION = API_ROOT / "composition" / "forecasting_execution.py"
 ML_ROOT = PRODUCTION_ROOT / "ml"
 
 FORBIDDEN_PREFIXES = (
@@ -568,6 +570,8 @@ def test_api_composition_remains_unaware_of_dam_price_forecast_model_port() -> N
     assert "build_workflow_graph" not in app_names
     api_leaks: list[str] = []
     for path in sorted(API_ROOT.rglob("*.py")):
+        if path == FORECASTING_EXECUTION_COMPOSITION:
+            continue
         names = imported_names(path)
         modules = imported_modules(path)
         if DAM_PRICE_FORECAST_NAMES & names:

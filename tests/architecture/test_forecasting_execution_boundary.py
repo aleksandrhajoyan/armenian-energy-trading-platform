@@ -22,6 +22,8 @@ EXECUTION_MODULE = ORCHESTRATION_ROOT / "forecasting_execution.py"
 STATE_MODULE = ORCHESTRATION_ROOT / "state.py"
 GRAPH_MODULE = ORCHESTRATION_ROOT / "graph.py"
 API_ROOT = PRODUCTION_ROOT / "api"
+# Chunk 188: composition module whose own name contains "forecasting_execution".
+FORECASTING_EXECUTION_COMPOSITION = API_ROOT / "composition" / "forecasting_execution.py"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -354,7 +356,8 @@ def test_api_composition_does_not_import_or_construct_forecasting_execution_port
         assert "ForecastingExecutionPort" not in names
         source = path.read_text(encoding="utf-8")
         assert "ForecastingExecutionPort" not in source
-        assert "forecasting_execution" not in source
+        if path != FORECASTING_EXECUTION_COMPOSITION:
+            assert "forecasting_execution" not in source
 
 
 def test_forecasting_execution_stays_isolated_from_ml_implementations() -> None:
