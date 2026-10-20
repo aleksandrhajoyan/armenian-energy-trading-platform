@@ -1593,6 +1593,28 @@ Signed negative and zero predictions are valid and not clamped. Missing or ambig
 
 The application/live-inference separation stays explicit: application owns live inference through `DAMPriceForecastModelPort` and `DAMPriceForecastAgent`, while the feature-row builders, offline predictors (including the Chunk 182 two-feature predictor), evaluators (including the Chunk 183 two-feature MAE evaluator), the Chunk 178, Chunk 184, and Chunk 185 pairwise comparisons, and the Chunk 186 three-way comparison are offline ML evaluation machinery only; no model is selected. There is no DAM feature pipeline, LightGBM/XGBoost adapter, champion selection, production model selection, model registry, serialization, or production runtime wiring; DAM Price production forecasting remains incomplete.
 
+Chunk 193 adds one application-owned, unwired read boundary: `ForecastingSuccessReadPort` in `energy_trading.application.orchestration.forecasting_success_read`, a non-generic `Protocol` with exactly one operation, `async get_success(self, *, workflow_id: str) -> ForecastingSuccess`. The intended future flow is:
+
+```text
+Phase 3 forecasting (ForecastingWorkflowStep → ParallelForecastingExecutionService)
+      |
+      v
+ForecastingSuccess publication (existing ForecastingWorkflowContextPort.record_success)
+      |
+      v
+External context/storage owner (future concrete adapter — not yet implemented)
+      |
+      v
+ForecastingSuccessReadPort.get_success(workflow_id=...)   ← implemented now (Protocol only)
+      |
+      v
+Future Risk & Bid application consumer (Portfolio & Risk / Trading Strategy — not yet implemented)
+```
+
+Only the Protocol box is implemented. There is no concrete reader, no storage technology selected, and no consumer; the current `InMemoryForecastingWorkflowContext` does **not** implement this port and is unchanged. Nothing in `create_app()`, the API layer, `graph.py`, or `WorkflowState` imports it.
+
+The read port is deliberately separate from `ForecastingWorkflowContextPort`. That context port serves the forecasting phase itself — resolving the plan for a `WorkflowState` and recording the success — and keeps exactly its published two methods. Downstream consumers need only a read of an already-published result keyed by explicit workflow identity; they must not be able to resolve plans or record results, and they should not depend on a whole `WorkflowState` snapshot. The port returns the existing canonical `ForecastingSuccess` unchanged, adds no DTO or `WorkflowState` field, and does not manufacture a result when none exists: a future implementation must fail closed using established application errors. The exact ordered orchestration class inventory in `tests/architecture/test_orchestration_state_boundary.py` now explicitly recognizes `ForecastingSuccessReadPort` (between `ForecastingSuccess` and `ForecastingWorkflowStep`); that inventory still rejects any other new orchestration class.
+
 Chunk 192 adds offline integration verification only — no new production layer, builder, service, or wiring. The tested, caller-composed dependency path is:
 
 ```text

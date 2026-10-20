@@ -382,6 +382,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
         "ForecastingPlan",
         "StrictSingleForecastingFailureSelector",
         "ForecastingSuccess",
+        "ForecastingSuccessReadPort",
         "ForecastingWorkflowStep",
         "ParallelIngestionPlan",
         "ParallelIngestionSuccess",
