@@ -1593,7 +1593,33 @@ Signed negative and zero predictions are valid and not clamped. Missing or ambig
 
 The application/live-inference separation stays explicit: application owns live inference through `DAMPriceForecastModelPort` and `DAMPriceForecastAgent`, while the feature-row builders, offline predictors (including the Chunk 182 two-feature predictor), evaluators (including the Chunk 183 two-feature MAE evaluator), the Chunk 178, Chunk 184, and Chunk 185 pairwise comparisons, and the Chunk 186 three-way comparison are offline ML evaluation machinery only; no model is selected. There is no DAM feature pipeline, LightGBM/XGBoost adapter, champion selection, production model selection, model registry, serialization, or production runtime wiring; DAM Price production forecasting remains incomplete.
 
-Chunk 194 adds the first concrete implementation of that read boundary: infrastructure-owned, unwired `InMemoryForecastingSuccessReader` in `energy_trading.infrastructure.orchestration.forecasting_success_reader`. It is a process-local local/dev adapter for caller-supplied, already-completed snapshots — not a database and not a production storage decision. What exists now is:
+Chunk 195 (local/unpublished) adds a separate, explicitly opt-in local/dev adapter that joins the existing forecasting write context with the read boundary: infrastructure-owned, unwired `InMemoryForecastingReadAfterWriteContext` in `energy_trading.infrastructure.orchestration.forecasting_read_after_write_context`. It structurally satisfies both `ForecastingWorkflowContextPort` and `ForecastingSuccessReadPort` without inheriting either, and it wraps an explicitly supplied existing `InMemoryForecastingWorkflowContext` instead of reimplementing it:
+
+```text
+ForecastingWorkflowStep
+          |
+          v
+InMemoryForecastingReadAfterWriteContext
+          |
+          +-- resolve_plan --> existing InMemoryForecastingWorkflowContext
+          |
+          +-- record_success --> existing InMemoryForecastingWorkflowContext
+          |                         |
+          |                  accepted / rejected
+          |                         |
+          +<--- publish only after accepted
+          |
+          +-- get_success --> existing accepted-result view
+                                  |
+                                  v
+                           ForecastingSuccess
+```
+
+Ownership and ordering: the constructor takes required keyword-only `context: InMemoryForecastingWorkflowContext` and stores it by identity; it creates one instance-owned empty success mapping and one instance-owned `asyncio.Lock`, with no module- or class-level storage. `resolve_plan` delegates once and returns the wrapped context's plan unchanged. `record_success` holds the wrapper lock, awaits the wrapped context's `record_success`, and only after it returns publishes the success under `state.workflow_id` when nothing is yet visible for that key. The wrapped context stays the sole authority for recording validity, equality-based idempotency, and `ConflictError`: an equal retry leaves the first published object in place by identity, while a conflict or any other delegate failure propagates unchanged and publishes nothing. `get_success` takes the same lock, so a read cannot observe a success whose delegated record is still in progress, and it performs an exact-key lookup that fails closed with the existing `ResourceNotFoundError` and a fixed sanitized message.
+
+Visibility boundary: read-after-write is guaranteed only within one wrapper instance and only for writes made through it. Writes made directly on the wrapped context are not hydrated into the wrapper's view, the wrapper never reads the context's private attributes, and two wrapper instances do not share records. This is a process-local, non-durable view — not a database, event store, generic repository, or distributed-consistency claim. It is distinct from the Chunk 194 snapshot reader below, which serves caller-supplied snapshots and remains independent: the wrapper does not import or instantiate it, and wrapper writes are not visible through it. The wrapper is not exported from the infrastructure orchestration package and is not imported by `create_app()`, API modules, application modules, or `graph.py`; no Risk & Bid consumer exists and no production storage is selected.
+
+Chunk 194 (published at `85074f7`, tag `chunk-194`) adds the first concrete implementation of that read boundary: infrastructure-owned, unwired `InMemoryForecastingSuccessReader` in `energy_trading.infrastructure.orchestration.forecasting_success_reader`. It is a process-local local/dev adapter for caller-supplied, already-completed snapshots — not a database and not a production storage decision. What exists now is:
 
 ```text
 Caller-supplied completed ForecastingSuccess snapshots
