@@ -24,6 +24,9 @@ GRAPH_MODULE = ORCHESTRATION_ROOT / "graph.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 # Chunk 188: composition module whose own name contains "forecasting_execution".
 FORECASTING_EXECUTION_COMPOSITION = API_ROOT / "composition" / "forecasting_execution.py"
+# Chunk 189: the one composition module that legitimately injects the execution port.
+FORECASTING_WORKFLOW_COMPOSITION = API_ROOT / "composition" / "forecasting_workflow.py"
+FORECASTING_WORKFLOW_COMPOSITION_RELATIVE = "energy_trading/api/composition/forecasting_workflow.py"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -349,9 +352,15 @@ def test_graph_remains_unwired_to_the_forecasting_execution_port() -> None:
 def test_api_composition_does_not_import_or_construct_forecasting_execution_port() -> None:
     forbidden_wiring = ("energy_trading.application.orchestration.forecasting_execution",)
     assert collect_http_api_import_violations(API_ROOT, forbidden_wiring) == []
-    composition_leaks = collect_import_violations(API_ROOT, forbidden_wiring)
+    composition_leaks = collect_import_violations(
+        API_ROOT,
+        forbidden_wiring,
+        exclude_relative_prefixes=(FORECASTING_WORKFLOW_COMPOSITION_RELATIVE,),
+    )
     assert composition_leaks == []
     for path in sorted(API_ROOT.rglob("*.py")):
+        if path == FORECASTING_WORKFLOW_COMPOSITION:
+            continue
         names = imported_names(path)
         assert "ForecastingExecutionPort" not in names
         source = path.read_text(encoding="utf-8")
