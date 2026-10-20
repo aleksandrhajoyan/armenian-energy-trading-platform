@@ -1593,6 +1593,24 @@ Signed negative and zero predictions are valid and not clamped. Missing or ambig
 
 The application/live-inference separation stays explicit: application owns live inference through `DAMPriceForecastModelPort` and `DAMPriceForecastAgent`, while the feature-row builders, offline predictors (including the Chunk 182 two-feature predictor), evaluators (including the Chunk 183 two-feature MAE evaluator), the Chunk 178, Chunk 184, and Chunk 185 pairwise comparisons, and the Chunk 186 three-way comparison are offline ML evaluation machinery only; no model is selected. There is no DAM feature pipeline, LightGBM/XGBoost adapter, champion selection, production model selection, model registry, serialization, or production runtime wiring; DAM Price production forecasting remains incomplete.
 
+Chunk 192 adds offline integration verification only — no new production layer, builder, service, or wiring. The tested, caller-composed dependency path is:
+
+```text
+test-fake ConsumerLoadForecastModelPort ─┐
+test-fake DAMPriceForecastModelPort ─────┼→ Chunk 190 build_forecasting_workflow_step_from_model_ports
+InMemoryForecastingWorkflowContext ──────┘                 │
+                                                           v
+                                              ForecastingWorkflowStep ──────────┐
+                                                                                v
+                                         existing build_workflow_graph → compiled graph (ainvoke)
+                                                                                ^
+test-selected selector + attempt source + policy                                │
+        → Chunk 191 build_forecasting_failure_runtime_handler                   │
+        → ForecastingFailureRuntimeHandlingService ─────────────────────────────┘
+```
+
+The distinction is explicit: (1) the production graph and the Chunk 188–191 builders already existed and are unchanged; (2) `tests/unit/api/test_forecasting_phase3_vertical_slice.py` now proves offline that they interoperate — forecasting/running reaches `risk_and_bid`/`running` with one recorded `ForecastingSuccess`, a single attributed Consumer Load or DAM Price failure reaches `forecasting`/`failed` through the real TaskGroup `BaseExceptionGroup` and failure chain, a missing plan propagates `ResourceNotFoundError`, and invalid entry fails closed; (3) production runtime composition, a selected model, a selected failure policy, durable context, and `create_app()` wiring remain absent. Regulatory and Phase 2 collaborators are test doubles in these tests, and the selector, attempt source, and policy chosen in fixtures are not production defaults.
+
 Chunk 191 adds API-owned, unwired forecasting failure-runtime composition: `build_forecasting_failure_runtime_handler` in `energy_trading.api.composition.forecasting_failure_runtime`.
 
 ```text
