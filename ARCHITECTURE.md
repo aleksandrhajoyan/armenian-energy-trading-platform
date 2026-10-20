@@ -1593,7 +1593,20 @@ Signed negative and zero predictions are valid and not clamped. Missing or ambig
 
 The application/live-inference separation stays explicit: application owns live inference through `DAMPriceForecastModelPort` and `DAMPriceForecastAgent`, while the feature-row builders, offline predictors (including the Chunk 182 two-feature predictor), evaluators (including the Chunk 183 two-feature MAE evaluator), the Chunk 178, Chunk 184, and Chunk 185 pairwise comparisons, and the Chunk 186 three-way comparison are offline ML evaluation machinery only; no model is selected. There is no DAM feature pipeline, LightGBM/XGBoost adapter, champion selection, production model selection, model registry, serialization, or production runtime wiring; DAM Price production forecasting remains incomplete.
 
-Chunk 195 (local/unpublished) adds a separate, explicitly opt-in local/dev adapter that joins the existing forecasting write context with the read boundary: infrastructure-owned, unwired `InMemoryForecastingReadAfterWriteContext` in `energy_trading.infrastructure.orchestration.forecasting_read_after_write_context`. It structurally satisfies both `ForecastingWorkflowContextPort` and `ForecastingSuccessReadPort` without inheriting either, and it wraps an explicitly supplied existing `InMemoryForecastingWorkflowContext` instead of reimplementing it:
+Chunk 196 (local/unpublished) adds offline integration verification only — no production code, builder, abstraction, storage, or wiring changed. `tests/unit/api/test_forecasting_phase3_graph_read_after_write.py` composes the real Chunk 190 `build_forecasting_workflow_step_from_model_ports` and Chunk 191 `build_forecasting_failure_runtime_handler` with one real `InMemoryForecastingReadAfterWriteContext` (wrapping a real `InMemoryForecastingWorkflowContext`) injected as the forecasting workflow-context port, and reads through that same instance typed as `ForecastingSuccessReadPort`:
+
+```text
+ForecastingPlan (prepared in wrapped context)
+  → compiled build_workflow_graph (ainvoke, forecasting/running)
+  → ForecastingWorkflowStep: resolve_plan → ParallelForecastingExecutionService → record_success
+  → InMemoryForecastingReadAfterWriteContext (delegate record, then publish first accepted success)
+  → forecasting_success_transition → risk_and_bid/running (seven-field WorkflowState, no payload)
+same wrapper instance as ForecastingSuccessReadPort → get_success(workflow_id=...) → exact ForecastingSuccess
+```
+
+Visibility boundaries proven offline: before invocation, and after a Consumer Load or DAM branch failure (real executor attribution → real failure runtime handling → `forecasting`/`failed`), a missing plan, or an invalid entry, `get_success` fails closed with the sanitized `ResourceNotFoundError`; reads are keyed by exact workflow identity with no near-miss match; an equal re-invocation keeps the first published object by identity; a conflicting re-invocation propagates `ConflictError` from the wrapped context through the step and graph and leaves the original success readable. Model ports, failure selector/attempt source/policy, and the Regulatory/Phase 2 collaborators are test-selected doubles, not production defaults. No production runtime, storage choice, or Risk & Bid consumer exists.
+
+Chunk 195 (published at `a73de30`, tag `chunk-195`) adds a separate, explicitly opt-in local/dev adapter that joins the existing forecasting write context with the read boundary: infrastructure-owned, unwired `InMemoryForecastingReadAfterWriteContext` in `energy_trading.infrastructure.orchestration.forecasting_read_after_write_context`. It structurally satisfies both `ForecastingWorkflowContextPort` and `ForecastingSuccessReadPort` without inheriting either, and it wraps an explicitly supplied existing `InMemoryForecastingWorkflowContext` instead of reimplementing it:
 
 ```text
 ForecastingWorkflowStep
