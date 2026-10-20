@@ -1593,6 +1593,28 @@ Signed negative and zero predictions are valid and not clamped. Missing or ambig
 
 The application/live-inference separation stays explicit: application owns live inference through `DAMPriceForecastModelPort` and `DAMPriceForecastAgent`, while the feature-row builders, offline predictors (including the Chunk 182 two-feature predictor), evaluators (including the Chunk 183 two-feature MAE evaluator), the Chunk 178, Chunk 184, and Chunk 185 pairwise comparisons, and the Chunk 186 three-way comparison are offline ML evaluation machinery only; no model is selected. There is no DAM feature pipeline, LightGBM/XGBoost adapter, champion selection, production model selection, model registry, serialization, or production runtime wiring; DAM Price production forecasting remains incomplete.
 
+Chunk 194 adds the first concrete implementation of that read boundary: infrastructure-owned, unwired `InMemoryForecastingSuccessReader` in `energy_trading.infrastructure.orchestration.forecasting_success_reader`. It is a process-local local/dev adapter for caller-supplied, already-completed snapshots — not a database and not a production storage decision. What exists now is:
+
+```text
+Caller-supplied completed ForecastingSuccess snapshots
+                       |
+                       v
+           InMemoryForecastingSuccessReader
+                       |
+                 get_success
+                       |
+                       v
+              ForecastingSuccess
+                       |
+                       v
+           Future Risk & Bid consumer
+                    (not wired)
+```
+
+The constructor takes required keyword-only `successes: Mapping[str, ForecastingSuccess]` and copies the mapping once; the canonical `ForecastingSuccess` objects are kept and returned by identity. Async `get_success(*, workflow_id: str)` is an exact-key lookup that raises the existing `ResourceNotFoundError` with a fixed sanitized message when absent; it never fabricates a result or falls back to another workflow. The reader structurally satisfies `ForecastingSuccessReadPort` without inheriting it and has no write method.
+
+This reader is **not** a shared backing store for `InMemoryForecastingWorkflowContext`. The context still owns plan resolution and success recording with its own private storage; the reader does not import the context, touch its private attributes, or share storage with it, so a success recorded through the context is not readable through the reader. A future production read/write integration needs an explicitly designed backing-store ownership and consistency contract. The reader is not exported from the infrastructure orchestration package and is not imported by `create_app()`, API modules, application modules, or `graph.py`; no Risk & Bid consumer exists.
+
 Chunk 193 adds one application-owned, unwired read boundary: `ForecastingSuccessReadPort` in `energy_trading.application.orchestration.forecasting_success_read`, a non-generic `Protocol` with exactly one operation, `async get_success(self, *, workflow_id: str) -> ForecastingSuccess`. The intended future flow is:
 
 ```text
