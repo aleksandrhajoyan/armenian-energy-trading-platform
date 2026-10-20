@@ -24,6 +24,9 @@ API_ROOT = PRODUCTION_ROOT / "api"
 # Chunk 189: the one composition module that legitimately injects the context port.
 FORECASTING_WORKFLOW_COMPOSITION = API_ROOT / "composition" / "forecasting_workflow.py"
 FORECASTING_WORKFLOW_COMPOSITION_RELATIVE = "energy_trading/api/composition/forecasting_workflow.py"
+# Chunk 190: the stack composition module forwards the context port to the Chunk 189 builder.
+FORECASTING_STACK_COMPOSITION = API_ROOT / "composition" / "forecasting_stack.py"
+FORECASTING_STACK_COMPOSITION_RELATIVE = "energy_trading/api/composition/forecasting_stack.py"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -410,11 +413,14 @@ def test_api_composition_does_not_import_or_construct_forecasting_context_port()
     composition_leaks = collect_import_violations(
         API_ROOT,
         forbidden_wiring,
-        exclude_relative_prefixes=(FORECASTING_WORKFLOW_COMPOSITION_RELATIVE,),
+        exclude_relative_prefixes=(
+            FORECASTING_WORKFLOW_COMPOSITION_RELATIVE,
+            FORECASTING_STACK_COMPOSITION_RELATIVE,
+        ),
     )
     assert composition_leaks == []
     for path in sorted(API_ROOT.rglob("*.py")):
-        if path == FORECASTING_WORKFLOW_COMPOSITION:
+        if path in (FORECASTING_WORKFLOW_COMPOSITION, FORECASTING_STACK_COMPOSITION):
             continue
         names = imported_names(path)
         assert "ForecastingWorkflowContextPort" not in names

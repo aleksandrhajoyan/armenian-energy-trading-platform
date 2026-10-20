@@ -26,6 +26,9 @@ API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 # Chunk 188: the one API composition module authorized to construct forecasting agents.
 FORECASTING_EXECUTION_COMPOSITION = API_ROOT / "composition" / "forecasting_execution.py"
+# Chunk 190: the stack composition module may import only the model-port type for its
+# public signature; it must never import or construct the agent.
+FORECASTING_STACK_COMPOSITION = API_ROOT / "composition" / "forecasting_stack.py"
 AUTHORIZED_CONSUMER_LOAD_ML_MODELS = {
     (
         PRODUCTION_ROOT / "ml" / "consumer_load" / "previous_day_persistence.py",
@@ -431,6 +434,8 @@ def test_api_composition_remains_unaware_of_the_agent() -> None:
             continue
         names = imported_names(path)
         modules = imported_modules(path)
+        if path == FORECASTING_STACK_COMPOSITION:
+            names = names - {"ConsumerLoadForecastModelPort"}
         if CONSUMER_LOAD_FORECAST_NAMES & names:
             api_leaks.append(path.name)
         if "energy_trading.application.agents.consumer_load_forecast" in modules:

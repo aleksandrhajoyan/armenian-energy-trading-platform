@@ -28,6 +28,9 @@ API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 # Chunk 188: the one API composition module authorized to construct forecasting agents.
 FORECASTING_EXECUTION_COMPOSITION = API_ROOT / "composition" / "forecasting_execution.py"
+# Chunk 190: the stack composition module may import only the model-port type for its
+# public signature; it must never import or construct the agent.
+FORECASTING_STACK_COMPOSITION = API_ROOT / "composition" / "forecasting_stack.py"
 ML_ROOT = PRODUCTION_ROOT / "ml"
 AUTHORIZED_ML_ADAPTER = ML_ROOT / "dam_price" / "previous_day_persistence.py"
 AUTHORIZED_OLS_ML_ADAPTER = ML_ROOT / "dam_price" / "lag_24h_168h_ols_forecast.py"
@@ -481,6 +484,8 @@ def test_api_composition_remains_unaware_of_the_agent() -> None:
             continue
         names = imported_names(path)
         modules = imported_modules(path)
+        if path == FORECASTING_STACK_COMPOSITION:
+            names = names - {"DAMPriceForecastModelPort"}
         if DAM_PRICE_FORECAST_NAMES & names:
             api_leaks.append(path.name)
         if "energy_trading.application.agents.dam_price_forecast" in modules:

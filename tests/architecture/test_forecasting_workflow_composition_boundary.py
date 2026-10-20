@@ -21,6 +21,8 @@ API_APP = API_ROOT / "app.py"
 COMPOSITION_ROOT = API_ROOT / "composition"
 COMPOSITION_INIT = COMPOSITION_ROOT / "__init__.py"
 BUILDER_MODULE = COMPOSITION_ROOT / "forecasting_workflow.py"
+# Chunk 190: the one composition module authorized to delegate to this builder.
+STACK_COMPOSITION_MODULE = COMPOSITION_ROOT / "forecasting_stack.py"
 BUILDER_NAME = "build_forecasting_workflow_step"
 BUILDER_MODULE_NAME = "energy_trading.api.composition.forecasting_workflow"
 APPLICATION_ROOT = PRODUCTION_ROOT / "application"
@@ -441,7 +443,7 @@ def test_http_surfaces_and_create_app_remain_unaware_of_the_builder() -> None:
 
 def test_other_composition_modules_do_not_import_the_builder() -> None:
     for path in sorted(COMPOSITION_ROOT.glob("*.py")):
-        if path == BUILDER_MODULE:
+        if path in (BUILDER_MODULE, STACK_COMPOSITION_MODULE):
             continue
         assert BUILDER_NAME not in imported_names(path)
         assert BUILDER_MODULE_NAME not in imported_modules(path)

@@ -27,6 +27,8 @@ FORECASTING_EXECUTION_COMPOSITION = API_ROOT / "composition" / "forecasting_exec
 # Chunk 189: the one composition module that legitimately injects the execution port.
 FORECASTING_WORKFLOW_COMPOSITION = API_ROOT / "composition" / "forecasting_workflow.py"
 FORECASTING_WORKFLOW_COMPOSITION_RELATIVE = "energy_trading/api/composition/forecasting_workflow.py"
+# Chunk 190: imports the Chunk 188 API builder module, whose name contains "forecasting_execution".
+FORECASTING_STACK_COMPOSITION = API_ROOT / "composition" / "forecasting_stack.py"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -365,7 +367,7 @@ def test_api_composition_does_not_import_or_construct_forecasting_execution_port
         assert "ForecastingExecutionPort" not in names
         source = path.read_text(encoding="utf-8")
         assert "ForecastingExecutionPort" not in source
-        if path != FORECASTING_EXECUTION_COMPOSITION:
+        if path not in (FORECASTING_EXECUTION_COMPOSITION, FORECASTING_STACK_COMPOSITION):
             assert "forecasting_execution" not in source
 
 
