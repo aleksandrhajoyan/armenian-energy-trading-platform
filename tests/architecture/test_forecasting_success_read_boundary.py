@@ -27,6 +27,9 @@ IN_MEMORY_CONTEXT_MODULE = (
 )
 PORTFOLIO_RISK_EXECUTION_MODULE = ORCHESTRATION_ROOT / "portfolio_risk_execution.py"
 READ_MODULE_NAME = "energy_trading.application.orchestration.forecasting_success_read"
+# Chunk 201: the exact API composition builder authorized to import the read port type.
+PORTFOLIO_RISK_STACK_MODULE = API_ROOT / "composition" / "portfolio_risk_stack.py"
+PORTFOLIO_RISK_STACK_RELATIVE = "energy_trading/api/composition/portfolio_risk_stack.py"
 
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
@@ -378,11 +381,24 @@ def test_graph_remains_unaware_of_the_read_port() -> None:
     assert "get_success" not in source
 
 
-def test_create_app_and_api_remain_unaware_of_the_read_port() -> None:
+def test_only_portfolio_risk_stack_may_import_read_port_from_api() -> None:
     assert READ_MODULE_NAME not in imported_modules(APP_MODULE)
     assert "ForecastingSuccessReadPort" not in APP_MODULE.read_text(encoding="utf-8")
-    assert collect_import_violations(API_ROOT, (READ_MODULE_NAME,)) == []
+    # Chunk 201: the exact builder imports the read port as a type and never reads.
+    assert READ_MODULE_NAME in imported_modules(PORTFOLIO_RISK_STACK_MODULE)
+    assert "ForecastingSuccessReadPort" in imported_names(PORTFOLIO_RISK_STACK_MODULE)
+    assert "get_success" not in _identifier_names(PORTFOLIO_RISK_STACK_MODULE)
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            (READ_MODULE_NAME,),
+            exclude_relative_prefixes=(PORTFOLIO_RISK_STACK_RELATIVE,),
+        )
+        == []
+    )
     for path in sorted(API_ROOT.rglob("*.py")):
+        if path == PORTFOLIO_RISK_STACK_MODULE:
+            continue
         source = path.read_text(encoding="utf-8")
         assert "ForecastingSuccessReadPort" not in source
         assert "forecasting_success_read" not in source
@@ -392,8 +408,11 @@ def test_no_production_module_implements_or_imports_the_read_port_yet() -> None:
     # Chunk 199: the exact Portfolio & Risk execution service is the sole authorized consumer.
     assert READ_MODULE_NAME in imported_modules(PORTFOLIO_RISK_EXECUTION_MODULE)
     assert "ForecastingSuccessReadPort" in imported_names(PORTFOLIO_RISK_EXECUTION_MODULE)
+    # Chunk 201: the exact API composition builder is the only other authorized importer.
+    assert READ_MODULE_NAME in imported_modules(PORTFOLIO_RISK_STACK_MODULE)
+    assert "ForecastingSuccessReadPort" in imported_names(PORTFOLIO_RISK_STACK_MODULE)
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path in (READ_MODULE, PORTFOLIO_RISK_EXECUTION_MODULE):
+        if path in (READ_MODULE, PORTFOLIO_RISK_EXECUTION_MODULE, PORTFOLIO_RISK_STACK_MODULE):
             continue
         assert READ_MODULE_NAME not in imported_modules(path), path
         assert "ForecastingSuccessReadPort" not in imported_names(path), path

@@ -28,6 +28,9 @@ APP_MODULE = API_ROOT / "app.py"
 AGENT_MODULE = APPLICATION_ROOT / "agents" / "portfolio_risk.py"
 EXECUTION_MODULE = ORCHESTRATION_ROOT / "portfolio_risk_execution.py"
 ASSESSMENT_MODULE_NAME = "energy_trading.application.ports.portfolio_risk_assessment"
+# Chunk 201: the exact API composition builder authorized to import the assessment port type.
+PORTFOLIO_RISK_STACK_MODULE = API_ROOT / "composition" / "portfolio_risk_stack.py"
+PORTFOLIO_RISK_STACK_RELATIVE = "energy_trading/api/composition/portfolio_risk_stack.py"
 
 PUBLIC_TYPES = ("PortfolioRiskAssessmentRequest", "PortfolioRiskAssessmentPort")
 
@@ -383,16 +386,34 @@ def test_graph_remains_unwired_to_the_assessment_port() -> None:
     assert "portfolio_risk_assessment" not in source
 
 
-def test_create_app_and_api_remain_unwired_to_the_assessment_port() -> None:
+def test_only_portfolio_risk_stack_may_import_assessment_port_from_api() -> None:
     assert ASSESSMENT_MODULE_NAME not in imported_modules(APP_MODULE)
-    assert collect_import_violations(API_ROOT, (ASSESSMENT_MODULE_NAME,)) == []
+    assert "PortfolioRiskAssessment" not in APP_MODULE.read_text(encoding="utf-8")
+    # Chunk 201: the exact builder imports only the port type, never the request DTO.
+    assert ASSESSMENT_MODULE_NAME in imported_modules(PORTFOLIO_RISK_STACK_MODULE)
+    assert "PortfolioRiskAssessmentPort" in imported_names(PORTFOLIO_RISK_STACK_MODULE)
+    stack_source = PORTFOLIO_RISK_STACK_MODULE.read_text(encoding="utf-8")
+    assert "PortfolioRiskAssessmentRequest" not in stack_source
+    assert {"assess", "RiskAssessment", "value_at_risk", "risk_score"}.isdisjoint(
+        _identifier_names(PORTFOLIO_RISK_STACK_MODULE)
+    )
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            (ASSESSMENT_MODULE_NAME,),
+            exclude_relative_prefixes=(PORTFOLIO_RISK_STACK_RELATIVE,),
+        )
+        == []
+    )
     for path in sorted(API_ROOT.rglob("*.py")):
+        if path == PORTFOLIO_RISK_STACK_MODULE:
+            continue
         source = path.read_text(encoding="utf-8")
         assert "PortfolioRiskAssessment" not in source, path
         assert "portfolio_risk_assessment" not in source, path
 
 
-def test_only_portfolio_risk_agent_may_import_assessment_port() -> None:
+def test_only_authorized_modules_may_import_assessment_port() -> None:
     # Chunk 198: the exact Portfolio & Risk Agent module is the sole authorized consumer.
     assert ASSESSMENT_MODULE_NAME in imported_modules(AGENT_MODULE)
     assert {"PortfolioRiskAssessmentPort", "PortfolioRiskAssessmentRequest"} <= imported_names(
@@ -406,8 +427,15 @@ def test_only_portfolio_risk_agent_may_import_assessment_port() -> None:
     assert {"assess", "RiskAssessment_empty", "value_at_risk", "risk_score"}.isdisjoint(
         _identifier_names(EXECUTION_MODULE)
     )
+    # Chunk 201: the exact API builder may import only the port type.
+    assert "PortfolioRiskAssessmentPort" in imported_names(PORTFOLIO_RISK_STACK_MODULE)
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path in (ASSESSMENT_MODULE, AGENT_MODULE, EXECUTION_MODULE):
+        if path in (
+            ASSESSMENT_MODULE,
+            AGENT_MODULE,
+            EXECUTION_MODULE,
+            PORTFOLIO_RISK_STACK_MODULE,
+        ):
             continue
         assert ASSESSMENT_MODULE_NAME not in imported_modules(path), path
         assert "PortfolioRiskAssessment" not in path.read_text(encoding="utf-8"), path

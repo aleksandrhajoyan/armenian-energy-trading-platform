@@ -25,6 +25,9 @@ API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 AGENT_MODULE_NAME = "energy_trading.application.agents.portfolio_risk"
 ASSESSMENT_MODULE_NAME = "energy_trading.application.ports.portfolio_risk_assessment"
+# Chunk 201: the exact API composition builder authorized to construct the agent.
+PORTFOLIO_RISK_STACK_MODULE = API_ROOT / "composition" / "portfolio_risk_stack.py"
+PORTFOLIO_RISK_STACK_RELATIVE = "energy_trading/api/composition/portfolio_risk_stack.py"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -404,16 +407,29 @@ def test_graph_remains_unaware_of_the_portfolio_risk_agent() -> None:
     assert "PortfolioRiskAgent" not in GRAPH_MODULE.read_text(encoding="utf-8")
 
 
-def test_create_app_and_api_remain_unaware_of_the_portfolio_risk_agent() -> None:
+def test_only_portfolio_risk_composition_builder_may_import_agent_from_api() -> None:
     assert AGENT_MODULE_NAME not in imported_modules(API_APP)
-    assert collect_import_violations(API_ROOT, (AGENT_MODULE_NAME, ASSESSMENT_MODULE_NAME)) == []
+    assert "PortfolioRiskAgent" not in API_APP.read_text(encoding="utf-8")
+    # Chunk 201: the exact builder imports the real published agent class.
+    assert AGENT_MODULE_NAME in imported_modules(PORTFOLIO_RISK_STACK_MODULE)
+    assert "PortfolioRiskAgent" in imported_names(PORTFOLIO_RISK_STACK_MODULE)
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            (AGENT_MODULE_NAME, ASSESSMENT_MODULE_NAME),
+            exclude_relative_prefixes=(PORTFOLIO_RISK_STACK_RELATIVE,),
+        )
+        == []
+    )
     for path in sorted(API_ROOT.rglob("*.py")):
+        if path == PORTFOLIO_RISK_STACK_MODULE:
+            continue
         assert "PortfolioRiskAgent" not in path.read_text(encoding="utf-8"), path
 
 
 def test_no_other_production_module_imports_the_portfolio_risk_agent() -> None:
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path == AGENT_MODULE:
+        if path in (AGENT_MODULE, PORTFOLIO_RISK_STACK_MODULE):
             continue
         assert AGENT_MODULE_NAME not in imported_modules(path), path
         assert "PortfolioRiskAgent" not in path.read_text(encoding="utf-8"), path

@@ -1641,7 +1641,7 @@ Dependency direction: the service lives in `application/orchestration` and impor
 
 The service is framework-neutral and production-unwired: it is not exported from `application/orchestration/__init__.py`, and `graph.py`, `create_app()`, and API modules do not import it. The real quantitative assessment, a durable forecasting-success reader, production composition, Trading Strategy, and Risk & Bid graph routing remain absent.
 
-Chunk 200 (local/unpublished) adds offline integration verification only — no production code, builder, abstraction, storage decision, graph topology, or wiring changed. `tests/unit/api/test_forecasting_to_portfolio_risk_vertical_slice.py` exercises this vertical slice:
+Chunk 200 (published at `25efd7688e25ee8690a9e734f504be7d0af332fb`, tag `chunk-200`) adds offline integration verification only — no production code, builder, abstraction, storage decision, graph topology, or wiring changed. `tests/unit/api/test_forecasting_to_portfolio_risk_vertical_slice.py` exercises this vertical slice:
 
 ```text
 ForecastingPlan (prepared in wrapped InMemoryForecastingWorkflowContext)
@@ -1656,6 +1656,18 @@ ForecastingPlan (prepared in wrapped InMemoryForecastingWorkflowContext)
 ```
 
 The final assessment is supplied by a test-only port implementation; it is not the result of any risk engine. The compiled graph still visits only `workflow_entry`, `forecasting`, and `forecasting_success_transition` on this path and has no Portfolio & Risk node; Phase 4 is not wired into the production graph. A Consumer Load or DAM branch failure ends the graph at `forecasting`/`failed` under the test-selected terminal policy and publishes no success, so the risk handoff fails closed with the existing sanitized `ResourceNotFoundError` and never reaches the assessment port. Conversely, a downstream assessment failure (`DependencyUnavailableError`) propagates unchanged through the agent and service without retry or fallback and does not invalidate the already published `ForecastingSuccess` or the completed graph state. Workflow identity remains an exact key with no near-miss or latest-result fallback.
+
+Chunk 201 (local/unpublished) adds one API-owned, unwired, construction-only composition builder, `build_portfolio_risk_execution_service` in `energy_trading.api.composition.portfolio_risk_stack`:
+
+```text
+caller-supplied ForecastingSuccessReadPort + PortfolioRiskAssessmentPort
+  → build_portfolio_risk_execution_service(*, forecast_reader, assessment_port)   ← API composition (sync)
+  → PortfolioRiskAgent(assessment_port=assessment_port)                          (application, exactly once)
+  → PortfolioRiskExecutionService(forecast_reader=forecast_reader, risk_agent=agent)  (application, exactly once)
+  → returned unchanged; nothing is executed at build time
+```
+
+The API composition layer owns only this builder. The application layer continues to own `PortfolioRiskAgent`, `PortfolioRiskExecutionService`, `ForecastingSuccessReadPort`, and `PortfolioRiskAssessmentPort`; dependency direction is unchanged (API composition → application). The builder imports exactly those four published types and nothing from domain, infrastructure, ML, LangGraph, FastAPI, configuration, or providers. It imports the `ForecastingSuccessReadPort` interface from `forecasting_success_read`, which is distinct from importing the `ForecastingSuccess` aggregate that interface returns: the builder does not import the `forecasting_success` module or the `ForecastingSuccess` class, never constructs or reads a forecast, and is therefore not a production forecast consumer. It does not own numerical risk methodology, choose a concrete reader or assessment engine, or select runtime providers; callers supply already-constructed ports and keep their lifetime. It is not exported from `api/composition/__init__.py` and is not invoked by `create_app()`, HTTP routes, lifespans, or the production LangGraph, so composition-time construction capability does not imply runtime wiring. A quantitative assessment implementation, a durable reader, and Risk & Bid routing remain absent.
 
 Chunk 196 (published at `d891942885a088adb1c7e4e885bd174697a2d500`, tag `chunk-196`) adds offline integration verification only — no production code, builder, abstraction, storage, or wiring changed. `tests/unit/api/test_forecasting_phase3_graph_read_after_write.py` composes the real Chunk 190 `build_forecasting_workflow_step_from_model_ports` and Chunk 191 `build_forecasting_failure_runtime_handler` with one real `InMemoryForecastingReadAfterWriteContext` (wrapping a real `InMemoryForecastingWorkflowContext`) injected as the forecasting workflow-context port, and reads through that same instance typed as `ForecastingSuccessReadPort`:
 

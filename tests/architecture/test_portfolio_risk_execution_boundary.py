@@ -25,6 +25,9 @@ AGENT_MODULE = APPLICATION_ROOT / "agents" / "portfolio_risk.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 EXECUTION_MODULE_NAME = "energy_trading.application.orchestration.portfolio_risk_execution"
+# Chunk 201: the exact API composition builder authorized to construct the service.
+PORTFOLIO_RISK_STACK_MODULE = API_ROOT / "composition" / "portfolio_risk_stack.py"
+PORTFOLIO_RISK_STACK_RELATIVE = "energy_trading/api/composition/portfolio_risk_stack.py"
 
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
@@ -501,10 +504,26 @@ def test_graph_remains_unwired_to_the_execution_service() -> None:
     assert "portfolio_risk_execution" not in source
 
 
-def test_create_app_and_api_remain_unwired_to_the_execution_service() -> None:
+def test_only_portfolio_risk_composition_builder_may_import_service_from_api() -> None:
     assert EXECUTION_MODULE_NAME not in imported_modules(API_APP)
-    assert collect_import_violations(API_ROOT, (EXECUTION_MODULE_NAME,)) == []
+    app_source = API_APP.read_text(encoding="utf-8")
+    assert "PortfolioRiskExecutionService" not in app_source
+    assert "portfolio_risk_stack" not in app_source
+    # Chunk 201: the exact builder imports the canonical service and never executes it.
+    assert EXECUTION_MODULE_NAME in imported_modules(PORTFOLIO_RISK_STACK_MODULE)
+    assert "PortfolioRiskExecutionService" in imported_names(PORTFOLIO_RISK_STACK_MODULE)
+    assert "execute" not in _identifier_names(PORTFOLIO_RISK_STACK_MODULE)
+    assert (
+        collect_import_violations(
+            API_ROOT,
+            (EXECUTION_MODULE_NAME,),
+            exclude_relative_prefixes=(PORTFOLIO_RISK_STACK_RELATIVE,),
+        )
+        == []
+    )
     for path in sorted(API_ROOT.rglob("*.py")):
+        if path == PORTFOLIO_RISK_STACK_MODULE:
+            continue
         source = path.read_text(encoding="utf-8")
         assert "PortfolioRiskExecutionService" not in source, path
         assert "portfolio_risk_execution" not in source, path
@@ -526,7 +545,7 @@ def test_concrete_portfolio_risk_agent_remains_unaware_of_the_service() -> None:
 
 def test_no_other_production_module_imports_the_execution_service() -> None:
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path == EXECUTION_MODULE:
+        if path in (EXECUTION_MODULE, PORTFOLIO_RISK_STACK_MODULE):
             continue
         assert EXECUTION_MODULE_NAME not in imported_modules(path), path
         assert "PortfolioRiskExecutionService" not in path.read_text(encoding="utf-8"), path

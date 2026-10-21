@@ -21,6 +21,10 @@ SUCCESS_MODULE = ORCHESTRATION_ROOT / "forecasting_success.py"
 STATE_MODULE = ORCHESTRATION_ROOT / "state.py"
 GRAPH_MODULE = ORCHESTRATION_ROOT / "graph.py"
 API_ROOT = PRODUCTION_ROOT / "api"
+# Chunk 201: the exact API builder that imports only the forecasting-success read port.
+PORTFOLIO_RISK_STACK_MODULE = API_ROOT / "composition" / "portfolio_risk_stack.py"
+READ_MODULE_NAME = "energy_trading.application.orchestration.forecasting_success_read"
+SUCCESS_MODULE_NAME = "energy_trading.application.orchestration.forecasting_success"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -423,9 +427,28 @@ def test_api_composition_does_not_import_or_construct_forecasting_success() -> N
     for path in sorted(API_ROOT.rglob("*.py")):
         names = imported_names(path)
         assert "ForecastingSuccess" not in names
+        if path == PORTFOLIO_RISK_STACK_MODULE:
+            continue
         source = path.read_text(encoding="utf-8")
         assert "ForecastingSuccess" not in source
         assert "forecasting_success" not in source
+    # Chunk 201: exact import checks replace the substring scan for the builder only.
+    stack_modules = imported_modules(PORTFOLIO_RISK_STACK_MODULE)
+    stack_names = imported_names(PORTFOLIO_RISK_STACK_MODULE)
+    assert READ_MODULE_NAME in stack_modules
+    assert "ForecastingSuccessReadPort" in stack_names
+    assert SUCCESS_MODULE_NAME not in stack_modules
+    assert "ForecastingSuccess" not in stack_names
+    stack_identifiers = _identifier_names(PORTFOLIO_RISK_STACK_MODULE)
+    assert {
+        "ForecastingSuccess",
+        "consumer_load_forecast",
+        "dam_price_forecast",
+        "get_success",
+        "InMemoryForecastingReadAfterWriteContext",
+        "InMemoryForecastingSuccessReader",
+    }.isdisjoint(stack_identifiers)
+    assert not any(module.startswith("energy_trading.infrastructure") for module in stack_modules)
 
 
 def test_forecasting_success_stays_isolated_from_ml_implementations() -> None:
