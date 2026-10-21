@@ -348,6 +348,7 @@ def test_orchestration_package_does_not_introduce_concrete_agents() -> None:
         "hydro_resources.py",
         "market_monitoring.py",
         "news_intelligence.py",
+        "portfolio_risk.py",
         "regulatory_intelligence.py",
         "weather_and_renewable_forecast.py",
     ]

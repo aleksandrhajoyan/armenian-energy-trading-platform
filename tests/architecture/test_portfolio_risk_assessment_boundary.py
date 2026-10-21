@@ -25,6 +25,7 @@ GRAPH_MODULE = ORCHESTRATION_ROOT / "graph.py"
 READ_MODULE = ORCHESTRATION_ROOT / "forecasting_success_read.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 APP_MODULE = API_ROOT / "app.py"
+AGENT_MODULE = APPLICATION_ROOT / "agents" / "portfolio_risk.py"
 ASSESSMENT_MODULE_NAME = "energy_trading.application.ports.portfolio_risk_assessment"
 
 PUBLIC_TYPES = ("PortfolioRiskAssessmentRequest", "PortfolioRiskAssessmentPort")
@@ -390,9 +391,14 @@ def test_create_app_and_api_remain_unwired_to_the_assessment_port() -> None:
         assert "portfolio_risk_assessment" not in source, path
 
 
-def test_no_production_module_implements_or_imports_the_assessment_port_yet() -> None:
+def test_only_portfolio_risk_agent_may_import_assessment_port() -> None:
+    # Chunk 198: the exact Portfolio & Risk Agent module is the sole authorized consumer.
+    assert ASSESSMENT_MODULE_NAME in imported_modules(AGENT_MODULE)
+    assert {"PortfolioRiskAssessmentPort", "PortfolioRiskAssessmentRequest"} <= imported_names(
+        AGENT_MODULE
+    )
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path == ASSESSMENT_MODULE:
+        if path in (ASSESSMENT_MODULE, AGENT_MODULE):
             continue
         assert ASSESSMENT_MODULE_NAME not in imported_modules(path), path
         assert "PortfolioRiskAssessment" not in path.read_text(encoding="utf-8"), path

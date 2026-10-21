@@ -3293,7 +3293,7 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
 
 ## ADR-207 — Portfolio & Risk assessment starts as a scoped, canonical, asynchronous application port over explicit inputs
 
-- **Status:** Accepted for the implemented local Chunk 197 state (unpublished).
+- **Status:** Accepted; Chunk 197 published at `58b61091dbf18948c0e746f4d3181b9ddfb21640` (tag `chunk-197`, subject `feat: add chunk 197 portfolio risk assessment request and port boundary`).
 - **Context:** ADR-206 (Chunk 196, published at `d891942885a088adb1c7e4e885bd174697a2d500`, tag `chunk-196`) verified offline that a successful Phase 3 run is readable through `ForecastingSuccessReadPort` by explicit workflow identity. The Portfolio & Risk Agent specified in `AGENTS.md` has no typed application boundary yet, and future Risk & Bid work needs one that does not couple risk assessment to forecasting storage, LangGraph, or `WorkflowState`. Portfolio positions, commercial constraints, risk limits, and an assessment methodology have not been verified or selected.
 - **Decision:**
   - Application owns exactly two new public types in `energy_trading.application.ports.portfolio_risk_assessment`: `PortfolioRiskAssessmentRequest` and `PortfolioRiskAssessmentPort`.
@@ -3305,3 +3305,16 @@ Log of significant decisions. Status values: **Proposed**, **Accepted**, **Super
   - The port is not exported from `application/ports/__init__.py`; `create_app()`, API modules, `graph.py`, `WorkflowState`, and the read port do not import it. No Risk & Bid LangGraph node is added.
   - No historical architecture assertion needed to evolve.
 - **Consequences:** Future Portfolio & Risk work has a typed, storage-neutral, framework-neutral boundary that returns canonical `RiskAssessment`. The Portfolio & Risk Agent, a quantitative engine, portfolio position / commercial-constraint / risk-policy contracts, the Risk & Bid caller, the Trading Strategy Agent, and FastAPI/LangGraph wiring remain absent; Phase 3 production runtime, Risk & Bid, and the full five-phase workflow remain incomplete.
+
+## ADR-208 — Portfolio & Risk Agent is a thin application delegate over the published asynchronous assessment port
+
+- **Status:** Accepted for the implemented local Chunk 198 state (unpublished).
+- **Context:** ADR-207 (Chunk 197, published at `58b61091dbf18948c0e746f4d3181b9ddfb21640`, tag `chunk-197`) added `PortfolioRiskAssessmentRequest` and `PortfolioRiskAssessmentPort` with no consumer. `AgentName.PORTFOLIO_AND_RISK` already exists, and every other concrete agent satisfies `AgentPort` structurally. Orchestration needs an agent identity it can later invoke through `AgentPort`, but no assessment methodology, completeness rule, position model, or commercial limit has been verified.
+- **Decision:**
+  - Application owns exactly one new class, `PortfolioRiskAgent`, in `energy_trading.application.agents.portfolio_risk`. It structurally satisfies `AgentPort[PortfolioRiskAssessmentRequest, RiskAssessment]` without inheriting it; `name` returns the existing `AgentName.PORTFOLIO_AND_RISK`. No enum value, alias, base class, registry, or factory is introduced.
+  - The constructor takes exactly one keyword-only dependency, `assessment_port: PortfolioRiskAssessmentPort`, stored by identity. This chunk's explicit keyword-only requirement intentionally differs from the positional constructors of the forecasting agents, which are unchanged.
+  - `run(request)` awaits `assess(request=request)` exactly once and returns that exact `RiskAssessment`. There is no reconstruction, copy, defaulting, unit or currency change, risk-status inference, retry, fallback, exception translation, logging, concurrency, or LLM use; errors propagate unchanged.
+  - The agent does not call `ForecastingSuccessReadPort`, resolve workflow plans, or inspect `WorkflowState`; callers assemble the request and the injected port owns any future quantitative implementation.
+  - The agent is not exported from `application/agents/__init__.py`, and `graph.py`, `create_app()`, and API modules do not import it.
+  - Two historical architecture assertions evolved narrowly with Architect approval: the Chunk 197 boundary test now permits exactly the agent module (and nothing else) to import the assessment contract, and the orchestration-state concrete-agent inventory lists `portfolio_risk.py`.
+- **Consequences:** The Portfolio & Risk Agent identity is invocable through `AgentPort` in tests only. Numerical assessment methodology, completeness rules, portfolio positions, commercial (Pricing & Sales) limits, risk policy, a concrete assessment implementation, the Risk & Bid caller, Trading Strategy, and production LangGraph/FastAPI wiring are deferred; the Portfolio & Risk parent capability, Risk & Bid, and the five-phase workflow remain incomplete.
