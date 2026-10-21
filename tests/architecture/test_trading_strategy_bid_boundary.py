@@ -33,6 +33,8 @@ APP_MODULE = API_ROOT / "app.py"
 BID_MODULE_NAME = "energy_trading.application.ports.trading_strategy_bid"
 # Chunk 203: the exact application agent authorized to consume the bid port.
 TRADING_STRATEGY_AGENT_MODULE = AGENTS_ROOT / "trading_strategy.py"
+# Chunk 204: the exact execution service authorized to import only the request type.
+TRADING_STRATEGY_EXECUTION_MODULE = ORCHESTRATION_ROOT / "trading_strategy_execution.py"
 
 PUBLIC_TYPES = ("TradingStrategyBidRequest", "TradingStrategyBidPort")
 
@@ -450,9 +452,25 @@ def test_api_and_create_app_remain_unwired_to_the_bid_port() -> None:
         assert "trading_strategy_bid" not in source, path
 
 
+def test_execution_service_imports_only_the_bid_request_and_never_the_port() -> None:
+    # Chunk 204: the exact service assembles the request; the agent owns the port.
+    assert BID_MODULE_NAME in imported_modules(TRADING_STRATEGY_EXECUTION_MODULE)
+    service_names = imported_names(TRADING_STRATEGY_EXECUTION_MODULE)
+    assert "TradingStrategyBidRequest" in service_names
+    assert "TradingStrategyBidPort" not in service_names
+    identifiers = _identifier_names(TRADING_STRATEGY_EXECUTION_MODULE)
+    assert "TradingStrategyBidPort" not in identifiers
+    assert "propose_bids" not in identifiers
+    assert "MarketBid" not in {
+        node.func.id
+        for node in ast.walk(_tree(TRADING_STRATEGY_EXECUTION_MODULE))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+
+
 def test_no_other_production_module_imports_the_bid_port() -> None:
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path in (BID_MODULE, TRADING_STRATEGY_AGENT_MODULE):
+        if path in (BID_MODULE, TRADING_STRATEGY_AGENT_MODULE, TRADING_STRATEGY_EXECUTION_MODULE):
             continue
         assert BID_MODULE_NAME not in imported_modules(path), path
         assert "TradingStrategyBid" not in path.read_text(encoding="utf-8"), path
