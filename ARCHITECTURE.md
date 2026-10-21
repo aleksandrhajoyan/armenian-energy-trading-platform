@@ -1669,7 +1669,18 @@ caller-supplied ForecastingSuccessReadPort + PortfolioRiskAssessmentPort
 
 The API composition layer owns only this builder. The application layer continues to own `PortfolioRiskAgent`, `PortfolioRiskExecutionService`, `ForecastingSuccessReadPort`, and `PortfolioRiskAssessmentPort`; dependency direction is unchanged (API composition → application). The builder imports exactly those four published types and nothing from domain, infrastructure, ML, LangGraph, FastAPI, configuration, or providers. It imports the `ForecastingSuccessReadPort` interface from `forecasting_success_read`, which is distinct from importing the `ForecastingSuccess` aggregate that interface returns: the builder does not import the `forecasting_success` module or the `ForecastingSuccess` class, never constructs or reads a forecast, and is therefore not a production forecast consumer. It does not own numerical risk methodology, choose a concrete reader or assessment engine, or select runtime providers; callers supply already-constructed ports and keep their lifetime. It is not exported from `api/composition/__init__.py` and is not invoked by `create_app()`, HTTP routes, lifespans, or the production LangGraph, so composition-time construction capability does not imply runtime wiring. A quantitative assessment implementation, a durable reader, and Risk & Bid routing remain absent.
 
-Chunk 202 (local/unpublished) adds one application-owned, unwired Trading Strategy bid proposal boundary, `TradingStrategyBidRequest` and `TradingStrategyBidPort` in `energy_trading.application.ports.trading_strategy_bid`:
+Chunk 203 (local/unpublished) adds the tenth concrete application agent, application-owned, unwired `TradingStrategyAgent` in `energy_trading.application.agents.trading_strategy`:
+
+```text
+caller-assembled TradingStrategyBidRequest
+  → TradingStrategyAgent.run(request)                   ← application agent, delegation only
+  → TradingStrategyBidPort.propose_bids(*, request)     ← injected; no implementation exists
+  → tuple[MarketBid, ...]                               (returned by identity, unchanged)
+```
+
+The constructor takes exactly one required keyword-only `bid_port: TradingStrategyBidPort` and preserves it by identity; it constructs nothing and selects no concrete port implementation. `name` returns the existing `AgentName.TRADING_STRATEGY`. `run` awaits `propose_bids(request=request)` exactly once and returns the exact tuple, so the agent structurally satisfies `AgentPort[TradingStrategyBidRequest, tuple[MarketBid, ...]]` without inheriting the Protocol. Errors propagate unchanged with no retry, fallback, translation, or logging. An empty tuple is returned unchanged and does not imply risk approval, regulatory approval, or trade authorization; the agent does not own the interpretation of why a proposal collection is empty. Proposal algorithms, bid MW/price calculation, side/product/interval selection, eligibility and risk-acceptance rules, and verified market-specific rules remain external to the agent and belong to a future concrete `TradingStrategyBidPort` implementation. The agent imports only `AgentName`, the published bid port and request, and canonical `MarketBid`; it does not read forecasts, run a risk assessment, inspect `WorkflowState`, submit, or persist. It is not exported from `application/agents/__init__.py`, and no production graph, `create_app()`, or API wiring was added; `AgentName`, `AgentPort`, and `WorkflowState` are unchanged.
+
+Chunk 202 (published at `7ca2c3688b39ae3a245740b3231eafef58c35a3e`, tag `chunk-202`) adds one application-owned, unwired Trading Strategy bid proposal boundary, `TradingStrategyBidRequest` and `TradingStrategyBidPort` in `energy_trading.application.ports.trading_strategy_bid`:
 
 ```text
 caller-obtained RiskAssessment + ForecastingSuccess + generation/regulatory tuples

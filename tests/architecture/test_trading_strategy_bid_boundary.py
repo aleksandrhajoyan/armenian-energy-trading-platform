@@ -31,6 +31,8 @@ PORTFOLIO_RISK_EXECUTION_MODULE = ORCHESTRATION_ROOT / "portfolio_risk_execution
 API_ROOT = PRODUCTION_ROOT / "api"
 APP_MODULE = API_ROOT / "app.py"
 BID_MODULE_NAME = "energy_trading.application.ports.trading_strategy_bid"
+# Chunk 203: the exact application agent authorized to consume the bid port.
+TRADING_STRATEGY_AGENT_MODULE = AGENTS_ROOT / "trading_strategy.py"
 
 PUBLIC_TYPES = ("TradingStrategyBidRequest", "TradingStrategyBidPort")
 
@@ -401,8 +403,15 @@ def test_bid_contract_excludes_payload_escape_hatches_and_calculation() -> None:
         assert token not in code_only, token
 
 
-def test_no_concrete_trading_strategy_agent_exists() -> None:
+def test_only_the_trading_strategy_agent_consumes_the_bid_port_in_agents() -> None:
+    # Chunk 203: the exact agent module imports the published port and request.
+    assert BID_MODULE_NAME in imported_modules(TRADING_STRATEGY_AGENT_MODULE)
+    agent_names = imported_names(TRADING_STRATEGY_AGENT_MODULE)
+    assert "TradingStrategyBidPort" in agent_names
+    assert "TradingStrategyBidRequest" in agent_names
     for path in sorted(AGENTS_ROOT.rglob("*.py")):
+        if path == TRADING_STRATEGY_AGENT_MODULE:
+            continue
         assert BID_MODULE_NAME not in imported_modules(path), path
         assert "TradingStrategyBid" not in path.read_text(encoding="utf-8"), path
         assert "TradingStrategyAgent" not in _identifier_names(path), path
@@ -443,7 +452,7 @@ def test_api_and_create_app_remain_unwired_to_the_bid_port() -> None:
 
 def test_no_other_production_module_imports_the_bid_port() -> None:
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path == BID_MODULE:
+        if path in (BID_MODULE, TRADING_STRATEGY_AGENT_MODULE):
             continue
         assert BID_MODULE_NAME not in imported_modules(path), path
         assert "TradingStrategyBid" not in path.read_text(encoding="utf-8"), path
