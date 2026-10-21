@@ -26,6 +26,7 @@ READ_MODULE = ORCHESTRATION_ROOT / "forecasting_success_read.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 APP_MODULE = API_ROOT / "app.py"
 AGENT_MODULE = APPLICATION_ROOT / "agents" / "portfolio_risk.py"
+EXECUTION_MODULE = ORCHESTRATION_ROOT / "portfolio_risk_execution.py"
 ASSESSMENT_MODULE_NAME = "energy_trading.application.ports.portfolio_risk_assessment"
 
 PUBLIC_TYPES = ("PortfolioRiskAssessmentRequest", "PortfolioRiskAssessmentPort")
@@ -397,8 +398,16 @@ def test_only_portfolio_risk_agent_may_import_assessment_port() -> None:
     assert {"PortfolioRiskAssessmentPort", "PortfolioRiskAssessmentRequest"} <= imported_names(
         AGENT_MODULE
     )
+    # Chunk 199: the exact execution-service module may import only the request DTO.
+    assert ASSESSMENT_MODULE_NAME in imported_modules(EXECUTION_MODULE)
+    assert "PortfolioRiskAssessmentRequest" in imported_names(EXECUTION_MODULE)
+    assert "PortfolioRiskAssessmentPort" not in imported_names(EXECUTION_MODULE)
+    assert "PortfolioRiskAssessmentPort" not in EXECUTION_MODULE.read_text(encoding="utf-8")
+    assert {"assess", "RiskAssessment_empty", "value_at_risk", "risk_score"}.isdisjoint(
+        _identifier_names(EXECUTION_MODULE)
+    )
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path in (ASSESSMENT_MODULE, AGENT_MODULE):
+        if path in (ASSESSMENT_MODULE, AGENT_MODULE, EXECUTION_MODULE):
             continue
         assert ASSESSMENT_MODULE_NAME not in imported_modules(path), path
         assert "PortfolioRiskAssessment" not in path.read_text(encoding="utf-8"), path

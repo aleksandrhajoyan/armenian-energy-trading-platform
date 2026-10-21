@@ -1611,7 +1611,7 @@ Available versus unmodeled inputs: the request carries only canonical inputs tha
 
 No concrete implementation, risk formula, VaR or exposure calculation, MW/MWh or currency conversion, or bid construction exists. The port is not exported from `application/ports/__init__.py`, and `create_app()`, API modules, `graph.py`, `WorkflowState`, and the read port do not import it. No Trading Strategy Agent or Risk & Bid LangGraph node exists.
 
-Chunk 198 (local/unpublished) adds the first consumer of that port: application-owned, unwired `PortfolioRiskAgent` in `energy_trading.application.agents.portfolio_risk`.
+Chunk 198 (published at `9df9913d2b4ec4e3eeaaf70dc9dc4561d9c12e11`, tag `chunk-198`) adds the first consumer of that port: application-owned, unwired `PortfolioRiskAgent` in `energy_trading.application.agents.portfolio_risk`.
 
 ```text
 PortfolioRiskAssessmentRequest (Chunk 197, caller-assembled)
@@ -1624,6 +1624,22 @@ PortfolioRiskAssessmentRequest (Chunk 197, caller-assembled)
 Dependency direction: the agent lives in `application/agents` and imports only `AgentName` from `agents.base`, the Chunk 197 port module, and canonical `RiskAssessment` from `domain.models.trading`. It structurally satisfies `AgentPort[PortfolioRiskAssessmentRequest, RiskAssessment]` without inheriting it and returns the existing `AgentName.PORTFOLIO_AND_RISK`. The constructor takes one keyword-only `assessment_port: PortfolioRiskAssessmentPort` stored by identity. `run` awaits `assess(request=request)` exactly once and returns that exact object: no reconstruction, copy, unit or currency change, risk-status defaulting, completeness inference, retry, fallback, exception translation, or logging; errors propagate unchanged. The agent does not call `ForecastingSuccessReadPort`, inspect `WorkflowState`, or import orchestration, infrastructure, API, ML, or the in-memory forecasting reader/read-after-write wrapper.
 
 The actual assessment implementation is still absent: no numerical policy, methodology, threshold, or completeness rule is selected. The agent is not exported from `application/agents/__init__.py`, and `graph.py`, `create_app()`, and API modules do not import it; no Risk & Bid node, graph wiring, or infrastructure is introduced.
+
+Chunk 199 (local/unpublished) adds the first callable Phase 3-to-Phase 4 forecasting-result consumer: application-owned, unwired `PortfolioRiskExecutionService` in `energy_trading.application.orchestration.portfolio_risk_execution`.
+
+```text
+caller-supplied workflow_id, portfolio_id, delivery_date, generation/hydro/regulatory tuples
+  → PortfolioRiskExecutionService.execute(...)          ← implemented now (application use case)
+  → ForecastingSuccessReadPort.get_success(workflow_id=workflow_id)   (Chunk 193 Protocol, exactly once)
+  → PortfolioRiskAssessmentRequest(...)                 (Chunk 197 DTO, exact ForecastingSuccess + exact tuples)
+  → AgentPort[PortfolioRiskAssessmentRequest, RiskAssessment].run(request)   (Chunk 198 PortfolioRiskAgent structurally, exactly once)
+  → PortfolioRiskAssessmentPort.assess(request=request) (owned by the agent; quantitative implementation absent)
+  → canonical RiskAssessment, returned unchanged
+```
+
+Dependency direction: the service lives in `application/orchestration` and imports only `datetime.date`, the generic `AgentPort` from `agents.base`, `ForecastingSuccessReadPort`, `PortfolioRiskAssessmentRequest` (not the assessment Protocol), and canonical domain contracts (`GenerationAvailabilityRecord`, `HydroRecord`, `RegulatoryConstraint`, `RiskAssessment`, `EntityId`). It does not import the concrete `PortfolioRiskAgent`, infrastructure, API, ML, FastAPI, LangGraph, storage, or provider modules; the real agent and the in-memory read-after-write wrapper are accepted structurally. The caller supplies every non-forecast input; the service reads the forecast by the exact supplied workflow identity with no near-miss, most-recent, or default fallback, and never copies, sorts, filters, aligns, or recalculates forecasts or source records. Failure semantics fail closed: a missing or unavailable forecast propagates before any request is constructed or the agent is called; request validation errors propagate before the agent is called; agent errors propagate unchanged with no retry. No false acceptable assessment is ever generated. `WorkflowState` is not an input and is unchanged.
+
+The service is framework-neutral and production-unwired: it is not exported from `application/orchestration/__init__.py`, and `graph.py`, `create_app()`, and API modules do not import it. The real quantitative assessment, a durable forecasting-success reader, production composition, Trading Strategy, and Risk & Bid graph routing remain absent.
 
 Chunk 196 (published at `d891942885a088adb1c7e4e885bd174697a2d500`, tag `chunk-196`) adds offline integration verification only — no production code, builder, abstraction, storage, or wiring changed. `tests/unit/api/test_forecasting_phase3_graph_read_after_write.py` composes the real Chunk 190 `build_forecasting_workflow_step_from_model_ports` and Chunk 191 `build_forecasting_failure_runtime_handler` with one real `InMemoryForecastingReadAfterWriteContext` (wrapping a real `InMemoryForecastingWorkflowContext`) injected as the forecasting workflow-context port, and reads through that same instance typed as `ForecastingSuccessReadPort`:
 
