@@ -1625,7 +1625,7 @@ Dependency direction: the agent lives in `application/agents` and imports only `
 
 The actual assessment implementation is still absent: no numerical policy, methodology, threshold, or completeness rule is selected. The agent is not exported from `application/agents/__init__.py`, and `graph.py`, `create_app()`, and API modules do not import it; no Risk & Bid node, graph wiring, or infrastructure is introduced.
 
-Chunk 199 (local/unpublished) adds the first callable Phase 3-to-Phase 4 forecasting-result consumer: application-owned, unwired `PortfolioRiskExecutionService` in `energy_trading.application.orchestration.portfolio_risk_execution`.
+Chunk 199 (published at `8fb8bf163f8789b7268e1aa00ddff0fb9089aa28`, tag `chunk-199`) adds the first callable Phase 3-to-Phase 4 forecasting-result consumer: application-owned, unwired `PortfolioRiskExecutionService` in `energy_trading.application.orchestration.portfolio_risk_execution`.
 
 ```text
 caller-supplied workflow_id, portfolio_id, delivery_date, generation/hydro/regulatory tuples
@@ -1640,6 +1640,22 @@ caller-supplied workflow_id, portfolio_id, delivery_date, generation/hydro/regul
 Dependency direction: the service lives in `application/orchestration` and imports only `datetime.date`, the generic `AgentPort` from `agents.base`, `ForecastingSuccessReadPort`, `PortfolioRiskAssessmentRequest` (not the assessment Protocol), and canonical domain contracts (`GenerationAvailabilityRecord`, `HydroRecord`, `RegulatoryConstraint`, `RiskAssessment`, `EntityId`). It does not import the concrete `PortfolioRiskAgent`, infrastructure, API, ML, FastAPI, LangGraph, storage, or provider modules; the real agent and the in-memory read-after-write wrapper are accepted structurally. The caller supplies every non-forecast input; the service reads the forecast by the exact supplied workflow identity with no near-miss, most-recent, or default fallback, and never copies, sorts, filters, aligns, or recalculates forecasts or source records. Failure semantics fail closed: a missing or unavailable forecast propagates before any request is constructed or the agent is called; request validation errors propagate before the agent is called; agent errors propagate unchanged with no retry. No false acceptable assessment is ever generated. `WorkflowState` is not an input and is unchanged.
 
 The service is framework-neutral and production-unwired: it is not exported from `application/orchestration/__init__.py`, and `graph.py`, `create_app()`, and API modules do not import it. The real quantitative assessment, a durable forecasting-success reader, production composition, Trading Strategy, and Risk & Bid graph routing remain absent.
+
+Chunk 200 (local/unpublished) adds offline integration verification only — no production code, builder, abstraction, storage decision, graph topology, or wiring changed. `tests/unit/api/test_forecasting_to_portfolio_risk_vertical_slice.py` exercises this vertical slice:
+
+```text
+ForecastingPlan (prepared in wrapped InMemoryForecastingWorkflowContext)
+  → compiled build_workflow_graph (ainvoke, forecasting/running → risk_and_bid/running)
+  → ForecastingWorkflowStep → ParallelForecastingExecutionService (test-only model ports)
+  → InMemoryForecastingReadAfterWriteContext.record_success (graph ends at END)
+  ── explicit caller step, outside the graph ──
+  → PortfolioRiskExecutionService.execute (same wrapper instance as ForecastingSuccessReadPort)
+  → PortfolioRiskAgent.run (real agent, via AgentPort)
+  → PortfolioRiskAssessmentPort.assess (deterministic test-only fake)
+  → canonical RiskAssessment, returned unchanged
+```
+
+The final assessment is supplied by a test-only port implementation; it is not the result of any risk engine. The compiled graph still visits only `workflow_entry`, `forecasting`, and `forecasting_success_transition` on this path and has no Portfolio & Risk node; Phase 4 is not wired into the production graph. A Consumer Load or DAM branch failure ends the graph at `forecasting`/`failed` under the test-selected terminal policy and publishes no success, so the risk handoff fails closed with the existing sanitized `ResourceNotFoundError` and never reaches the assessment port. Conversely, a downstream assessment failure (`DependencyUnavailableError`) propagates unchanged through the agent and service without retry or fallback and does not invalidate the already published `ForecastingSuccess` or the completed graph state. Workflow identity remains an exact key with no near-miss or latest-result fallback.
 
 Chunk 196 (published at `d891942885a088adb1c7e4e885bd174697a2d500`, tag `chunk-196`) adds offline integration verification only — no production code, builder, abstraction, storage, or wiring changed. `tests/unit/api/test_forecasting_phase3_graph_read_after_write.py` composes the real Chunk 190 `build_forecasting_workflow_step_from_model_ports` and Chunk 191 `build_forecasting_failure_runtime_handler` with one real `InMemoryForecastingReadAfterWriteContext` (wrapping a real `InMemoryForecastingWorkflowContext`) injected as the forecasting workflow-context port, and reads through that same instance typed as `ForecastingSuccessReadPort`:
 
