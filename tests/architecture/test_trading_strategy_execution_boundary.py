@@ -27,6 +27,8 @@ PORTFOLIO_RISK_EXECUTION_MODULE = ORCHESTRATION_ROOT / "portfolio_risk_execution
 API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 EXECUTION_MODULE_NAME = "energy_trading.application.orchestration.trading_strategy_execution"
+# Chunk 206: the exact API composition builder authorized to construct the service.
+TRADING_STRATEGY_STACK_MODULE = API_ROOT / "composition" / "trading_strategy_stack.py"
 
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
@@ -546,10 +548,29 @@ def test_graph_remains_unwired_to_the_execution_service() -> None:
 def test_api_and_create_app_remain_unwired_to_the_execution_service() -> None:
     assert API_APP.exists()
     for path in sorted(API_ROOT.rglob("*.py")):
+        if path == TRADING_STRATEGY_STACK_MODULE:
+            continue
         assert EXECUTION_MODULE_NAME not in imported_modules(path), path
         source = path.read_text(encoding="utf-8")
         assert "TradingStrategyExecutionService" not in source, path
         assert "trading_strategy_execution" not in source, path
+
+
+def test_only_the_trading_strategy_stack_constructs_the_service_inside_api() -> None:
+    # Chunk 206: the exact builder imports and constructs the service; it never executes it.
+    assert EXECUTION_MODULE_NAME in imported_modules(TRADING_STRATEGY_STACK_MODULE)
+    assert "TradingStrategyExecutionService" in imported_names(TRADING_STRATEGY_STACK_MODULE)
+    constructed_by: list[str] = []
+    for path in sorted(API_ROOT.rglob("*.py")):
+        for node in ast.walk(_tree(path)):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "TradingStrategyExecutionService"
+            ):
+                constructed_by.append(path.relative_to(PRODUCTION_ROOT).as_posix())
+    assert constructed_by == ["api/composition/trading_strategy_stack.py"]
+    assert "execute" not in _identifier_names(TRADING_STRATEGY_STACK_MODULE)
 
 
 def test_agent_bid_port_and_portfolio_risk_execution_remain_unaware_of_the_service() -> None:
@@ -567,7 +588,7 @@ def test_agent_bid_port_and_portfolio_risk_execution_remain_unaware_of_the_servi
 
 def test_no_other_production_module_imports_the_execution_service() -> None:
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path == EXECUTION_MODULE:
+        if path in (EXECUTION_MODULE, TRADING_STRATEGY_STACK_MODULE):
             continue
         assert EXECUTION_MODULE_NAME not in imported_modules(path), path
         assert "TradingStrategyExecutionService" not in path.read_text(encoding="utf-8"), path

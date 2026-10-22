@@ -35,6 +35,8 @@ BID_MODULE_NAME = "energy_trading.application.ports.trading_strategy_bid"
 TRADING_STRATEGY_AGENT_MODULE = AGENTS_ROOT / "trading_strategy.py"
 # Chunk 204: the exact execution service authorized to import only the request type.
 TRADING_STRATEGY_EXECUTION_MODULE = ORCHESTRATION_ROOT / "trading_strategy_execution.py"
+# Chunk 206: the exact API composition builder authorized to import only the port type.
+TRADING_STRATEGY_STACK_MODULE = API_ROOT / "composition" / "trading_strategy_stack.py"
 
 PUBLIC_TYPES = ("TradingStrategyBidRequest", "TradingStrategyBidPort")
 
@@ -446,10 +448,24 @@ def test_portfolio_risk_stack_remains_unwired_to_the_bid_port() -> None:
 def test_api_and_create_app_remain_unwired_to_the_bid_port() -> None:
     assert APP_MODULE.exists()
     for path in sorted(API_ROOT.rglob("*.py")):
+        if path == TRADING_STRATEGY_STACK_MODULE:
+            continue
         assert BID_MODULE_NAME not in imported_modules(path), path
         source = path.read_text(encoding="utf-8")
         assert "TradingStrategyBid" not in source, path
         assert "trading_strategy_bid" not in source, path
+
+
+def test_trading_strategy_stack_imports_only_the_bid_port_and_never_the_request() -> None:
+    # Chunk 206: the exact builder forwards the port; requests belong to execution time.
+    assert BID_MODULE_NAME in imported_modules(TRADING_STRATEGY_STACK_MODULE)
+    stack_names = imported_names(TRADING_STRATEGY_STACK_MODULE)
+    assert "TradingStrategyBidPort" in stack_names
+    assert "TradingStrategyBidRequest" not in stack_names
+    identifiers = _identifier_names(TRADING_STRATEGY_STACK_MODULE)
+    assert "TradingStrategyBidRequest" not in identifiers
+    assert "propose_bids" not in identifiers
+    assert "MarketBid" not in identifiers
 
 
 def test_execution_service_imports_only_the_bid_request_and_never_the_port() -> None:
@@ -470,7 +486,12 @@ def test_execution_service_imports_only_the_bid_request_and_never_the_port() -> 
 
 def test_no_other_production_module_imports_the_bid_port() -> None:
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path in (BID_MODULE, TRADING_STRATEGY_AGENT_MODULE, TRADING_STRATEGY_EXECUTION_MODULE):
+        if path in (
+            BID_MODULE,
+            TRADING_STRATEGY_AGENT_MODULE,
+            TRADING_STRATEGY_EXECUTION_MODULE,
+            TRADING_STRATEGY_STACK_MODULE,
+        ):
             continue
         assert BID_MODULE_NAME not in imported_modules(path), path
         assert "TradingStrategyBid" not in path.read_text(encoding="utf-8"), path

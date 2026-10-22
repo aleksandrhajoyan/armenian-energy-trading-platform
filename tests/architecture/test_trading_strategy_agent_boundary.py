@@ -26,6 +26,8 @@ API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 AGENT_MODULE_NAME = "energy_trading.application.agents.trading_strategy"
 BID_MODULE_NAME = "energy_trading.application.ports.trading_strategy_bid"
+# Chunk 206: the exact API composition builder authorized to construct the agent.
+TRADING_STRATEGY_STACK_MODULE = API_ROOT / "composition" / "trading_strategy_stack.py"
 
 FORBIDDEN_PREFIXES = (
     "energy_trading.infrastructure",
@@ -458,13 +460,28 @@ def test_graph_and_workflow_state_remain_unaware_of_the_trading_strategy_agent()
 def test_api_and_create_app_remain_unwired_to_the_trading_strategy_agent() -> None:
     assert API_APP.exists()
     for path in sorted(API_ROOT.rglob("*.py")):
+        if path == TRADING_STRATEGY_STACK_MODULE:
+            continue
         assert AGENT_MODULE_NAME not in imported_modules(path), path
         assert "TradingStrategyAgent" not in path.read_text(encoding="utf-8"), path
 
 
+def test_only_the_trading_strategy_stack_constructs_the_agent_inside_api() -> None:
+    # Chunk 206: the exact builder imports and constructs the agent; it never runs it.
+    assert AGENT_MODULE_NAME in imported_modules(TRADING_STRATEGY_STACK_MODULE)
+    assert "TradingStrategyAgent" in imported_names(TRADING_STRATEGY_STACK_MODULE)
+    constructed_by: list[str] = []
+    for path in sorted(API_ROOT.rglob("*.py")):
+        for node in ast.walk(_tree(path)):
+            if isinstance(node, ast.Call) and _call_name(node) == "TradingStrategyAgent":
+                constructed_by.append(path.relative_to(PRODUCTION_ROOT).as_posix())
+    assert constructed_by == ["api/composition/trading_strategy_stack.py"]
+    assert "run" not in _identifier_names(TRADING_STRATEGY_STACK_MODULE)
+
+
 def test_no_other_production_module_imports_the_trading_strategy_agent() -> None:
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path == AGENT_MODULE:
+        if path in (AGENT_MODULE, TRADING_STRATEGY_STACK_MODULE):
             continue
         assert AGENT_MODULE_NAME not in imported_modules(path), path
         assert "TradingStrategyAgent" not in path.read_text(encoding="utf-8"), path
