@@ -29,6 +29,8 @@ API_APP = API_ROOT / "app.py"
 EXECUTION_MODULE_NAME = "energy_trading.application.orchestration.trading_strategy_execution"
 # Chunk 206: the exact API composition builder authorized to construct the service.
 TRADING_STRATEGY_STACK_MODULE = API_ROOT / "composition" / "trading_strategy_stack.py"
+# Chunk 208: the exact application service authorized to import and invoke the service.
+PROPOSAL_HANDOFF_MODULE = ORCHESTRATION_ROOT / "trading_strategy_proposal_handoff.py"
 
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
@@ -586,9 +588,46 @@ def test_agent_bid_port_and_portfolio_risk_execution_remain_unaware_of_the_servi
     assert methods == ["__init__", "name", "run"]
 
 
+def test_only_the_proposal_handoff_service_invokes_the_service_inside_application() -> None:
+    # Chunk 208: the exact handoff service imports and awaits ``execute`` once; it
+    # never constructs the service, the concrete agent, or invokes the bid port.
+    assert EXECUTION_MODULE_NAME in imported_modules(PROPOSAL_HANDOFF_MODULE)
+    assert "TradingStrategyExecutionService" in imported_names(PROPOSAL_HANDOFF_MODULE)
+    tree = _tree(PROPOSAL_HANDOFF_MODULE)
+    awaited_executes = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Await)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Attribute)
+        and node.value.func.attr == "execute"
+        and isinstance(node.value.func.value, ast.Attribute)
+        and isinstance(node.value.func.value.value, ast.Name)
+        and node.value.func.value.value.id == "self"
+    ]
+    assert len(awaited_executes) == 1
+    called_names = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "TradingStrategyExecutionService" not in called_names
+    assert "TradingStrategyAgent" not in called_names
+    identifiers = _identifier_names(PROPOSAL_HANDOFF_MODULE)
+    assert "propose_bids" not in identifiers
+    assert "TradingStrategyAgent" not in identifiers
+    assert "TradingStrategyBidPort" not in identifiers
+    application_users = sorted(
+        path.relative_to(PRODUCTION_ROOT).as_posix()
+        for path in APPLICATION_ROOT.rglob("*.py")
+        if path != EXECUTION_MODULE and EXECUTION_MODULE_NAME in imported_modules(path)
+    )
+    assert application_users == ["application/orchestration/trading_strategy_proposal_handoff.py"]
+
+
 def test_no_other_production_module_imports_the_execution_service() -> None:
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path in (EXECUTION_MODULE, TRADING_STRATEGY_STACK_MODULE):
+        if path in (EXECUTION_MODULE, TRADING_STRATEGY_STACK_MODULE, PROPOSAL_HANDOFF_MODULE):
             continue
         assert EXECUTION_MODULE_NAME not in imported_modules(path), path
         assert "TradingStrategyExecutionService" not in path.read_text(encoding="utf-8"), path

@@ -28,6 +28,8 @@ AGENT_BASE_MODULE = AGENTS_ROOT / "base.py"
 API_ROOT = PRODUCTION_ROOT / "api"
 APP_MODULE = API_ROOT / "app.py"
 HANDOFF_MODULE_NAME = "energy_trading.application.orchestration.risk_and_bid_proposal_handoff"
+# Chunk 208: the exact application service authorized to import and construct the handoff.
+PROPOSAL_HANDOFF_SERVICE_MODULE = ORCHESTRATION_ROOT / "trading_strategy_proposal_handoff.py"
 
 HANDOFF_FIELDS = (
     ("workflow_id", "str"),
@@ -543,10 +545,43 @@ def test_workflow_state_and_graph_remain_unaware_of_the_handoff() -> None:
         assert "risk_and_bid_proposal_handoff" not in source, path
 
 
+def test_only_proposal_handoff_service_constructs_handoff_after_strategy_result() -> None:
+    # Chunk 208: the exact service imports the handoff and constructs it once,
+    # only after awaiting the Trading Strategy result.
+    assert HANDOFF_MODULE_NAME in imported_modules(PROPOSAL_HANDOFF_SERVICE_MODULE)
+    assert "RiskAndBidProposalHandoff" in imported_names(PROPOSAL_HANDOFF_SERVICE_MODULE)
+    tree = _tree(PROPOSAL_HANDOFF_SERVICE_MODULE)
+    constructions = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and _call_name(node) == "RiskAndBidProposalHandoff"
+    ]
+    assert len(constructions) == 1
+    awaits = [node for node in ast.walk(tree) if isinstance(node, ast.Await)]
+    assert len(awaits) == 1
+    assert (awaits[0].lineno, awaits[0].col_offset) < (
+        constructions[0].lineno,
+        constructions[0].col_offset,
+    )
+    assert constructions[0].args == []
+    keywords = [keyword.arg for keyword in constructions[0].keywords]
+    assert keywords == [field_name for field_name, _ in HANDOFF_FIELDS]
+    constructed_by = sorted(
+        path.relative_to(PRODUCTION_ROOT).as_posix()
+        for path in PRODUCTION_ROOT.rglob("*.py")
+        if path != HANDOFF_MODULE
+        and any(
+            isinstance(node, ast.Call) and _call_name(node) == "RiskAndBidProposalHandoff"
+            for node in ast.walk(_tree(path))
+        )
+    )
+    assert constructed_by == ["application/orchestration/trading_strategy_proposal_handoff.py"]
+
+
 def test_no_other_production_module_imports_or_constructs_the_handoff() -> None:
     assert APP_MODULE.exists()
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path == HANDOFF_MODULE:
+        if path in (HANDOFF_MODULE, PROPOSAL_HANDOFF_SERVICE_MODULE):
             continue
         assert HANDOFF_MODULE_NAME not in imported_modules(path), path
         source = path.read_text(encoding="utf-8")
