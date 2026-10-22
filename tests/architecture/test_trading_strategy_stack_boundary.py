@@ -23,6 +23,8 @@ COMPOSITION_INIT = COMPOSITION_ROOT / "__init__.py"
 BUILDER_MODULE = COMPOSITION_ROOT / "trading_strategy_stack.py"
 BUILDER_NAME = "build_trading_strategy_execution_service"
 BUILDER_MODULE_NAME = "energy_trading.api.composition.trading_strategy_stack"
+# Chunk 209: the exact API composition module authorized to import and call this builder.
+PROPOSAL_HANDOFF_STACK_MODULE = COMPOSITION_ROOT / "trading_strategy_proposal_handoff_stack.py"
 APPLICATION_ROOT = PRODUCTION_ROOT / "application"
 GRAPH_MODULE = APPLICATION_ROOT / "orchestration" / "graph.py"
 STATE_MODULE = APPLICATION_ROOT / "orchestration" / "state.py"
@@ -525,7 +527,7 @@ def test_create_app_and_http_surfaces_remain_unwired_to_the_builder() -> None:
 
 def test_other_composition_modules_do_not_import_or_construct_trading_strategy() -> None:
     for path in sorted(COMPOSITION_ROOT.glob("*.py")):
-        if path == BUILDER_MODULE:
+        if path in (BUILDER_MODULE, PROPOSAL_HANDOFF_STACK_MODULE):
             continue
         assert BUILDER_MODULE_NAME not in imported_modules(path), path
         source = path.read_text(encoding="utf-8")
@@ -539,6 +541,34 @@ def test_other_composition_modules_do_not_import_or_construct_trading_strategy()
                 constructed_by.append(path.relative_to(SRC_ROOT).as_posix())
     assert sorted(set(constructed_by)) == [
         "energy_trading/api/composition/trading_strategy_stack.py"
+    ]
+
+
+def test_proposal_handoff_stack_calls_the_builder_once_and_forwards_the_bid_port() -> None:
+    # Chunk 209: the exact consumer reuses this builder instead of reconstructing it.
+    assert BUILDER_MODULE_NAME in imported_modules(PROPOSAL_HANDOFF_STACK_MODULE)
+    assert BUILDER_NAME in imported_names(PROPOSAL_HANDOFF_STACK_MODULE)
+    tree = _parse(PROPOSAL_HANDOFF_STACK_MODULE)
+    builder_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and _call_name(node) == BUILDER_NAME
+    ]
+    assert len(builder_calls) == 1
+    assert isinstance(builder_calls[0].func, ast.Name)
+    assert _keywords(builder_calls[0]) == {"bid_port": "bid_port"}
+    called = {_call_name(node) for node in ast.walk(tree) if isinstance(node, ast.Call)}
+    assert called.isdisjoint(EXPECTED_CONSTRUCTIONS)
+    identifiers = _identifier_names(PROPOSAL_HANDOFF_STACK_MODULE)
+    assert {"TradingStrategyAgent", "TradingStrategyExecutionService"}.isdisjoint(identifiers)
+    assert {"run", "execute", "propose_bids"}.isdisjoint(identifiers)
+    consumers = sorted(
+        path.relative_to(SRC_ROOT).as_posix()
+        for path in PRODUCTION_ROOT.rglob("*.py")
+        if path != BUILDER_MODULE and BUILDER_MODULE_NAME in imported_modules(path)
+    )
+    assert consumers == [
+        "energy_trading/api/composition/trading_strategy_proposal_handoff_stack.py"
     ]
 
 

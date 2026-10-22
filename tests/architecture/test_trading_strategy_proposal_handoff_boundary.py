@@ -28,6 +28,11 @@ API_ROOT = PRODUCTION_ROOT / "api"
 API_APP = API_ROOT / "app.py"
 SERVICE_MODULE_NAME = "energy_trading.application.orchestration.trading_strategy_proposal_handoff"
 SERVICE_CLASS_NAME = "TradingStrategyProposalHandoffService"
+# Chunk 209: the exact API composition builder authorized to import and construct
+# the service; it never executes it.
+PROPOSAL_HANDOFF_STACK_MODULE = (
+    API_ROOT / "composition" / "trading_strategy_proposal_handoff_stack.py"
+)
 
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
@@ -664,9 +669,32 @@ def test_workflow_state_and_graph_remain_unaware_of_the_service() -> None:
 def test_no_production_runtime_wiring_imports_or_constructs_the_service() -> None:
     assert API_APP.exists()
     for path in sorted(PRODUCTION_ROOT.rglob("*.py")):
-        if path == SERVICE_MODULE:
+        if path in (SERVICE_MODULE, PROPOSAL_HANDOFF_STACK_MODULE):
             continue
         assert SERVICE_MODULE_NAME not in imported_modules(path), path
         source = path.read_text(encoding="utf-8")
         assert SERVICE_CLASS_NAME not in source, path
         assert "trading_strategy_proposal_handoff" not in source, path
+
+
+def test_only_the_proposal_handoff_stack_constructs_the_service_and_never_executes_it() -> None:
+    # Chunk 209: the exact builder imports and constructs the service once.
+    assert SERVICE_MODULE_NAME in imported_modules(PROPOSAL_HANDOFF_STACK_MODULE)
+    assert SERVICE_CLASS_NAME in imported_names(PROPOSAL_HANDOFF_STACK_MODULE)
+    constructions = [
+        node
+        for node in ast.walk(_tree(PROPOSAL_HANDOFF_STACK_MODULE))
+        if isinstance(node, ast.Call) and _call_name(node) == SERVICE_CLASS_NAME
+    ]
+    assert len(constructions) == 1
+    assert isinstance(constructions[0].func, ast.Name)
+    identifiers = _identifier_names(PROPOSAL_HANDOFF_STACK_MODULE)
+    assert {"execute", "run", "propose_bids"}.isdisjoint(identifiers)
+    assert "RiskAndBidProposalHandoff" not in identifiers
+    constructed_by = sorted(
+        path.relative_to(PRODUCTION_ROOT).as_posix()
+        for path in PRODUCTION_ROOT.rglob("*.py")
+        for node in ast.walk(_tree(path))
+        if isinstance(node, ast.Call) and _call_name(node) == SERVICE_CLASS_NAME
+    )
+    assert constructed_by == ["api/composition/trading_strategy_proposal_handoff_stack.py"]

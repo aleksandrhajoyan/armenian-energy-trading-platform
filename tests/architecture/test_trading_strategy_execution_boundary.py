@@ -31,6 +31,13 @@ EXECUTION_MODULE_NAME = "energy_trading.application.orchestration.trading_strate
 TRADING_STRATEGY_STACK_MODULE = API_ROOT / "composition" / "trading_strategy_stack.py"
 # Chunk 208: the exact application service authorized to import and invoke the service.
 PROPOSAL_HANDOFF_MODULE = ORCHESTRATION_ROOT / "trading_strategy_proposal_handoff.py"
+# Chunk 209: the exact API composition builder authorized to reach the service only
+# through the published Chunk 206 builder; it never imports or names the service.
+PROPOSAL_HANDOFF_STACK_MODULE = (
+    API_ROOT / "composition" / "trading_strategy_proposal_handoff_stack.py"
+)
+TRADING_STRATEGY_STACK_MODULE_NAME = "energy_trading.api.composition.trading_strategy_stack"
+TRADING_STRATEGY_STACK_BUILDER_NAME = "build_trading_strategy_execution_service"
 
 ALLOWED_MODULE_IMPORTS = frozenset(
     {
@@ -281,6 +288,61 @@ def _method_body_nodes() -> list[ast.AST]:
             for statement in method.body:
                 nodes.extend(ast.walk(statement))
     return nodes
+
+
+def _approved_stack_builder_uses() -> tuple[ast.alias, ast.Name]:
+    """Return the Chunk 209 module's single builder import alias and call target.
+
+    Both are structurally verified: one non-aliased import from the published
+    Chunk 206 composition module and one keyword-only call forwarding ``bid_port``.
+    """
+
+    tree = _tree(PROPOSAL_HANDOFF_STACK_MODULE)
+    imports = [
+        (node, alias)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+        if alias.name == TRADING_STRATEGY_STACK_BUILDER_NAME
+    ]
+    assert len(imports) == 1
+    import_from, alias = imports[0]
+    assert import_from.module == TRADING_STRATEGY_STACK_MODULE_NAME
+    assert import_from.level == 0
+    assert alias.asname is None
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == TRADING_STRATEGY_STACK_BUILDER_NAME
+    ]
+    assert len(calls) == 1
+    call = calls[0]
+    assert isinstance(call.func, ast.Name)
+    assert call.args == []
+    assert [(kw.arg, ast.unparse(kw.value)) for kw in call.keywords] == [("bid_port", "bid_port")]
+    references = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id == TRADING_STRATEGY_STACK_BUILDER_NAME
+    ]
+    assert references == [call.func]
+    return alias, call.func
+
+
+def _source_without_nodes(path: Path, nodes: tuple[ast.alias | ast.Name, ...]) -> str:
+    """Blank out exactly the source spans of the given single-line nodes."""
+
+    lines = [line.encode("utf-8") for line in path.read_text(encoding="utf-8").splitlines()]
+    for node in nodes:
+        assert node.end_lineno == node.lineno
+        assert node.end_col_offset is not None
+        index = node.lineno - 1
+        line = lines[index]
+        width = node.end_col_offset - node.col_offset
+        lines[index] = line[: node.col_offset] + b" " * width + line[node.end_col_offset :]
+    return "\n".join(line.decode("utf-8") for line in lines)
 
 
 def test_execution_module_belongs_to_application_orchestration() -> None:
@@ -555,7 +617,27 @@ def test_api_and_create_app_remain_unwired_to_the_execution_service() -> None:
         assert EXECUTION_MODULE_NAME not in imported_modules(path), path
         source = path.read_text(encoding="utf-8")
         assert "TradingStrategyExecutionService" not in source, path
+        if path == PROPOSAL_HANDOFF_STACK_MODULE:
+            # Chunk 209: only the two structurally verified uses of the published
+            # Chunk 206 builder identifier are disregarded by the raw-text scan.
+            source = _source_without_nodes(path, _approved_stack_builder_uses())
         assert "trading_strategy_execution" not in source, path
+
+
+def test_proposal_handoff_stack_reaches_the_service_only_through_the_published_builder() -> None:
+    # Chunk 209: one import of and one call to the Chunk 206 builder; never the service.
+    alias, call_target = _approved_stack_builder_uses()
+    assert alias.name == call_target.id == TRADING_STRATEGY_STACK_BUILDER_NAME
+    assert TRADING_STRATEGY_STACK_MODULE_NAME in imported_modules(PROPOSAL_HANDOFF_STACK_MODULE)
+    assert EXECUTION_MODULE_NAME not in imported_modules(PROPOSAL_HANDOFF_STACK_MODULE)
+    names = imported_names(PROPOSAL_HANDOFF_STACK_MODULE)
+    assert "TradingStrategyExecutionService" not in names
+    identifiers = _identifier_names(PROPOSAL_HANDOFF_STACK_MODULE)
+    assert {"TradingStrategyExecutionService", "TradingStrategyAgent"}.isdisjoint(identifiers)
+    assert {"execute", "run", "propose_bids"}.isdisjoint(identifiers)
+    source = PROPOSAL_HANDOFF_STACK_MODULE.read_text(encoding="utf-8")
+    assert "TradingStrategyExecutionService" not in source
+    assert source.count("trading_strategy_execution") == 2
 
 
 def test_only_the_trading_strategy_stack_constructs_the_service_inside_api() -> None:
