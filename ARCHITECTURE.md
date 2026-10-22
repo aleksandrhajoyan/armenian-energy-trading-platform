@@ -1669,7 +1669,30 @@ caller-supplied ForecastingSuccessReadPort + PortfolioRiskAssessmentPort
 
 The API composition layer owns only this builder. The application layer continues to own `PortfolioRiskAgent`, `PortfolioRiskExecutionService`, `ForecastingSuccessReadPort`, and `PortfolioRiskAssessmentPort`; dependency direction is unchanged (API composition → application). The builder imports exactly those four published types and nothing from domain, infrastructure, ML, LangGraph, FastAPI, configuration, or providers. It imports the `ForecastingSuccessReadPort` interface from `forecasting_success_read`, which is distinct from importing the `ForecastingSuccess` aggregate that interface returns: the builder does not import the `forecasting_success` module or the `ForecastingSuccess` class, never constructs or reads a forecast, and is therefore not a production forecast consumer. It does not own numerical risk methodology, choose a concrete reader or assessment engine, or select runtime providers; callers supply already-constructed ports and keep their lifetime. It is not exported from `api/composition/__init__.py` and is not invoked by `create_app()`, HTTP routes, lifespans, or the production LangGraph, so composition-time construction capability does not imply runtime wiring. A quantitative assessment implementation, a durable reader, and Risk & Bid routing remain absent.
 
-Chunk 204 (local/unpublished) adds application-owned, unwired `TradingStrategyExecutionService` in `energy_trading.application.orchestration.trading_strategy_execution`, a request-assembly and delegation use case over explicit caller-supplied canonical inputs:
+Chunk 205 (local/unpublished) adds offline integration verification only — no production code, builder, coordinator, abstraction, package export, graph node or topology, FastAPI route, or wiring changed. `tests/unit/api/test_forecasting_to_trading_strategy_vertical_slice.py` exercises the complete explicitly sequenced vertical slice:
+
+```text
+Real forecasting graph → shared ForecastingSuccess context → real Portfolio Risk execution
+  → canonical RiskAssessment → real Trading Strategy execution → test-provided canonical bid proposals
+
+ForecastingPlan (prepared in wrapped InMemoryForecastingWorkflowContext)
+  → compiled build_workflow_graph (ainvoke, forecasting/running → risk_and_bid/running)
+  → ForecastingWorkflowStep → ParallelForecastingExecutionService (test-only model ports)
+  → InMemoryForecastingReadAfterWriteContext.record_success (graph ends at END)
+  ── explicit test-level sequencing, outside the graph ──
+  → build_portfolio_risk_execution_service(forecast_reader=<same wrapper>, assessment_port=<fake>)
+  → PortfolioRiskExecutionService.execute → PortfolioRiskAgent.run
+  → PortfolioRiskAssessmentPort.assess (deterministic test-only fake) → RiskAssessment
+  → test reads ForecastingSuccess back through the same wrapper (external caller)
+  → TradingStrategyExecutionService.execute(risk_assessment, forecasting_success, ...)
+  → TradingStrategyAgent.run (real agent, via AgentPort)
+  → TradingStrategyBidPort.propose_bids (deterministic test-only fake)
+  → tuple[MarketBid, ...], returned unchanged
+```
+
+Test-level sequencing is distinct from production graph wiring. The test, not a production coordinator, owns the order forecast → risk → bid; the compiled graph still visits only `workflow_entry`, `forecasting`, and `forecasting_success_transition` on this path, stops at `risk_and_bid`/`running`, and has no Portfolio & Risk, Trading Strategy, market-gateway, billing, or settlement node. The graph-facing forecasting context and the Portfolio Risk read port are the exact same read-after-write wrapper instance; no second forecast store exists. `PortfolioRiskExecutionService` owns its existing forecast read; `TradingStrategyExecutionService` performs no forecast retrieval or risk execution and receives both objects from the test. Deterministic fakes are used only at the external/model and numerical-decision seams: the Consumer Load and DAM model ports, `PortfolioRiskAssessmentPort`, and `TradingStrategyBidPort` (plus inert Regulatory and Phase 2 graph collaborators and recording forwarders over the published initial attempt source and terminal-fail policy). The compiled graph, the read-after-write wrapper, both execution services, and both agents are real. Failure isolation: a Consumer Load or DAM terminal failure publishes no success, so the risk stage fails closed with `ResourceNotFoundError` and Trading Strategy is never reached; an assessment `DependencyUnavailableError` propagates unchanged and blocks Trading Strategy; a bid-port `DependencyUnavailableError` propagates unchanged after exactly one call with no retry or default proposal, leaving the published forecast and the produced assessment untouched. The fixture assessment and bids are not risk approval, trading eligibility, or authorization to submit, and Phase 4 remains unwired from the production graph, `create_app()`, and API routes.
+
+Chunk 204 (published at `4d9a2540d728d45057adbd26b364aa151d1ed8bf`, tag `chunk-204`) adds application-owned, unwired `TradingStrategyExecutionService` in `energy_trading.application.orchestration.trading_strategy_execution`, a request-assembly and delegation use case over explicit caller-supplied canonical inputs:
 
 ```text
 caller-supplied canonical inputs
